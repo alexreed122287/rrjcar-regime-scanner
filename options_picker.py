@@ -195,10 +195,7 @@ def get_options_recommendations(
         "error": None,
     }
 
-    # Only recommend calls for bullish signals
-    if regime_id > 2:
-        result["error"] = f"Regime not bullish ({regime_label}) - no call recommendations"
-        return result
+    # Show options for all regimes — user decides whether to trade
 
     try:
         ticker = yf.Ticker(symbol)
@@ -305,8 +302,8 @@ def scan_options_for_watchlist(
 
     for r in scan_results:
         regime_id = r.get("regime_id")
-        if regime_id is None or regime_id > 2:
-            continue  # skip non-bullish
+        if regime_id is None:
+            continue
 
         price = r.get("price")
         if not price:

@@ -916,14 +916,14 @@ if scan_btn:
 
     progress.progress(80, text="Finding options...")
 
-    # Options scan for bullish tickers
+    # Options scan for all scanned tickers
     options_recs = []
     if options_enabled:
-        bullish = [r for r in results if r.get("regime_id") is not None and r["regime_id"] <= 2]
-        if bullish:
-            with st.spinner(f"Finding best options for {len(bullish)} bullish tickers..."):
+        with_price = [r for r in results if r.get("price") is not None]
+        if with_price:
+            with st.spinner(f"Finding options for {len(with_price)} tickers..."):
                 options_recs = scan_options_for_watchlist(
-                    bullish,
+                    with_price,
                     min_dte=min_dte,
                     max_dte=max_dte,
                     top_n=top_n_options,
