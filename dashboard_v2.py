@@ -767,198 +767,196 @@ if "options_recs" not in st.session_state:
 
 
 # ════════════════════════════════════════════════════════
-#  SETTINGS (main page expander — works on mobile + desktop sidebar)
+#  SETTINGS — top-level controls always visible
 # ════════════════════════════════════════════════════════
-_first_visit = st.session_state.scan_results is None
-_settings_container = st.expander("Settings", expanded=_first_visit)
-with _settings_container:
 
-    # Watchlist + Strategy (compact)
-    watchlist_keys = list(WATCHLISTS.keys())
-    saved_wl = _saved.get("watchlist", "All Stocks (no ETFs)")
-    default_idx = watchlist_keys.index(saved_wl) if saved_wl in watchlist_keys else 0
-    wl1, wl2 = st.columns([3, 1])
-    watchlist_name = wl1.selectbox("Watchlist", watchlist_keys, index=default_idx, label_visibility="collapsed")
-    strategy = "v2" if wl2.selectbox("V", ["V2", "V1"], label_visibility="collapsed") == "V2" else "v1"
-    custom_tickers = st.text_input("Add", value=_saved.get("custom_tickers", ""), placeholder="Add tickers...", label_visibility="collapsed")
+# Watchlist + SCAN — always visible at top
+watchlist_keys = list(WATCHLISTS.keys())
+saved_wl = _saved.get("watchlist", "All Stocks (no ETFs)")
+default_idx = watchlist_keys.index(saved_wl) if saved_wl in watchlist_keys else 0
+wl1, wl2 = st.columns([3, 1])
+watchlist_name = wl1.selectbox("Watchlist", watchlist_keys, index=default_idx, label_visibility="collapsed")
+strategy = "v2" if wl2.selectbox("V", ["V2", "V1"], label_visibility="collapsed") == "V2" else "v1"
+custom_tickers = st.text_input("Add", value=_saved.get("custom_tickers", ""), placeholder="Add tickers...", label_visibility="collapsed")
 
-    tickers = list(WATCHLISTS[watchlist_name])
-    if custom_tickers.strip():
-        extras = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
-        tickers = list(dict.fromkeys(tickers + extras))
+tickers = list(WATCHLISTS[watchlist_name])
+if custom_tickers.strip():
+    extras = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
+    tickers = list(dict.fromkeys(tickers + extras))
 
-    interval = "1d"
+interval = "1d"
 
-    # Settings (ultra-compact — 2 columns)
-    with st.expander(f"{len(tickers):,} tickers  |  Settings", expanded=False):
-        s1, s2 = st.columns(2)
-        _nr = _saved.get("n_regimes", 7)
-        _mw = _saved.get("max_workers", 6)
-        _mc = _saved.get("min_confs", 6)
-        _rc = _saved.get("regime_confirm", 2)
-        _cd = _saved.get("cooldown", 3)
-        n_regimes = s1.number_input(f"Regimes ({_nr}/10)", value=_nr, min_value=3, max_value=10)
-        max_workers = s2.number_input(f"Speed ({_mw}/8)", value=_mw, min_value=1, max_value=8)
-        min_confs = s1.number_input(f"Confs ({_mc}/12)", value=_mc, min_value=3, max_value=12)
-        regime_confirm = s2.number_input(f"Confirm ({_rc}/10)", value=_rc, min_value=1, max_value=10)
-        cooldown = s1.number_input(f"Cooldown ({_cd}/20)", value=_cd, min_value=1, max_value=20)
-        initial_capital = s2.number_input("Capital $", value=_saved.get("initial_capital", 100000), min_value=1000, step=10000)
-        _rp = _saved.get("risk_pct", 10)
-        risk_pct = s1.number_input(f"Risk ({_rp}%/25%)", value=_rp, min_value=1, max_value=25)
-        st.session_state.risk_pct = risk_pct
-        options_enabled = st.checkbox("Options Picker", value=_saved.get("options_enabled", True))
-        if options_enabled:
-            d1, d2, d3 = st.columns(3)
-            _md = _saved.get("min_dte", 21)
-            _xd = _saved.get("max_dte", 45)
-            _tn = _saved.get("top_n_options", 3)
-            min_dte = d1.number_input(f"Min DTE ({_md})", value=_md, min_value=7, max_value=30)
-            max_dte = d2.number_input(f"Max DTE ({_xd})", value=_xd, min_value=30, max_value=180)
-            top_n_options = d3.number_input(f"Picks ({_tn})", value=_tn, min_value=1, max_value=10)
+# SCAN button — always visible
+scan_btn = st.button("SCAN", type="primary", use_container_width=True)
+
+# Advanced settings in expander
+with st.expander(f"{len(tickers):,} tickers  |  Advanced Settings"):
+    s1, s2 = st.columns(2)
+    _nr = _saved.get("n_regimes", 7)
+    _mw = _saved.get("max_workers", 6)
+    _mc = _saved.get("min_confs", 6)
+    _rc = _saved.get("regime_confirm", 2)
+    _cd = _saved.get("cooldown", 3)
+    n_regimes = s1.number_input(f"Regimes ({_nr}/10)", value=_nr, min_value=3, max_value=10)
+    max_workers = s2.number_input(f"Speed ({_mw}/8)", value=_mw, min_value=1, max_value=8)
+    min_confs = s1.number_input(f"Confs ({_mc}/12)", value=_mc, min_value=3, max_value=12)
+    regime_confirm = s2.number_input(f"Confirm ({_rc}/10)", value=_rc, min_value=1, max_value=10)
+    cooldown = s1.number_input(f"Cooldown ({_cd}/20)", value=_cd, min_value=1, max_value=20)
+    initial_capital = s2.number_input("Capital $", value=_saved.get("initial_capital", 100000), min_value=1000, step=10000)
+    _rp = _saved.get("risk_pct", 10)
+    risk_pct = s1.number_input(f"Risk ({_rp}%/25%)", value=_rp, min_value=1, max_value=25)
+    st.session_state.risk_pct = risk_pct
+    options_enabled = st.checkbox("Options Picker", value=_saved.get("options_enabled", True))
+    if options_enabled:
+        d1, d2, d3 = st.columns(3)
+        _md = _saved.get("min_dte", 21)
+        _xd = _saved.get("max_dte", 45)
+        _tn = _saved.get("top_n_options", 3)
+        min_dte = d1.number_input(f"Min DTE ({_md})", value=_md, min_value=7, max_value=30)
+        max_dte = d2.number_input(f"Max DTE ({_xd})", value=_xd, min_value=30, max_value=180)
+        top_n_options = d3.number_input(f"Picks ({_tn})", value=_tn, min_value=1, max_value=10)
+    else:
+        min_dte, max_dte, top_n_options = 21, 45, 3
+    auto_refresh = st.checkbox("Auto-Refresh", value=_saved.get("auto_refresh", False))
+    refresh_minutes = 5
+    if auto_refresh:
+        refresh_minutes = st.slider("Min", 1, 30, _saved.get("refresh_minutes", 5))
+
+# Alerts & Scheduling
+with st.expander("Alerts & Schedule"):
+    alerts_enabled = st.checkbox("Enable Alerts", value=_saved.get("alerts_enabled", False))
+
+    if alerts_enabled:
+        st.markdown("**Trigger On**")
+        tc1, tc2, tc3 = st.columns(3)
+        alert_on_regime_change = tc1.checkbox("Any Change", value=_saved.get("alert_on_regime_change", True))
+        alert_on_bull_entry = tc2.checkbox("Bull Entry", value=_saved.get("alert_on_bull_entry", True))
+        alert_on_bear_entry = tc3.checkbox("Bear Entry", value=_saved.get("alert_on_bear_entry", False))
+        alert_min_confirmations = st.slider("Min Confirmations", 1, 10, _saved.get("alert_min_confirmations", 6))
+
+        st.markdown("**Email (SMTP)**")
+        alert_email = st.text_input("To Address", value=_saved.get("alert_email", ""))
+        ec1, ec2 = st.columns(2)
+        alert_smtp_server = ec1.text_input("SMTP Server", value=_saved.get("alert_smtp_server", "smtp.gmail.com"))
+        alert_smtp_port = ec2.number_input("Port", value=_saved.get("alert_smtp_port", 587), min_value=1, max_value=65535)
+        alert_smtp_user = st.text_input("SMTP User", value=_saved.get("alert_smtp_user", ""))
+        alert_smtp_password = st.text_input("SMTP Password", value=_saved.get("alert_smtp_password", ""), type="password")
+
+        st.markdown("**Telegram**")
+        alert_telegram_enabled = st.checkbox("Enable Telegram", value=_saved.get("alert_telegram_enabled", False))
+        if alert_telegram_enabled:
+            alert_telegram_bot_token = st.text_input("Bot Token", value=_saved.get("alert_telegram_bot_token", ""), type="password")
+            alert_telegram_chat_id = st.text_input("Chat ID", value=_saved.get("alert_telegram_chat_id", ""))
         else:
-            min_dte, max_dte, top_n_options = 21, 45, 3
-        auto_refresh = st.checkbox("Auto-Refresh", value=_saved.get("auto_refresh", False))
-        refresh_minutes = 5
-        if auto_refresh:
-            refresh_minutes = st.slider("Min", 1, 30, _saved.get("refresh_minutes", 5))
-
-    # ── Alerts & Scheduling ──
-    with st.expander("Alerts & Schedule"):
-        alerts_enabled = st.checkbox("Enable Alerts", value=_saved.get("alerts_enabled", False))
-
-        if alerts_enabled:
-            st.markdown("**Trigger On**")
-            tc1, tc2, tc3 = st.columns(3)
-            alert_on_regime_change = tc1.checkbox("Any Change", value=_saved.get("alert_on_regime_change", True))
-            alert_on_bull_entry = tc2.checkbox("Bull Entry", value=_saved.get("alert_on_bull_entry", True))
-            alert_on_bear_entry = tc3.checkbox("Bear Entry", value=_saved.get("alert_on_bear_entry", False))
-            alert_min_confirmations = st.slider("Min Confirmations", 1, 10, _saved.get("alert_min_confirmations", 6))
-
-            st.markdown("**Email (SMTP)**")
-            alert_email = st.text_input("To Address", value=_saved.get("alert_email", ""))
-            ec1, ec2 = st.columns(2)
-            alert_smtp_server = ec1.text_input("SMTP Server", value=_saved.get("alert_smtp_server", "smtp.gmail.com"))
-            alert_smtp_port = ec2.number_input("Port", value=_saved.get("alert_smtp_port", 587), min_value=1, max_value=65535)
-            alert_smtp_user = st.text_input("SMTP User", value=_saved.get("alert_smtp_user", ""))
-            alert_smtp_password = st.text_input("SMTP Password", value=_saved.get("alert_smtp_password", ""), type="password")
-
-            st.markdown("**Telegram**")
-            alert_telegram_enabled = st.checkbox("Enable Telegram", value=_saved.get("alert_telegram_enabled", False))
-            if alert_telegram_enabled:
-                alert_telegram_bot_token = st.text_input("Bot Token", value=_saved.get("alert_telegram_bot_token", ""), type="password")
-                alert_telegram_chat_id = st.text_input("Chat ID", value=_saved.get("alert_telegram_chat_id", ""))
-            else:
-                alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
-                alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
-
-            st.markdown("**Scheduled Scans**")
-            scheduled_scans_enabled = st.checkbox("Enable Scheduled Scans", value=_saved.get("scheduled_scans_enabled", False))
-            if scheduled_scans_enabled:
-                scheduled_scan_times = st.text_input(
-                    "Scan Times (comma-separated, 24h)",
-                    value=_saved.get("scheduled_scan_times", "09:30,12:00,15:30"),
-                    help="e.g. 09:30,12:00,15:30"
-                )
-                scheduled_scan_timezone = st.selectbox(
-                    "Timezone",
-                    ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"],
-                    index=["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"].index(
-                        _saved.get("scheduled_scan_timezone", "America/Chicago")
-                    ),
-                )
-            else:
-                scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
-                scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
-
-            if st.button("Test Alert", use_container_width=True):
-                from alerts import send_email_alert, send_telegram_alert
-                test_change = [{"symbol": "TEST", "prev_regime": 3, "new_regime": 0, "regime_label": "Bull Run", "price": 100.00, "confirmations": 6}]
-                test_settings = {**_saved,
-                    "alert_email": alert_email, "alert_smtp_server": alert_smtp_server,
-                    "alert_smtp_port": alert_smtp_port, "alert_smtp_user": alert_smtp_user,
-                    "alert_smtp_password": alert_smtp_password,
-                    "alert_telegram_enabled": alert_telegram_enabled,
-                    "alert_telegram_bot_token": alert_telegram_bot_token,
-                    "alert_telegram_chat_id": alert_telegram_chat_id,
-                }
-                if alert_email:
-                    st.info(send_email_alert(test_change, test_settings))
-                if alert_telegram_enabled:
-                    st.info(send_telegram_alert(test_change, test_settings))
-                if not alert_email and not alert_telegram_enabled:
-                    st.warning("No channels configured.")
-        else:
-            alert_email = _saved.get("alert_email", "")
-            alert_smtp_server = _saved.get("alert_smtp_server", "smtp.gmail.com")
-            alert_smtp_port = _saved.get("alert_smtp_port", 587)
-            alert_smtp_user = _saved.get("alert_smtp_user", "")
-            alert_smtp_password = _saved.get("alert_smtp_password", "")
-            alert_telegram_enabled = _saved.get("alert_telegram_enabled", False)
             alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
             alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
-            alert_on_regime_change = _saved.get("alert_on_regime_change", True)
-            alert_on_bull_entry = _saved.get("alert_on_bull_entry", True)
-            alert_on_bear_entry = _saved.get("alert_on_bear_entry", False)
-            alert_min_confirmations = _saved.get("alert_min_confirmations", 6)
-            scheduled_scans_enabled = _saved.get("scheduled_scans_enabled", False)
+
+        st.markdown("**Scheduled Scans**")
+        scheduled_scans_enabled = st.checkbox("Enable Scheduled Scans", value=_saved.get("scheduled_scans_enabled", False))
+        if scheduled_scans_enabled:
+            scheduled_scan_times = st.text_input(
+                "Scan Times (comma-separated, 24h)",
+                value=_saved.get("scheduled_scan_times", "09:30,12:00,15:30"),
+                help="e.g. 09:30,12:00,15:30"
+            )
+            scheduled_scan_timezone = st.selectbox(
+                "Timezone",
+                ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"],
+                index=["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"].index(
+                    _saved.get("scheduled_scan_timezone", "America/Chicago")
+                ),
+            )
+        else:
             scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
             scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
 
-    # Scan + Save
-    scan_btn = st.button("SCAN", type="primary", use_container_width=True)
-    bc1, bc2 = st.columns(2)
-    if bc1.button("Save", use_container_width=True):
-        save_settings({
-            "watchlist": watchlist_name, "custom_tickers": custom_tickers,
-            "strategy": strategy, "min_confs": min_confs,
-            "regime_confirm": regime_confirm, "cooldown": cooldown,
-            "initial_capital": initial_capital, "n_regimes": n_regimes,
-            "max_workers": max_workers, "options_enabled": options_enabled,
-            "min_dte": min_dte, "max_dte": max_dte, "top_n_options": top_n_options,
-            "auto_refresh": auto_refresh, "refresh_minutes": refresh_minutes,
-            "risk_pct": risk_pct,
-            "alerts_enabled": alerts_enabled,
-            "alert_email": alert_email, "alert_smtp_server": alert_smtp_server,
-            "alert_smtp_port": alert_smtp_port, "alert_smtp_user": alert_smtp_user,
-            "alert_smtp_password": alert_smtp_password,
-            "alert_telegram_enabled": alert_telegram_enabled,
-            "alert_telegram_bot_token": alert_telegram_bot_token,
-            "alert_telegram_chat_id": alert_telegram_chat_id,
-            "alert_on_regime_change": alert_on_regime_change,
-            "alert_on_bull_entry": alert_on_bull_entry,
-            "alert_on_bear_entry": alert_on_bear_entry,
-            "alert_min_confirmations": alert_min_confirmations,
-            "scheduled_scans_enabled": scheduled_scans_enabled,
-            "scheduled_scan_times": scheduled_scan_times,
-            "scheduled_scan_timezone": scheduled_scan_timezone,
-        })
-        st.toast("Saved")
+        if st.button("Test Alert", use_container_width=True):
+            from alerts import send_email_alert, send_telegram_alert
+            test_change = [{"symbol": "TEST", "prev_regime": 3, "new_regime": 0, "regime_label": "Bull Run", "price": 100.00, "confirmations": 6}]
+            test_settings = {**_saved,
+                "alert_email": alert_email, "alert_smtp_server": alert_smtp_server,
+                "alert_smtp_port": alert_smtp_port, "alert_smtp_user": alert_smtp_user,
+                "alert_smtp_password": alert_smtp_password,
+                "alert_telegram_enabled": alert_telegram_enabled,
+                "alert_telegram_bot_token": alert_telegram_bot_token,
+                "alert_telegram_chat_id": alert_telegram_chat_id,
+            }
+            if alert_email:
+                st.info(send_email_alert(test_change, test_settings))
+            if alert_telegram_enabled:
+                st.info(send_telegram_alert(test_change, test_settings))
+            if not alert_email and not alert_telegram_enabled:
+                st.warning("No channels configured.")
+    else:
+        alert_email = _saved.get("alert_email", "")
+        alert_smtp_server = _saved.get("alert_smtp_server", "smtp.gmail.com")
+        alert_smtp_port = _saved.get("alert_smtp_port", 587)
+        alert_smtp_user = _saved.get("alert_smtp_user", "")
+        alert_smtp_password = _saved.get("alert_smtp_password", "")
+        alert_telegram_enabled = _saved.get("alert_telegram_enabled", False)
+        alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
+        alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
+        alert_on_regime_change = _saved.get("alert_on_regime_change", True)
+        alert_on_bull_entry = _saved.get("alert_on_bull_entry", True)
+        alert_on_bear_entry = _saved.get("alert_on_bear_entry", False)
+        alert_min_confirmations = _saved.get("alert_min_confirmations", 6)
+        scheduled_scans_enabled = _saved.get("scheduled_scans_enabled", False)
+        scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
+        scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
 
-    # Tradier (hidden unless not connected)
-    if not tradier_configured():
-        with st.expander("Connect Tradier"):
-            t_token = st.text_input("Token", type="password")
-            t_acct = st.text_input("Account ID")
-            t_sandbox = st.checkbox("Sandbox", value=True)
-            if st.button("Connect", use_container_width=True):
-                if t_token and t_acct:
-                    save_tradier_config(t_token, t_acct, t_sandbox)
-                    st.rerun()
+# Save button
+if st.button("Save Settings", use_container_width=True):
+    save_settings({
+        "watchlist": watchlist_name, "custom_tickers": custom_tickers,
+        "strategy": strategy, "min_confs": min_confs,
+        "regime_confirm": regime_confirm, "cooldown": cooldown,
+        "initial_capital": initial_capital, "n_regimes": n_regimes,
+        "max_workers": max_workers, "options_enabled": options_enabled,
+        "min_dte": min_dte, "max_dte": max_dte, "top_n_options": top_n_options,
+        "auto_refresh": auto_refresh, "refresh_minutes": refresh_minutes,
+        "risk_pct": risk_pct,
+        "alerts_enabled": alerts_enabled,
+        "alert_email": alert_email, "alert_smtp_server": alert_smtp_server,
+        "alert_smtp_port": alert_smtp_port, "alert_smtp_user": alert_smtp_user,
+        "alert_smtp_password": alert_smtp_password,
+        "alert_telegram_enabled": alert_telegram_enabled,
+        "alert_telegram_bot_token": alert_telegram_bot_token,
+        "alert_telegram_chat_id": alert_telegram_chat_id,
+        "alert_on_regime_change": alert_on_regime_change,
+        "alert_on_bull_entry": alert_on_bull_entry,
+        "alert_on_bear_entry": alert_on_bear_entry,
+        "alert_min_confirmations": alert_min_confirmations,
+        "scheduled_scans_enabled": scheduled_scans_enabled,
+        "scheduled_scan_times": scheduled_scan_times,
+        "scheduled_scan_timezone": scheduled_scan_timezone,
+    })
+    st.toast("Saved")
 
-    # Store in session
-    st.session_state.strategy = strategy
-    st.session_state.min_confs = min_confs
-    st.session_state.regime_confirm = regime_confirm
-    st.session_state.cooldown = cooldown
-    st.session_state.initial_capital = initial_capital
-    st.session_state.options_enabled = options_enabled
-    st.session_state.min_dte = min_dte
-    st.session_state.max_dte = max_dte
-    st.session_state.top_n_options = top_n_options
+# Tradier (hidden unless not connected)
+if not tradier_configured():
+    with st.expander("Connect Tradier"):
+        t_token = st.text_input("Token", type="password")
+        t_acct = st.text_input("Account ID")
+        t_sandbox = st.checkbox("Sandbox", value=True)
+        if st.button("Connect", use_container_width=True):
+            if t_token and t_acct:
+                save_tradier_config(t_token, t_acct, t_sandbox)
+                st.rerun()
 
-    if st.session_state.last_scan_time:
-        elapsed = (datetime.now() - st.session_state.last_scan_time).seconds
-        st.caption(f"Last scan: {elapsed}s ago")
+# Store in session
+st.session_state.strategy = strategy
+st.session_state.min_confs = min_confs
+st.session_state.regime_confirm = regime_confirm
+st.session_state.cooldown = cooldown
+st.session_state.initial_capital = initial_capital
+st.session_state.options_enabled = options_enabled
+st.session_state.min_dte = min_dte
+st.session_state.max_dte = max_dte
+st.session_state.top_n_options = top_n_options
+
+if st.session_state.last_scan_time:
+    elapsed = (datetime.now() - st.session_state.last_scan_time).seconds
+    st.caption(f"Last scan: {elapsed}s ago")
 
 
 # ════════════════════════════════════════════════════════
