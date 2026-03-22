@@ -1049,6 +1049,7 @@ if scan_btn:
             strategy=strategy,
             batch_size=batch_size,
             progress_callback=_on_batch,
+            bullish_only=True,
         )
     except Exception as e:
         st.error(f"Scan failed: {str(e)[:100]}")
