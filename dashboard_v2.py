@@ -40,6 +40,16 @@ from performance_tracker import (
 from roll_manager import check_roll_trigger, find_roll_target
 from order_executor import execute_buy_calls, execute_sell_to_close, execute_roll as exec_roll
 
+# ─── Mobile Detection ───
+def is_mobile():
+    """Detect mobile via Sec-Ch-Ua-Mobile header."""
+    try:
+        return st.context.headers.get("Sec-Ch-Ua-Mobile", "?0") == "?1"
+    except Exception:
+        return False
+
+MOBILE = is_mobile()
+
 # ─── Page Config ───
 st.set_page_config(
     page_title="RRJCAR Regime Scanner",
@@ -47,6 +57,14 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# ─── PWA Meta Tags ───
+st.markdown("""
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#101114">
+""", unsafe_allow_html=True)
 
 # ─── Suppress error details ───
 try:
@@ -186,7 +204,7 @@ st.markdown("""
     ::-webkit-scrollbar-track { background: #101114; }
     ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
 
-    /* Mobile responsive */
+    /* ── Mobile Responsive ── */
     @media (max-width: 768px) {
         .main .block-container { padding: 0.3rem 0.4rem 0.5rem; }
         .metric-card .value { font-size: 0.95rem; }
@@ -194,12 +212,63 @@ st.markdown("""
         .stTabs [data-baseweb="tab"] { font-size: 0.6rem; padding: 0.3rem 0.5rem; }
         h1 { font-size: 1.1rem !important; }
         .stDataFrame { font-size: 0.6rem; }
-        .stButton > button { font-size: 0.65rem; padding: 0.3rem 0.6rem; }
+        .stButton > button { font-size: 0.65rem; padding: 0.3rem 0.6rem; min-height: 44px; }
     }
     @media (max-width: 480px) {
-        .main .block-container { padding: 0.2rem 0.3rem; }
-        .metric-card .value { font-size: 0.8rem; }
-        .stTabs [data-baseweb="tab"] { font-size: 0.55rem; padding: 0.25rem 0.4rem; }
+        .main .block-container { padding: 0.2rem 0.2rem 0.5rem; max-width: 100vw; overflow-x: hidden; }
+
+        /* Metrics — compact grid */
+        .metric-card .value { font-size: 0.85rem; }
+        .metric-card .label { font-size: 0.45rem; letter-spacing: 0.5px; }
+        .metric-card { padding: 0.15rem 0; }
+
+        /* Tabs — scrollable, compact */
+        .stTabs [data-baseweb="tab-list"] { overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 0; }
+        .stTabs [data-baseweb="tab"] { font-size: 0.55rem; padding: 0.3rem 0.5rem; white-space: nowrap; flex-shrink: 0; }
+
+        /* Headings */
+        h1 { font-size: 1rem !important; }
+        h2,h3 { font-size: 0.85rem !important; }
+
+        /* Tables */
+        .stDataFrame { font-size: 0.55rem; }
+
+        /* Buttons — touch-friendly */
+        .stButton > button { font-size: 0.7rem; padding: 0.4rem 0.6rem; min-height: 44px; border-radius: 6px; }
+        .stButton > button[kind="primary"] { font-size: 0.75rem; }
+
+        /* Columns — allow wrapping */
+        div[data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: 0.2rem !important; }
+
+        /* Signal banner */
+        .signal-banner { font-size: 0.75rem; padding: 0.4rem 0.6rem; }
+
+        /* Hide scrollbar on horizontal scroll */
+        ::-webkit-scrollbar { height: 2px; }
+
+        /* Expanders */
+        .streamlit-expanderHeader { font-size: 0.7rem; }
+
+        /* Mobile card styles */
+        .mobile-card {
+            background: #18191d; border-radius: 6px; padding: 0.5rem 0.6rem;
+            margin-bottom: 0.35rem; border: 1px solid #1f2937;
+        }
+        .mobile-card:active { background: #1f2937; }
+        .mobile-card .mc-symbol { font-weight: 600; color: #f3f4f6; font-size: 0.85rem; }
+        .mobile-card .mc-price { color: #9ca3af; font-size: 0.8rem; margin-left: 0.5rem; }
+        .mobile-card .mc-row2 { margin-top: 0.2rem; display: flex; gap: 0.6rem; align-items: center; }
+        .mobile-card .mc-regime { font-size: 0.65rem; }
+        .mobile-card .mc-signal { font-size: 0.65rem; font-weight: 500; }
+        .mobile-card .mc-conf { color: #6b7280; font-size: 0.65rem; }
+        .mobile-card .mc-chg { font-size: 0.7rem; }
+
+        /* Iframe charts — shorter on mobile */
+        iframe { max-height: 180px !important; }
+
+        /* Selectbox — compact */
+        .stSelectbox { font-size: 0.7rem; }
+        .stSelectbox > div > div { min-height: 38px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -271,8 +340,17 @@ def regime_badge_html(regime_id, regime_label, confidence=None):
     return f'<span class="regime-badge" style="background:{bg}; color:{color}; border:1px solid {color};">{regime_label}{conf_str}</span>'
 
 
+def _screener_signal_info(r):
+    """Extract signal display info from a result row."""
+    sig = r.get("signal", "")
+    short_sig = sig.replace("LONG -- ", "").replace("CASH -- ", "").replace("EXIT -- ", "EXIT: ")
+    sig_colors = {"ENTER": "#34d399", "CONFIRMING": "#5eead4", "HOLD": "#2dd4bf", "EXIT": "#f87171", "BEARISH": "#f87171"}
+    sig_hex = next((v for k, v in sig_colors.items() if k in sig), "#6b7280")
+    return short_sig, sig_hex
+
+
 def render_screener_table(results, filter_signal="All"):
-    """Render the screener as styled cards."""
+    """Render the screener — card layout on mobile, column grid on desktop."""
     filtered = results
     if filter_signal != "All":
         filtered = [r for r in results if filter_signal.upper() in (r.get("signal") or "").upper()]
@@ -281,106 +359,119 @@ def render_screener_table(results, filter_signal="All"):
         st.info("No tickers match the current filter.")
         return None
 
-    # Header
-    cols = st.columns([1, 1, 0.8, 1.3, 1.3, 0.7, 0.5, 0.5, 0.5])
-    for col, h in zip(cols, ["", "Price", "1D", "Regime", "Signal", "Confs", "RSI", "ADX", ""]):
-        col.markdown(f'<span style="color:#4b5563;font-size:0.6rem">{h}</span>', unsafe_allow_html=True)
-
-
     selected_symbol = None
 
-    # Filter out errored tickers from main view
+    # Filter out errored tickers
     errored = [r for r in filtered if r.get("error") and r.get("price") is None]
     filtered = [r for r in filtered if not (r.get("error") and r.get("price") is None)]
 
-    for r in filtered:
+    if MOBILE:
+        # ── Mobile: compact card layout ──
+        for r in filtered:
+            rid = r.get("regime_id")
+            chg = r.get("change_1d")
+            chg_hex = "#34d399" if chg and chg >= 0 else "#f87171" if chg else "#6b7280"
+            chg_str = f"{chg:+.1f}%" if chg is not None else ""
+            price_str = f"${r['price']:,.2f}" if r.get("price") else "--"
+            regime_html = regime_badge_html(rid, r.get("regime_label", "")) if rid is not None else ""
+            short_sig, sig_hex = _screener_signal_info(r)
+            cmet = r.get("confirmations_met", 0)
+            conf_total = r.get("confirmations_total", 12)
+
+            # Render card as HTML + a button for drill-down
+            if st.button(
+                f"{r['symbol']}  {price_str}  {chg_str}",
+                key=f"btn_{r['symbol']}", use_container_width=True,
+            ):
+                selected_symbol = r["symbol"]
+
+            st.markdown(
+                f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                f'padding:0 0.3rem 0.4rem;margin-top:-0.5rem;margin-bottom:0.2rem">'
+                f'<span>{regime_html}</span>'
+                f'<span style="color:{sig_hex};font-weight:600;font-size:0.7rem">{short_sig}</span>'
+                f'<span style="color:#6b7280;font-size:0.7rem">{cmet}/{conf_total}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+    else:
+        # ── Desktop: 9-column grid ──
         cols = st.columns([1, 1, 0.8, 1.3, 1.3, 0.7, 0.5, 0.5, 0.5])
+        for col, h in zip(cols, ["", "Price", "1D", "Regime", "Signal", "Confs", "RSI", "ADX", ""]):
+            col.markdown(f'<span style="color:#4b5563;font-size:0.6rem">{h}</span>', unsafe_allow_html=True)
 
-        # Symbol
-        if cols[0].button(r["symbol"], key=f"btn_{r['symbol']}", use_container_width=True):
-            selected_symbol = r["symbol"]
+        for r in filtered:
+            cols = st.columns([1, 1, 0.8, 1.3, 1.3, 0.7, 0.5, 0.5, 0.5])
 
-        # Price
-        cols[1].markdown(f'<span style="color:#e5e7eb;font-size:0.8rem">${r["price"]:,.2f}</span>' if r.get("price") else "--", unsafe_allow_html=True)
+            if cols[0].button(r["symbol"], key=f"btn_{r['symbol']}", use_container_width=True):
+                selected_symbol = r["symbol"]
 
-        # 1D Change
-        chg = r.get("change_1d")
-        if chg is not None:
-            c_hex = "#34d399" if chg >= 0 else "#f87171"
-            cols[2].markdown(f'<span style="color:{c_hex};font-size:0.8rem">{chg:+.1f}%</span>', unsafe_allow_html=True)
-        else:
-            cols[2].markdown("--")
+            cols[1].markdown(f'<span style="color:#e5e7eb;font-size:0.8rem">${r["price"]:,.2f}</span>' if r.get("price") else "--", unsafe_allow_html=True)
 
-        # Regime with trend arrow
-        rid = r.get("regime_id")
-        if rid is not None:
-            # Determine trend direction
-            changed = r.get("regime_changed", False)
-            prev = r.get("prev_regime", "")
-            if changed and rid is not None:
-                # Compare to previous — lower regime_id = more bullish
-                # If regime improved (moved toward bull), show up arrow
-                prev_rid = None
-                for pi, pl in enumerate(REGIME_LABELS):
-                    if pl == prev:
-                        prev_rid = pi
-                        break
-                if prev_rid is not None and rid < prev_rid:
-                    trend = '<span style="color:#34d399"> ^</span>'
-                elif prev_rid is not None and rid > prev_rid:
-                    trend = '<span style="color:#f87171"> v</span>'
+            chg = r.get("change_1d")
+            if chg is not None:
+                c_hex = "#34d399" if chg >= 0 else "#f87171"
+                cols[2].markdown(f'<span style="color:{c_hex};font-size:0.8rem">{chg:+.1f}%</span>', unsafe_allow_html=True)
+            else:
+                cols[2].markdown("--")
+
+            rid = r.get("regime_id")
+            if rid is not None:
+                changed = r.get("regime_changed", False)
+                prev = r.get("prev_regime", "")
+                if changed and rid is not None:
+                    prev_rid = None
+                    for pi, pl in enumerate(REGIME_LABELS):
+                        if pl == prev:
+                            prev_rid = pi
+                            break
+                    if prev_rid is not None and rid < prev_rid:
+                        trend = '<span style="color:#34d399"> ^</span>'
+                    elif prev_rid is not None and rid > prev_rid:
+                        trend = '<span style="color:#f87171"> v</span>'
+                    else:
+                        trend = ""
                 else:
                     trend = ""
+                cols[3].markdown(f'{regime_badge_html(rid, r["regime_label"])}{trend}', unsafe_allow_html=True)
             else:
-                trend = ""
-            cols[3].markdown(f'{regime_badge_html(rid, r["regime_label"])}{trend}', unsafe_allow_html=True)
-        else:
-            cols[3].markdown("--")
+                cols[3].markdown("--")
 
-        # Signal
-        sig = r.get("signal", "")
-        short_sig = sig.replace("LONG -- ", "").replace("CASH -- ", "").replace("EXIT -- ", "EXIT: ")
-        sig_colors = {"ENTER": "#34d399", "CONFIRMING": "#5eead4", "HOLD": "#2dd4bf", "EXIT": "#f87171", "BEARISH": "#f87171"}
-        sig_hex = next((v for k, v in sig_colors.items() if k in sig), "#6b7280")
-        flash = ' class="alert-flash"' if "ENTER" in sig or "EXIT" in sig else ""
-        cols[4].markdown(f'<span{flash} style="color:{sig_hex};font-weight:600;font-size:0.75rem">{short_sig}</span>', unsafe_allow_html=True)
+            short_sig, sig_hex = _screener_signal_info(r)
+            flash = ' class="alert-flash"' if "ENTER" in r.get("signal", "") or "EXIT" in r.get("signal", "") else ""
+            cols[4].markdown(f'<span{flash} style="color:{sig_hex};font-weight:600;font-size:0.75rem">{short_sig}</span>', unsafe_allow_html=True)
 
-        # Confirmations
-        cmet = r.get("confirmations_met", 0)
-        conf_total = r.get("confirmations_total", 12)
-        ct_ratio = cmet / max(conf_total, 1)
-        ct_hex = "#34d399" if ct_ratio >= 0.6 else ("#5eead4" if ct_ratio >= 0.4 else "#f87171")
-        cols[5].markdown(f'<span style="color:{ct_hex};font-size:0.8rem">{cmet}/{conf_total}</span>', unsafe_allow_html=True)
+            cmet = r.get("confirmations_met", 0)
+            conf_total = r.get("confirmations_total", 12)
+            ct_ratio = cmet / max(conf_total, 1)
+            ct_hex = "#34d399" if ct_ratio >= 0.6 else ("#5eead4" if ct_ratio >= 0.4 else "#f87171")
+            cols[5].markdown(f'<span style="color:{ct_hex};font-size:0.8rem">{cmet}/{conf_total}</span>', unsafe_allow_html=True)
 
-        # RSI
-        rsi = r.get("rsi")
-        if rsi is not None:
-            rsi_hex = "#f87171" if rsi > 70 else ("#34d399" if rsi < 30 else "#9ca3af")
-            cols[6].markdown(f'<span style="color:{rsi_hex};font-size:0.8rem">{rsi:.0f}</span>', unsafe_allow_html=True)
-        else:
-            cols[6].markdown("--")
+            rsi = r.get("rsi")
+            if rsi is not None:
+                rsi_hex = "#f87171" if rsi > 70 else ("#34d399" if rsi < 30 else "#9ca3af")
+                cols[6].markdown(f'<span style="color:{rsi_hex};font-size:0.8rem">{rsi:.0f}</span>', unsafe_allow_html=True)
+            else:
+                cols[6].markdown("--")
 
-        # ADX
-        adx = r.get("adx")
-        if adx is not None:
-            adx_hex = "#34d399" if adx > 25 else "#6b7280"
-            cols[7].markdown(f'<span style="color:{adx_hex};font-size:0.8rem">{adx:.0f}</span>', unsafe_allow_html=True)
-        else:
-            cols[7].markdown("--")
+            adx = r.get("adx")
+            if adx is not None:
+                adx_hex = "#34d399" if adx > 25 else "#6b7280"
+                cols[7].markdown(f'<span style="color:{adx_hex};font-size:0.8rem">{adx:.0f}</span>', unsafe_allow_html=True)
+            else:
+                cols[7].markdown("--")
 
-        # Trend arrow in last column
-        _rid = r.get("regime_id")
-        _chg1d = r.get("change_1d", 0) or 0
-        _confs = r.get("confirmations_met", 0)
-        _conf_total = r.get("confirmations_total", 12)
-        if _rid is not None and _rid <= 2 and _confs >= _conf_total * 0.5 and _chg1d > 0:
-            cols[8].markdown('<span style="color:#34d399;font-size:0.9rem">^</span>', unsafe_allow_html=True)
-        elif _rid is not None and _rid >= 5:
-            cols[8].markdown('<span style="color:#f87171;font-size:0.9rem">v</span>', unsafe_allow_html=True)
-        else:
-            cols[8].markdown('<span style="color:#4b5563;font-size:0.9rem">-</span>', unsafe_allow_html=True)
+            _rid = r.get("regime_id")
+            _chg1d = r.get("change_1d", 0) or 0
+            _confs = r.get("confirmations_met", 0)
+            _conf_total = r.get("confirmations_total", 12)
+            if _rid is not None and _rid <= 2 and _confs >= _conf_total * 0.5 and _chg1d > 0:
+                cols[8].markdown('<span style="color:#34d399;font-size:0.9rem">^</span>', unsafe_allow_html=True)
+            elif _rid is not None and _rid >= 5:
+                cols[8].markdown('<span style="color:#f87171;font-size:0.9rem">v</span>', unsafe_allow_html=True)
+            else:
+                cols[8].markdown('<span style="color:#4b5563;font-size:0.9rem">-</span>', unsafe_allow_html=True)
 
-    # Show errored tickers in collapsed expander
     if errored:
         with st.expander(f"{len(errored)} tickers failed to scan", expanded=False):
             for r in errored:
@@ -552,19 +643,24 @@ def render_drill_down(result):
     """, unsafe_allow_html=True)
 
     # Top metrics
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    with c1:
+    _mcols = 3 if MOBILE else 6
+    _row1 = st.columns(_mcols)
+    with _row1[0]:
         render_metric("Price", f"${result['price']:,.2f}")
-    with c2:
+    with _row1[1]:
         css_r = "bull" if result["regime_id"] <= 1 else ("bear" if result["regime_id"] >= 5 else "neutral")
         render_metric("Regime", result["regime_label"], css_r)
-    with c3:
+    with _row1[2]:
         render_metric("Confidence", f"{result['regime_confidence']:.0%}")
-    with c4:
+    if MOBILE:
+        _row2 = st.columns(3)
+    else:
+        _row2 = _row1[3:]
+    with _row2[0]:
         render_metric("Confirmations", f"{result['confirmations_met']}/8")
-    with c5:
+    with _row2[1]:
         render_metric("Regime Streak", f"{result.get('regime_streak', '?')} bars")
-    with c6:
+    with _row2[2]:
         chg = result.get("change_1d")
         if chg is not None:
             css_c = "bull" if chg >= 0 else "bear"
@@ -575,9 +671,9 @@ def render_drill_down(result):
     # Confirmation breakdown
     with st.expander("Confirmation Breakdown", expanded=False):
         conf_detail = result.get("confirmation_detail", {})
-        conf_cols = st.columns(4)
+        conf_cols = st.columns(2 if MOBILE else 4)
         for idx, (name, passed) in enumerate(conf_detail.items()):
-            with conf_cols[idx % 4]:
+            with conf_cols[idx % (2 if MOBILE else 4)]:
                 icon_c = "+" if passed else "-"
                 st.markdown(f"{icon_c} **{name}**")
 
@@ -592,17 +688,25 @@ def render_drill_down(result):
     </iframe>
     </div>
     '''
-    st.components.v1.html(tv_html, height=225)
+    st.components.v1.html(tv_html, height=180 if MOBILE else 225)
 
     # Quick Trade (Tradier)
     if tradier_configured():
         with st.expander("Place Trade", expanded=False):
-            tc1, tc2, tc3, tc4 = st.columns([2, 2, 2, 2])
-            trade_type = tc1.selectbox("Type", ["Buy Calls", "Buy Shares"], key=f"tt_{sym}")
-            trade_qty = tc2.number_input("Qty", value=1, min_value=1, key=f"tq_{sym}")
-            trade_order = tc3.selectbox("Order", ["Market", "Limit"], key=f"to_{sym}")
-            trade_limit = tc4.number_input("Limit $", value=0.0, step=0.05, key=f"tl_{sym}",
-                                           disabled=trade_order != "Limit")
+            if MOBILE:
+                trade_type = st.selectbox("Type", ["Buy Calls", "Buy Shares"], key=f"tt_{sym}")
+                _tq1, _tq2 = st.columns(2)
+                trade_qty = _tq1.number_input("Qty", value=1, min_value=1, key=f"tq_{sym}")
+                trade_order = _tq2.selectbox("Order", ["Market", "Limit"], key=f"to_{sym}")
+                trade_limit = st.number_input("Limit $", value=0.0, step=0.05, key=f"tl_{sym}",
+                                               disabled=trade_order != "Limit")
+            else:
+                tc1, tc2, tc3, tc4 = st.columns([2, 2, 2, 2])
+                trade_type = tc1.selectbox("Type", ["Buy Calls", "Buy Shares"], key=f"tt_{sym}")
+                trade_qty = tc2.number_input("Qty", value=1, min_value=1, key=f"tq_{sym}")
+                trade_order = tc3.selectbox("Order", ["Market", "Limit"], key=f"to_{sym}")
+                trade_limit = tc4.number_input("Limit $", value=0.0, step=0.05, key=f"tl_{sym}",
+                                               disabled=trade_order != "Limit")
 
             if trade_type == "Buy Calls":
                 # Show top option pick if available
@@ -681,18 +785,20 @@ def render_drill_down(result):
     with tab2:
         try:
             metrics = bt["metrics"]
-            m1, m2, m3, m4, m5, m6 = st.columns(6)
-            with m1:
+            _bc = 3 if MOBILE else 6
+            _br1 = st.columns(_bc)
+            with _br1[0]:
                 render_metric("Return", f"{metrics['total_return_pct']:.1f}%", "bull" if metrics["total_return_pct"] > 0 else "bear")
-            with m2:
+            with _br1[1]:
                 render_metric("Alpha", f"{metrics['alpha_vs_buyhold']:.1f}%", "bull" if metrics["alpha_vs_buyhold"] > 0 else "bear")
-            with m3:
+            with _br1[2]:
                 render_metric("Win Rate", f"{metrics['win_rate']:.0f}%", "bull" if metrics["win_rate"] > 50 else "bear")
-            with m4:
+            _br2 = st.columns(_bc) if MOBILE else _br1[3:]
+            with _br2[0]:
                 render_metric("Sharpe", f"{metrics['sharpe_ratio']:.2f}")
-            with m5:
+            with _br2[1]:
                 render_metric("Max DD", f"{metrics['max_drawdown_pct']:.1f}%", "bear")
-            with m6:
+            with _br2[2]:
                 render_metric("PF", f"{metrics['profit_factor']:.2f}")
 
             if bt.get("trades"):
@@ -1066,19 +1172,21 @@ if results:
     n_errors = sum(1 for r in results if r.get("error") and r.get("price") is None)
 
     # Summary metrics
-    s1, s2, s3, s4, s5, s6 = st.columns(6)
-    with s1:
-        render_metric("Tickers Scanned", str(total))
-    with s2:
+    _sc = 3 if MOBILE else 6
+    _sr1 = st.columns(_sc)
+    with _sr1[0]:
+        render_metric("Scanned", str(total))
+    with _sr1[1]:
         render_metric("Bullish", str(n_bull), "bull")
-    with s3:
+    with _sr1[2]:
         render_metric("Neutral", str(n_neutral), "neutral")
-    with s4:
+    _sr2 = st.columns(_sc) if MOBILE else _sr1[3:]
+    with _sr2[0]:
         render_metric("Bearish", str(n_bear), "bear")
-    with s5:
-        render_metric("Entry Signals", str(n_enter), "bull" if n_enter > 0 else "cash")
-    with s6:
-        render_metric("Exit Signals", str(n_exit), "bear" if n_exit > 0 else "cash")
+    with _sr2[1]:
+        render_metric("Entry", str(n_enter), "bull" if n_enter > 0 else "cash")
+    with _sr2[2]:
+        render_metric("Exit", str(n_exit), "bear" if n_exit > 0 else "cash")
 
 
     # Tabs: Screener | Options Picks | Regime Chart | Signal Overview | Drill-Down
@@ -1086,13 +1194,16 @@ if results:
 
     with main_tabs[0]:
         # Filter bar
-        fc1, fc2, fc3 = st.columns([2, 2, 6])
-        with fc1:
+        if MOBILE:
+            _fc1, _fc2 = st.columns(2)
+        else:
+            _fc1, _fc2, _fc3 = st.columns([2, 2, 6])
+        with _fc1:
             filter_signal = st.selectbox(
                 "Filter",
                 ["All", "ENTER", "CONFIRMING", "HOLD", "EXIT", "CASH", "BEARISH"],
             )
-        with fc2:
+        with _fc2:
             sort_by = st.selectbox(
                 "Sort",
                 ["Top Buy First", "Confirmations", "RSI", "Regime (Bullish)", "1D Change"],
@@ -1215,12 +1326,13 @@ if results:
             )
 
             if picks:
-                # Column headers
-                hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([1, 0.7, 0.7, 0.6, 0.7, 0.6])
-                for col, lbl in zip([hc1,hc2,hc3,hc4,hc5,hc6], ["Strike","DTE","Delta","IV","Mid","Qty"]):
-                    col.markdown(f'<span style="color:#4b5563;font-size:0.6rem">{lbl}</span>', unsafe_allow_html=True)
-
                 _risk_pct = st.session_state.get("risk_pct", 10) / 100
+
+                if not MOBILE:
+                    # Desktop: column headers
+                    hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([1, 0.7, 0.7, 0.6, 0.7, 0.6])
+                    for col, lbl in zip([hc1,hc2,hc3,hc4,hc5,hc6], ["Strike","DTE","Delta","IV","Mid","Qty"]):
+                        col.markdown(f'<span style="color:#4b5563;font-size:0.6rem">{lbl}</span>', unsafe_allow_html=True)
 
                 for i, p in enumerate(picks):
                     atr_est = (sel_scan.get("price", 100) * 0.02) if sel_scan else 2
@@ -1235,14 +1347,30 @@ if results:
                         max_risk_pct=_risk_pct,
                     )
 
-                    c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 0.7, 0.7, 0.6, 0.7, 0.6, 0.6])
-                    c1.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">${p["strike"]:.0f}</span>', unsafe_allow_html=True)
-                    c2.markdown(f'<span style="color:#9ca3af;font-size:0.85rem">{p["dte"]}d</span>', unsafe_allow_html=True)
-                    c3.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">{p["delta"]:.2f}</span>', unsafe_allow_html=True)
-                    c4.markdown(f'<span style="color:#6b7280;font-size:0.85rem">{p["iv_pct"]:.0f}%</span>', unsafe_allow_html=True)
-                    c5.markdown(f'<span style="color:#2dd4bf;font-size:0.85rem">${p["mid"]:.2f}</span>', unsafe_allow_html=True)
-                    c6.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">{sizing["contracts"]}</span>', unsafe_allow_html=True)
-                    if c7.button("BUY", key=f"buy_{sel}_{i}", type="primary"):
+                    if MOBILE:
+                        # Mobile: compact card per option
+                        st.markdown(
+                            f'<div style="background:#18191d;border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.3rem;border:1px solid #1f2937">'
+                            f'<span style="color:#e5e7eb;font-size:0.85rem;font-weight:600">${p["strike"]:.0f}</span>'
+                            f'<span style="color:#6b7280;font-size:0.75rem;margin-left:0.5rem">{p["dte"]}d</span>'
+                            f'<span style="color:#9ca3af;font-size:0.75rem;margin-left:0.5rem">d{p["delta"]:.2f}</span>'
+                            f'<span style="color:#6b7280;font-size:0.75rem;margin-left:0.5rem">{p["iv_pct"]:.0f}%</span>'
+                            f'<span style="color:#2dd4bf;font-size:0.85rem;margin-left:0.5rem">${p["mid"]:.2f}</span>'
+                            f'<span style="color:#e5e7eb;font-size:0.75rem;margin-left:0.5rem">x{sizing["contracts"]}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                        _buy_clicked = st.button("BUY", key=f"buy_{sel}_{i}", type="primary", use_container_width=True)
+                    else:
+                        c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 0.7, 0.7, 0.6, 0.7, 0.6, 0.6])
+                        c1.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">${p["strike"]:.0f}</span>', unsafe_allow_html=True)
+                        c2.markdown(f'<span style="color:#9ca3af;font-size:0.85rem">{p["dte"]}d</span>', unsafe_allow_html=True)
+                        c3.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">{p["delta"]:.2f}</span>', unsafe_allow_html=True)
+                        c4.markdown(f'<span style="color:#6b7280;font-size:0.85rem">{p["iv_pct"]:.0f}%</span>', unsafe_allow_html=True)
+                        c5.markdown(f'<span style="color:#2dd4bf;font-size:0.85rem">${p["mid"]:.2f}</span>', unsafe_allow_html=True)
+                        c6.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">{sizing["contracts"]}</span>', unsafe_allow_html=True)
+                        _buy_clicked = c7.button("BUY", key=f"buy_{sel}_{i}", type="primary")
+                    if _buy_clicked:
                         if tradier_configured():
                             with st.spinner(f"Buying {sizing['contracts']}x {p['contractSymbol']}..."):
                                 result = execute_buy_calls(
@@ -1385,51 +1513,59 @@ if results:
                 pnl_est = (current_price - entry_px) / entry_px * 100 if entry_px > 0 and current_price > 0 else 0
 
                 # Row
-                h1, h2, h3, h4, h5 = st.columns([1.5, 2.5, 1, 1, 2])
-                h1.markdown(f"**{sym}**")
-                h2.markdown(f"`{contract or 'shares'}` x{qty}")
-                h3.markdown(f"${entry_px:.2f}")
                 pnl_color = "bull" if pnl_est >= 0 else "bear"
-                h4.markdown(f"<span class='{pnl_color}'>{pnl_est:+.1f}%</span>", unsafe_allow_html=True)
+                if MOBILE:
+                    st.markdown(
+                        f"**{sym}** &nbsp; `{contract or 'shares'}` x{qty} &nbsp; ${entry_px:.2f} &nbsp; "
+                        f"<span class='{pnl_color}'>{pnl_est:+.1f}%</span>",
+                        unsafe_allow_html=True,
+                    )
+                    ac1, ac2, ac3 = st.columns(3)
+                else:
+                    h1, h2, h3, h4, h5 = st.columns([1.5, 2.5, 1, 1, 2])
+                    h1.markdown(f"**{sym}**")
+                    h2.markdown(f"`{contract or 'shares'}` x{qty}")
+                    h3.markdown(f"${entry_px:.2f}")
+                    h4.markdown(f"<span class='{pnl_color}'>{pnl_est:+.1f}%</span>", unsafe_allow_html=True)
+                    with h5:
+                        ac1, ac2, ac3 = st.columns(3)
 
                 # Actions
-                with h5:
-                    ac1, ac2, ac3 = st.columns(3)
-                    if is_sell:
-                        if ac1.button("SELL", key=f"sell_{pos['id']}", type="primary"):
-                            if tradier_configured() and contract:
-                                quote = _get_option_quote_safe(sym, contract)
-                                result = execute_sell_to_close(sym, contract, qty, quote.get("ask", 0))
-                                if result.get("success"):
-                                    log_exit(pos["id"], result["fill_price"], "Sold via dashboard")
-                                    st.rerun()
-                                else:
-                                    st.error(result.get("error", "Failed"))
-                            else:
-                                log_exit(pos["id"], current_price, current_signal)
+                if is_sell:
+                    if ac1.button("SELL", key=f"sell_{pos['id']}", type="primary"):
+                        if tradier_configured() and contract:
+                            quote = _get_option_quote_safe(sym, contract)
+                            result = execute_sell_to_close(sym, contract, qty, quote.get("ask", 0))
+                            if result.get("success"):
+                                log_exit(pos["id"], result["fill_price"], "Sold via dashboard")
                                 st.rerun()
-                    else:
-                        ac1.caption("HOLD")
+                            else:
+                                st.error(result.get("error", "Failed"))
+                        else:
+                            log_exit(pos["id"], current_price, current_signal)
+                            st.rerun()
+                else:
+                    ac1.caption("HOLD")
 
-                    # Roll button — find recommended roll target
-                    if contract and scan_match:
-                        roll_target = find_roll_target(
-                            sym, current_price,
-                            current_contract_bid=current_price * 0.01,  # estimate
-                            same_expiry=contract[-15:-9] if len(contract) > 15 else None,
-                        )
-                        if roll_target:
-                            credit_est = roll_target.get("credit", 0)
-                            if ac2.button(f"ROLL +${credit_est:.2f}", key=f"roll_{pos['id']}"):
-                                if tradier_configured():
-                                    result = exec_roll(sym, contract, roll_target["contractSymbol"], qty,
-                                                      current_price * 0.01, roll_target["ask"])
-                                    if result.get("success"):
-                                        from performance_tracker import log_roll
-                                        log_roll(pos["id"], contract, roll_target["contractSymbol"],
-                                                "roll_up", result.get("credit", 0))
-                                        st.rerun()
-                            ac3.caption(f"-> {roll_target['contractSymbol'][-10:]}")
+                # Roll button — find recommended roll target
+                if contract and scan_match:
+                    roll_target = find_roll_target(
+                        sym, current_price,
+                        current_contract_bid=current_price * 0.01,  # estimate
+                        same_expiry=contract[-15:-9] if len(contract) > 15 else None,
+                    )
+                    if roll_target:
+                        credit_est = roll_target.get("credit", 0)
+                        if ac2.button(f"ROLL +${credit_est:.2f}", key=f"roll_{pos['id']}"):
+                            if tradier_configured():
+                                result = exec_roll(sym, contract, roll_target["contractSymbol"], qty,
+                                                  current_price * 0.01, roll_target["ask"])
+                                if result.get("success"):
+                                    from performance_tracker import log_roll
+                                    log_roll(pos["id"], contract, roll_target["contractSymbol"],
+                                            "roll_up", result.get("credit", 0))
+                                    st.rerun()
+                        ac3.caption(f"-> {roll_target['contractSymbol'][-10:]}")
         else:
             pass
 
@@ -1437,20 +1573,22 @@ if results:
         # ── PERFORMANCE ──
         perf = get_performance_summary()
         if perf["total_trades"] > 0:
-            pm1, pm2, pm3, pm4, pm5, pm6 = st.columns(6)
-            with pm1:
+            _pc = 3 if MOBILE else 6
+            _pr1 = st.columns(_pc)
+            with _pr1[0]:
                 render_metric("Total P&L", f"${perf['total_pnl']:,.0f}",
                              "bull" if perf["total_pnl"] > 0 else "bear")
-            with pm2:
+            with _pr1[1]:
                 render_metric("Win Rate", f"{perf['win_rate']:.0f}%",
                              "bull" if perf["win_rate"] > 50 else "bear")
-            with pm3:
+            with _pr1[2]:
                 render_metric("Trades", str(perf["total_trades"]))
-            with pm4:
+            _pr2 = st.columns(_pc) if MOBILE else _pr1[3:]
+            with _pr2[0]:
                 render_metric("Open", str(perf["open_trades"]))
-            with pm5:
+            with _pr2[1]:
                 render_metric("Rolls", str(perf["total_rolls"]))
-            with pm6:
+            with _pr2[2]:
                 render_metric("Roll Credits", f"${perf['total_roll_credits']:,.0f}", "bull")
 
             # Trade history table
@@ -1493,11 +1631,11 @@ if results:
 else:
     # Landing — clean hero, nothing else
     st.markdown("""
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:22vh 2rem 15vh;">
-        <div style="font-family:'Inter',sans-serif; font-weight:600; font-size:5rem; letter-spacing:0.6rem; color:#f3f4f6; line-height:1;">
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:15vh 1rem 10vh;">
+        <div style="font-family:'Inter',sans-serif; font-weight:600; font-size:clamp(2.5rem, 10vw, 5rem); letter-spacing:0.4rem; color:#f3f4f6; line-height:1;">
             RRJCAR
         </div>
-        <div style="font-family:'JetBrains Mono',monospace; font-weight:400; font-size:0.7rem; letter-spacing:0.5rem; color:#2dd4bf; text-transform:uppercase; margin-top:0.6rem;">
+        <div style="font-family:'JetBrains Mono',monospace; font-weight:400; font-size:clamp(0.5rem, 2vw, 0.7rem); letter-spacing:0.4rem; color:#2dd4bf; text-transform:uppercase; margin-top:0.6rem;">
             regime scanner
         </div>
     </div>
