@@ -70,12 +70,11 @@ st.markdown("""
     #MainMenu, footer {visibility: hidden;}
     header {visibility: visible !important;}
 
-    /* Hide file change bar, running spinner, status elements */
+    /* Hide file change bar, running spinner, status elements — but NOT sidebar toggle */
     .stStatusWidget, div[data-testid="stStatusWidget"],
     div[data-testid="stNotification"],
     .stSpinner > div > div:first-child,
     div[data-testid="stAppDeployButton"],
-    div[data-testid="stToolbar"] > div:nth-child(2),
     .stRunningMan { display: none !important; visibility: hidden !important; }
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
@@ -237,6 +236,31 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ─── Mobile sidebar toggle (st.components.v1.html allows JS) ───
+st.components.v1.html("""
+<style>
+  #sidebar-btn {
+    position: fixed; top: 10px; left: 10px; z-index: 999999;
+    background: #1f2937; border: 1px solid #374151; border-radius: 8px;
+    color: #2dd4bf; font-size: 1.3rem; width: 42px; height: 42px;
+    display: none; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    -webkit-tap-highlight-color: transparent; line-height: 1;
+  }
+  #sidebar-btn:active { background: #374151; }
+  @media (max-width: 600px) { #sidebar-btn { display: flex; } }
+</style>
+<div id="sidebar-btn" onclick="
+  var p = window.parent.document;
+  var btn = p.querySelector('[data-testid=\\'collapsedControl\\']')
+         || p.querySelector('button[data-testid=\\'baseButton-headerNoPadding\\']')
+         || p.querySelector('[data-testid=\\'stSidebarCollapsedControl\\']');
+  if (btn) { btn.click(); return; }
+  var sb = p.querySelector('section[data-testid=\\'stSidebar\\']');
+  if (sb) { sb.setAttribute('aria-expanded','true'); sb.style.width='300px'; sb.style.marginLeft='0'; }
+">&#9776;</div>
+""", height=0)
 
 
 # ─── Regime Colors (Palantir dark) ───
