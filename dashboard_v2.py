@@ -6,7 +6,6 @@ Run with: streamlit run dashboard_v2.py
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
@@ -68,45 +67,19 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    #MainMenu {visibility: hidden;}
-
-    /* Hide Streamlit chrome BUT keep header + sidebar toggle visible */
-    .stStatusWidget, div[data-testid="stStatusWidget"],
-    div[data-testid="stNotification"],
-    .stSpinner > div > div:first-child,
+    /* Hide ALL Streamlit chrome — header, footer, sidebar, badges, deploy, toolbar */
+    #MainMenu, footer, header,
+    div[data-testid="stSidebarCollapsedControl"],
+    section[data-testid="stSidebar"],
     div[data-testid="stAppDeployButton"],
     div[data-testid="stToolbar"],
     div[data-testid="stDecoration"],
-    .stRunningMan,
-    iframe[src*="streamlit"],
-    div[data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; }
-
-    /* Hide ALL footer / badge / branding elements (bottom-right icons) */
-    footer,
-    a[href*="streamlit.io"],
-    ._profileContainer_gzau3_53,
-    .viewerBadge_container__r5tak,
-    .viewerBadge_link__qRIco,
-    ._container_gzau3_1,
-    div[class*="viewerBadge"],
-    div[class*="stBottomBlockContainer"] iframe,
+    div[data-testid="manage-app-button"],
+    div[data-testid="stStatusWidget"],
     div[data-testid="stBottom"],
-    .stBottom,
-    .stApp > div:last-child > div[style*="position: fixed"],
-    div[data-testid="stDecoration"],
-    [data-testid="stAppViewBlockContainer"] > div:last-child iframe,
-    .stApp iframe[title="streamlit_app_badge"],
-    div[style*="position: fixed"][style*="bottom"] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; }
+    .stBottom, .stRunningMan,
+    iframe[src*="streamlit"] { display: none !important; visibility: hidden !important; }
 
-    /* Make header transparent but keep sidebar toggle clickable */
-    header[data-testid="stHeader"] { background: transparent !important; }
-    /* Ensure sidebar toggle is visible */
-    div[data-testid="stSidebarCollapsedControl"] { display: flex !important; visibility: visible !important; z-index: 999; }
-
-    /* Style the sidebar toggle button */
-    div[data-testid="stSidebarCollapsedControl"] { z-index: 999; }
-    section[data-testid="stSidebar"] { background: #101114; }
-    section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
 
@@ -267,88 +240,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
-# ─── JS: hide badges + create floating sidebar button ───
-components.html("""
-<script>
-(function() {
-    const doc = window.parent.document;
-
-    // --- Hide Streamlit Cloud badges/branding ---
-    function hideBadges() {
-        // Target iframes (Streamlit badge is often an iframe)
-        doc.querySelectorAll('iframe').forEach(function(el) {
-            var src = el.src || '';
-            var title = el.title || '';
-            if (src.indexOf('badge') !== -1 || src.indexOf('streamlit') !== -1 ||
-                title.indexOf('badge') !== -1 || title.indexOf('streamlit') !== -1) {
-                el.style.display = 'none';
-            }
-        });
-        // Target fixed-position elements at bottom of page
-        doc.querySelectorAll('div').forEach(function(el) {
-            var style = window.parent.getComputedStyle(el);
-            if (style.position === 'fixed' && parseInt(style.bottom) < 50 &&
-                parseInt(style.right) < 200 && el.offsetHeight < 80) {
-                el.style.display = 'none';
-            }
-        });
-        // Target links to streamlit.io
-        doc.querySelectorAll('a[href*="streamlit.io"]').forEach(function(el) {
-            var p = el.closest('div');
-            if (p) p.style.display = 'none';
-            el.style.display = 'none';
-        });
-        // Footer
-        var footer = doc.querySelector('footer');
-        if (footer) footer.style.display = 'none';
-    }
-
-    // --- Create floating sidebar toggle button ---
-    function createToggle() {
-        if (doc.getElementById('sidebar-toggle-btn')) return;
-        var btn = doc.createElement('div');
-        btn.id = 'sidebar-toggle-btn';
-        btn.innerHTML = '&#9776;';
-        btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:99999;' +
-            'width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.08);' +
-            'color:#2dd4bf;font-size:20px;display:flex;align-items:center;justify-content:center;' +
-            'cursor:pointer;border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(8px);' +
-            '-webkit-backdrop-filter:blur(8px);transition:background 0.2s;';
-        btn.onmouseenter = function() { btn.style.background = 'rgba(255,255,255,0.15)'; };
-        btn.onmouseleave = function() { btn.style.background = 'rgba(255,255,255,0.08)'; };
-        btn.onclick = function() {
-            // Try to find and click the native Streamlit sidebar toggle
-            var nativeBtn = doc.querySelector('div[data-testid="stSidebarCollapsedControl"] button') ||
-                            doc.querySelector('button[data-testid="stSidebarCollapsedControl"]') ||
-                            doc.querySelector('[data-testid="stSidebarNavCollapseButton"] button');
-            if (nativeBtn) { nativeBtn.click(); return; }
-            // Fallback: directly toggle sidebar visibility
-            var sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-            if (sidebar) {
-                var isHidden = sidebar.getAttribute('aria-expanded') === 'false' ||
-                               sidebar.style.display === 'none' ||
-                               sidebar.offsetWidth < 10;
-                if (isHidden) {
-                    sidebar.setAttribute('aria-expanded', 'true');
-                    sidebar.style.display = 'block';
-                    sidebar.style.transform = 'translateX(0)';
-                } else {
-                    sidebar.setAttribute('aria-expanded', 'false');
-                    sidebar.style.transform = 'translateX(-100%)';
-                }
-            }
-        };
-        doc.body.appendChild(btn);
-    }
-
-    // Run immediately and on interval (badges load async)
-    hideBadges();
-    createToggle();
-    setInterval(hideBadges, 1500);
-})();
-</script>
-""", height=0)
 
 # ─── Regime Colors (Palantir dark) ───
 REGIME_COLORS = {
@@ -894,94 +785,91 @@ if not results:
     """, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════
-#  SIDEBAR — All settings live here (hidden until hamburger tap)
+#  SETTINGS — Single expander below hero (no sidebar needed)
 # ════════════════════════════════════════════════════════
-with st.sidebar:
-    st.markdown("### Settings")
+with st.expander("Settings", expanded=False):
     watchlist_keys = list(WATCHLISTS.keys())
     saved_wl = _saved.get("watchlist", "All Stocks (no ETFs)")
     default_idx = watchlist_keys.index(saved_wl) if saved_wl in watchlist_keys else 0
     watchlist_name = st.selectbox("Watchlist", watchlist_keys, index=default_idx)
     strategy = "v2" if st.selectbox("Version", ["V2", "V1"]) == "V2" else "v1"
     custom_tickers = st.text_input("Add tickers", value=_saved.get("custom_tickers", ""), placeholder="AAPL, TSLA...")
-
     scan_btn = st.button("SCAN", type="primary", use_container_width=True)
-
-    with st.expander("Advanced"):
-        n_regimes = st.number_input("Regimes", value=_saved.get("n_regimes",7), min_value=3, max_value=10)
-        max_workers = st.number_input("Speed", value=_saved.get("max_workers",6), min_value=1, max_value=8)
-        min_confs = st.number_input("Confs", value=_saved.get("min_confs",6), min_value=3, max_value=12)
-        regime_confirm = st.number_input("Confirm", value=_saved.get("regime_confirm",2), min_value=1, max_value=10)
-        cooldown = st.number_input("Cooldown", value=_saved.get("cooldown",3), min_value=1, max_value=20)
-        initial_capital = st.number_input("Capital $", value=_saved.get("initial_capital", 100000), min_value=1000, step=10000)
-        risk_pct = st.number_input("Risk %", value=_saved.get("risk_pct",10), min_value=1, max_value=25)
-        options_enabled = st.checkbox("Options Picker", value=_saved.get("options_enabled", True))
-        if options_enabled:
-            min_dte = st.number_input("Min DTE", value=_saved.get("min_dte",21), min_value=7, max_value=30)
-            max_dte = st.number_input("Max DTE", value=_saved.get("max_dte",45), min_value=30, max_value=180)
-            top_n_options = st.number_input("Picks", value=_saved.get("top_n_options",3), min_value=1, max_value=10)
+    st.markdown("---")
+    st.caption("Advanced")
+    n_regimes = st.number_input("Regimes", value=_saved.get("n_regimes",7), min_value=3, max_value=10)
+    max_workers = st.number_input("Speed", value=_saved.get("max_workers",6), min_value=1, max_value=8)
+    min_confs = st.number_input("Confs", value=_saved.get("min_confs",6), min_value=3, max_value=12)
+    regime_confirm = st.number_input("Confirm", value=_saved.get("regime_confirm",2), min_value=1, max_value=10)
+    cooldown = st.number_input("Cooldown", value=_saved.get("cooldown",3), min_value=1, max_value=20)
+    initial_capital = st.number_input("Capital $", value=_saved.get("initial_capital", 100000), min_value=1000, step=10000)
+    risk_pct = st.number_input("Risk %", value=_saved.get("risk_pct",10), min_value=1, max_value=25)
+    options_enabled = st.checkbox("Options Picker", value=_saved.get("options_enabled", True))
+    if options_enabled:
+        min_dte = st.number_input("Min DTE", value=_saved.get("min_dte",21), min_value=7, max_value=30)
+        max_dte = st.number_input("Max DTE", value=_saved.get("max_dte",45), min_value=30, max_value=180)
+        top_n_options = st.number_input("Picks", value=_saved.get("top_n_options",3), min_value=1, max_value=10)
+    else:
+        min_dte, max_dte, top_n_options = 21, 45, 3
+    auto_refresh = st.checkbox("Auto-Refresh", value=_saved.get("auto_refresh", False))
+    refresh_minutes = _saved.get("refresh_minutes", 5)
+    if auto_refresh:
+        refresh_minutes = st.slider("Min", 1, 30, refresh_minutes)
+    st.markdown("---")
+    st.caption("Alerts & Schedule")
+    alerts_enabled = st.checkbox("Enable Alerts", value=_saved.get("alerts_enabled", False))
+    if alerts_enabled:
+        alert_on_regime_change = st.checkbox("Any Change", value=_saved.get("alert_on_regime_change", True))
+        alert_on_bull_entry = st.checkbox("Bull Entry", value=_saved.get("alert_on_bull_entry", True))
+        alert_on_bear_entry = st.checkbox("Bear Entry", value=_saved.get("alert_on_bear_entry", False))
+        alert_min_confirmations = st.slider("Min Confirmations", 1, 10, _saved.get("alert_min_confirmations", 6))
+        alert_email = st.text_input("Email To", value=_saved.get("alert_email", ""))
+        alert_smtp_server = st.text_input("SMTP Server", value=_saved.get("alert_smtp_server", "smtp.gmail.com"))
+        alert_smtp_port = st.number_input("Port", value=_saved.get("alert_smtp_port", 587), min_value=1, max_value=65535)
+        alert_smtp_user = st.text_input("SMTP User", value=_saved.get("alert_smtp_user", ""))
+        alert_smtp_password = st.text_input("SMTP Pass", value=_saved.get("alert_smtp_password", ""), type="password")
+        alert_telegram_enabled = st.checkbox("Telegram", value=_saved.get("alert_telegram_enabled", False))
+        if alert_telegram_enabled:
+            alert_telegram_bot_token = st.text_input("Bot Token", value=_saved.get("alert_telegram_bot_token", ""), type="password")
+            alert_telegram_chat_id = st.text_input("Chat ID", value=_saved.get("alert_telegram_chat_id", ""))
         else:
-            min_dte, max_dte, top_n_options = 21, 45, 3
-        auto_refresh = st.checkbox("Auto-Refresh", value=_saved.get("auto_refresh", False))
-        refresh_minutes = _saved.get("refresh_minutes", 5)
-        if auto_refresh:
-            refresh_minutes = st.slider("Min", 1, 30, refresh_minutes)
-
-    with st.expander("Alerts & Schedule"):
-        alerts_enabled = st.checkbox("Enable Alerts", value=_saved.get("alerts_enabled", False))
-        if alerts_enabled:
-            alert_on_regime_change = st.checkbox("Any Change", value=_saved.get("alert_on_regime_change", True))
-            alert_on_bull_entry = st.checkbox("Bull Entry", value=_saved.get("alert_on_bull_entry", True))
-            alert_on_bear_entry = st.checkbox("Bear Entry", value=_saved.get("alert_on_bear_entry", False))
-            alert_min_confirmations = st.slider("Min Confirmations", 1, 10, _saved.get("alert_min_confirmations", 6))
-            alert_email = st.text_input("Email To", value=_saved.get("alert_email", ""))
-            alert_smtp_server = st.text_input("SMTP Server", value=_saved.get("alert_smtp_server", "smtp.gmail.com"))
-            alert_smtp_port = st.number_input("Port", value=_saved.get("alert_smtp_port", 587), min_value=1, max_value=65535)
-            alert_smtp_user = st.text_input("SMTP User", value=_saved.get("alert_smtp_user", ""))
-            alert_smtp_password = st.text_input("SMTP Pass", value=_saved.get("alert_smtp_password", ""), type="password")
-            alert_telegram_enabled = st.checkbox("Telegram", value=_saved.get("alert_telegram_enabled", False))
-            if alert_telegram_enabled:
-                alert_telegram_bot_token = st.text_input("Bot Token", value=_saved.get("alert_telegram_bot_token", ""), type="password")
-                alert_telegram_chat_id = st.text_input("Chat ID", value=_saved.get("alert_telegram_chat_id", ""))
-            else:
-                alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
-                alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
-            scheduled_scans_enabled = st.checkbox("Scheduled Scans", value=_saved.get("scheduled_scans_enabled", False))
-            if scheduled_scans_enabled:
-                scheduled_scan_times = st.text_input("Times (24h)", value=_saved.get("scheduled_scan_times", "09:30,12:00,15:30"))
-                scheduled_scan_timezone = st.selectbox("TZ",
-                    ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"],
-                    index=["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"].index(_saved.get("scheduled_scan_timezone", "America/Chicago")))
-            else:
-                scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
-                scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
-        else:
-            alert_email = _saved.get("alert_email", "")
-            alert_smtp_server = _saved.get("alert_smtp_server", "smtp.gmail.com")
-            alert_smtp_port = _saved.get("alert_smtp_port", 587)
-            alert_smtp_user = _saved.get("alert_smtp_user", "")
-            alert_smtp_password = _saved.get("alert_smtp_password", "")
-            alert_telegram_enabled = _saved.get("alert_telegram_enabled", False)
             alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
             alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
-            alert_on_regime_change = _saved.get("alert_on_regime_change", True)
-            alert_on_bull_entry = _saved.get("alert_on_bull_entry", True)
-            alert_on_bear_entry = _saved.get("alert_on_bear_entry", False)
-            alert_min_confirmations = _saved.get("alert_min_confirmations", 6)
-            scheduled_scans_enabled = _saved.get("scheduled_scans_enabled", False)
+        scheduled_scans_enabled = st.checkbox("Scheduled Scans", value=_saved.get("scheduled_scans_enabled", False))
+        if scheduled_scans_enabled:
+            scheduled_scan_times = st.text_input("Times (24h)", value=_saved.get("scheduled_scan_times", "09:30,12:00,15:30"))
+            scheduled_scan_timezone = st.selectbox("TZ",
+                ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"],
+                index=["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"].index(_saved.get("scheduled_scan_timezone", "America/Chicago")))
+        else:
             scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
             scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
-
+    else:
+        alert_email = _saved.get("alert_email", "")
+        alert_smtp_server = _saved.get("alert_smtp_server", "smtp.gmail.com")
+        alert_smtp_port = _saved.get("alert_smtp_port", 587)
+        alert_smtp_user = _saved.get("alert_smtp_user", "")
+        alert_smtp_password = _saved.get("alert_smtp_password", "")
+        alert_telegram_enabled = _saved.get("alert_telegram_enabled", False)
+        alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
+        alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
+        alert_on_regime_change = _saved.get("alert_on_regime_change", True)
+        alert_on_bull_entry = _saved.get("alert_on_bull_entry", True)
+        alert_on_bear_entry = _saved.get("alert_on_bear_entry", False)
+        alert_min_confirmations = _saved.get("alert_min_confirmations", 6)
+        scheduled_scans_enabled = _saved.get("scheduled_scans_enabled", False)
+        scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
+        scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
+    st.markdown("---")
     if not tradier_configured():
-        with st.expander("Connect Tradier"):
-            t_token = st.text_input("Token", type="password")
-            t_acct = st.text_input("Account ID")
-            t_sandbox = st.checkbox("Sandbox", value=True)
-            if st.button("Connect", use_container_width=True):
-                if t_token and t_acct:
-                    save_tradier_config(t_token, t_acct, t_sandbox)
-                    st.rerun()
-
+        st.caption("Tradier")
+        t_token = st.text_input("Token", type="password")
+        t_acct = st.text_input("Account ID")
+        t_sandbox = st.checkbox("Sandbox", value=True)
+        if st.button("Connect", use_container_width=True):
+            if t_token and t_acct:
+                save_tradier_config(t_token, t_acct, t_sandbox)
+                st.rerun()
     if st.button("Save Settings", use_container_width=True):
         save_settings({
             "watchlist": watchlist_name, "custom_tickers": custom_tickers,
@@ -1008,7 +896,7 @@ with st.sidebar:
         })
         st.toast("Saved")
 
-# Ticker list (computed from sidebar selections)
+# Ticker list
 tickers = list(WATCHLISTS.get(watchlist_name, []))
 if custom_tickers.strip():
     extras = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
