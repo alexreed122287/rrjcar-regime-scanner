@@ -577,13 +577,13 @@ def render_drill_down(result):
     tv_html = f'''
     <div style="overflow:hidden;">
     <iframe
-        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=101114&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%232dd4bf&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%233b82f6&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23a855f7&theme=dark&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=250"
+        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=101114&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%232dd4bf&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%233b82f6&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23a855f7&theme=dark&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=220"
         style="width:100%;height:420px;border:none;"
         allowfullscreen>
     </iframe>
     </div>
     '''
-    st.components.v1.html(tv_html, height=260)
+    st.components.v1.html(tv_html, height=225)
 
     # Quick Trade (Tradier)
     if tradier_configured():
@@ -649,83 +649,56 @@ def render_drill_down(result):
                     else:
                         st.json(preview)
 
-    # Charts
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Regime Chart", "Backtest", "Options Picks", "Regime Stats", "Transition Matrix"])
+    # Charts — compact, side-by-side
+    tab1, tab2, tab3 = st.tabs(["Chart", "Backtest", "Options"])
 
     with tab1:
-        fig = plot_price_with_regimes(regime_df, f"{resolve_ticker(sym)} - Regime Overlay")
-        st.plotly_chart(fig, use_container_width=True)
-
-    with tab2:
-        with st.spinner("Running backtest..."):
+        ch1, ch2 = st.columns(2)
+        with ch1:
+            fig = plot_price_with_regimes(regime_df, f"{resolve_ticker(sym)}")
+            fig.update_layout(height=220, margin=dict(l=40, r=10, t=30, b=20))
+            st.plotly_chart(fig, use_container_width=True)
+        with ch2:
+            # Run backtest for equity curve
             _strat = st.session_state.get("strategy", "v2")
             _confs = st.session_state.get("min_confs", 6)
             _cool = st.session_state.get("cooldown", 3)
             _confirm = st.session_state.get("regime_confirm", 2)
             _cap = st.session_state.get("initial_capital", 100_000)
+            try:
+                if _strat == "v2":
+                    bt = run_backtest_v2(regime_df, min_confirmations=_confs, cooldown_bars=_cool, regime_confirm_bars=_confirm, initial_capital=_cap)
+                else:
+                    bt = run_backtest(regime_df, min_confirmations=_confs, cooldown_bars=_cool, regime_confirm_bars=_confirm, initial_capital=_cap)
+                fig_eq = plot_equity_curve(bt["equity_curve"], bt["df"])
+                fig_eq.update_layout(height=220, margin=dict(l=40, r=10, t=30, b=20))
+                st.plotly_chart(fig_eq, use_container_width=True)
+            except Exception:
+                pass
 
-            if _strat == "v2":
-                bt = run_backtest_v2(
-                    regime_df,
-                    min_confirmations=_confs,
-                    cooldown_bars=_cool,
-                    regime_confirm_bars=_confirm,
-                    initial_capital=_cap,
-                )
-            else:
-                bt = run_backtest(
-                    regime_df,
-                    min_confirmations=_confs,
-                    cooldown_bars=_cool,
-                    regime_confirm_bars=_confirm,
-                    initial_capital=_cap,
-                )
+    with tab2:
+        try:
+            metrics = bt["metrics"]
+            m1, m2, m3, m4, m5, m6 = st.columns(6)
+            with m1:
+                render_metric("Return", f"{metrics['total_return_pct']:.1f}%", "bull" if metrics["total_return_pct"] > 0 else "bear")
+            with m2:
+                render_metric("Alpha", f"{metrics['alpha_vs_buyhold']:.1f}%", "bull" if metrics["alpha_vs_buyhold"] > 0 else "bear")
+            with m3:
+                render_metric("Win Rate", f"{metrics['win_rate']:.0f}%", "bull" if metrics["win_rate"] > 50 else "bear")
+            with m4:
+                render_metric("Sharpe", f"{metrics['sharpe_ratio']:.2f}")
+            with m5:
+                render_metric("Max DD", f"{metrics['max_drawdown_pct']:.1f}%", "bear")
+            with m6:
+                render_metric("PF", f"{metrics['profit_factor']:.2f}")
 
-        metrics = bt["metrics"]
-        m1, m2, m3, m4, m5, m6 = st.columns(6)
-        with m1:
-            css_m = "bull" if metrics["total_return_pct"] > 0 else "bear"
-            render_metric("Total Return", f"{metrics['total_return_pct']:.1f}%", css_m)
-        with m2:
-            css_m = "bull" if metrics["alpha_vs_buyhold"] > 0 else "bear"
-            render_metric("Alpha vs B&H", f"{metrics['alpha_vs_buyhold']:.1f}%", css_m)
-        with m3:
-            render_metric("Win Rate", f"{metrics['win_rate']:.0f}%", "bull" if metrics["win_rate"] > 50 else "bear")
-        with m4:
-            render_metric("Sharpe", f"{metrics['sharpe_ratio']:.2f}")
-        with m5:
-            render_metric("Max DD", f"{metrics['max_drawdown_pct']:.1f}%", "bear")
-        with m6:
-            render_metric("Profit Factor", f"{metrics['profit_factor']:.2f}")
-
-        # V2-specific metrics row
-        if _strat == "v2":
-            vm1, vm2, vm3, vm4 = st.columns(4)
-            with vm1:
-                render_metric("Avg Bars Held", f"{metrics.get('avg_bars_held', 0):.0f} days")
-            with vm2:
-                render_metric("Avg Peak Gain", f"{metrics.get('avg_peak_gain', 0):+.1f}%", "bull")
-            with vm3:
-                render_metric("Avg Giveback", f"{metrics.get('avg_giveback', 0):.1f}%", "bear")
-            with vm4:
-                exit_reasons = metrics.get("exit_reasons", {})
-                top_exit = max(exit_reasons, key=exit_reasons.get) if exit_reasons else "N/A"
-                render_metric("Top Exit Reason", top_exit[:20])
-
-        fig_eq = plot_equity_curve(bt["equity_curve"], bt["df"])
-        st.plotly_chart(fig_eq, use_container_width=True)
-
-        # Trade log
-        if bt["trades"]:
-            trade_df = pd.DataFrame(bt["trades"])
-            st.dataframe(
-                trade_df, use_container_width=True, hide_index=True,
-                column_config={
-                    "pnl_pct": st.column_config.NumberColumn("PnL %", format="%.2f%%"),
-                    "entry_price": st.column_config.NumberColumn("Entry $", format="$%.2f"),
-                    "exit_price": st.column_config.NumberColumn("Exit $", format="$%.2f"),
-                },
-            )
+            if bt.get("trades"):
+                trade_df = pd.DataFrame(bt["trades"])
+                display_cols = [c for c in ["entry_date","exit_date","pnl_pct","exit_reason","roll_count"] if c in trade_df.columns]
+                st.dataframe(trade_df[display_cols], use_container_width=True, hide_index=True, height=180)
+        except Exception:
+            pass
 
     with tab3:
         # Options for this specific ticker
@@ -779,46 +752,6 @@ def render_drill_down(result):
         else:
             pass
 
-    with tab4:
-        if detector.regime_stats is not None:
-            col1, col2 = st.columns(2)
-            with col1:
-                fig_dist = go.Figure(go.Bar(
-                    x=detector.regime_stats["regime_label"],
-                    y=detector.regime_stats["pct_of_total"],
-                    marker_color=[REGIME_COLORS.get(i, "#666") for i in detector.regime_stats["regime_id"]],
-                    text=[f"{v:.1f}%" for v in detector.regime_stats["pct_of_total"]],
-                    textposition="outside",
-                ))
-                fig_dist.update_layout(
-                    title="Time in Each Regime",
-                    template="plotly_dark",
-                    paper_bgcolor="#101114", plot_bgcolor="#101114",
-                    height=240,
-                    yaxis=dict(title="% of Time", gridcolor="#1f2937"),
-                    margin=dict(l=60, r=20, t=60, b=40),
-                )
-                st.plotly_chart(fig_dist, use_container_width=True)
-            with col2:
-                stats = detector.regime_stats.copy()
-                stats["mean_return"] = stats["mean_return"].apply(lambda x: f"{x:.4f}")
-                stats["volatility"] = stats["volatility"].apply(lambda x: f"{x:.4f}")
-                stats["pct_of_total"] = stats["pct_of_total"].apply(lambda x: f"{x:.1f}%")
-                st.dataframe(stats, use_container_width=True, hide_index=True)
-
-    with tab5:
-        trans = detector.get_transition_matrix()
-        fig_heat = px.imshow(
-            trans.values, x=trans.columns, y=trans.index,
-            color_continuous_scale="RdYlGn", text_auto=".2f", aspect="auto",
-        )
-        fig_heat.update_layout(
-            title="Regime Transition Probabilities",
-            template="plotly_dark",
-            paper_bgcolor="#101114",
-            height=250,
-        )
-        st.plotly_chart(fig_heat, use_container_width=True)
 
 
 # ════════════════════════════════════════════════════════
@@ -1406,14 +1339,9 @@ if results:
             pass
 
     with main_tabs[4]:
-        # ── REGIME MAP ──
         fig_map = plot_regime_heatmap(results)
         if fig_map:
             st.plotly_chart(fig_map, use_container_width=True)
-
-        fig_sig = plot_signal_distribution(results)
-        if fig_sig:
-            st.plotly_chart(fig_sig, use_container_width=True)
 
     with main_tabs[5]:
         # Drill-down selector
