@@ -230,6 +230,46 @@ def scan_single_ticker(
         }
 
 
+def _scan_batch(
+    symbols: List[str],
+    interval: str,
+    period_days: int,
+    n_regimes: int,
+    min_confirmations: int,
+    regime_confirm_bars: int,
+    max_workers: int,
+    strategy: str,
+) -> List[Dict]:
+    """Scan a single batch of tickers in parallel."""
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_symbol = {
+            executor.submit(
+                scan_single_ticker, sym, interval, period_days,
+                n_regimes, min_confirmations, regime_confirm_bars, strategy,
+            ): sym
+            for sym in symbols
+        }
+        for future in concurrent.futures.as_completed(future_to_symbol):
+            result = future.result()
+            if result is not None:
+                results.append(result)
+    return results
+
+
+SIGNAL_PRIORITY = {
+    "LONG -- ENTER": 0,
+    "EXIT -- REGIME FLIP": 1,
+    "LONG -- CONFIRMING": 2,
+    "LONG -- HOLD": 3,
+    "CASH -- NEUTRAL": 4,
+    "CASH -- BEARISH": 5,
+    "ERROR": 99,
+}
+
+BULLISH_SIGNALS = {"LONG -- ENTER", "LONG -- CONFIRMING", "LONG -- HOLD"}
+
+
 def scan_watchlist(
     symbols: List[str],
     interval: str = "1d",
@@ -239,47 +279,36 @@ def scan_watchlist(
     regime_confirm_bars: int = 2,
     max_workers: int = 6,
     strategy: str = "v2",
+    batch_size: int = 200,
+    progress_callback=None,
 ) -> List[Dict]:
     """
-    Scan multiple tickers in parallel.
+    Scan multiple tickers in batches of `batch_size` (default 200).
 
-    strategy: "v1" or "v2" (default)
+    progress_callback: optional callable(batch_num, total_batches, running_results)
+        called after each batch completes so the UI can show progressive results.
+
     Returns list of scan result dicts, sorted by signal priority.
     """
     results = []
+    total = len(symbols)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_symbol = {
-            executor.submit(
-                scan_single_ticker,
-                sym,
-                interval,
-                period_days,
-                n_regimes,
-                min_confirmations,
-                regime_confirm_bars,
-                strategy,
-            ): sym
-            for sym in symbols
-        }
+    # Split into batches
+    batches = [symbols[i:i + batch_size] for i in range(0, total, batch_size)]
 
-        for future in concurrent.futures.as_completed(future_to_symbol):
-            result = future.result()
-            if result is not None:
-                results.append(result)
+    for batch_idx, batch in enumerate(batches):
+        batch_results = _scan_batch(
+            batch, interval, period_days, n_regimes,
+            min_confirmations, regime_confirm_bars, max_workers, strategy,
+        )
+        results.extend(batch_results)
+
+        # Notify caller of progress
+        if progress_callback:
+            progress_callback(batch_idx + 1, len(batches), results)
 
     # Sort: actionable signals first
-    signal_priority = {
-        "LONG -- ENTER": 0,
-        "EXIT -- REGIME FLIP": 1,
-        "LONG -- CONFIRMING": 2,
-        "LONG -- HOLD": 3,
-        "CASH -- NEUTRAL": 4,
-        "CASH -- BEARISH": 5,
-        "ERROR": 99,
-    }
-
-    results.sort(key=lambda r: (signal_priority.get(r.get("signal", "ERROR"), 50), -(r.get("confirmations_met") or 0)))
+    results.sort(key=lambda r: (SIGNAL_PRIORITY.get(r.get("signal", "ERROR"), 50), -(r.get("confirmations_met") or 0)))
 
     return results
 

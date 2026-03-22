@@ -1011,25 +1011,50 @@ try:
 except Exception:
     pass
 
-# ── Run Scan ──
+# ── Run Scan (batched, progressive) ──
 if scan_btn:
-    progress = st.progress(0, text=f"Scanning {len(tickers):,} tickers...")
+    from screener import BULLISH_SIGNALS
+    total_tickers = len(tickers)
+    batch_size = 200
+    n_batches = (total_tickers + batch_size - 1) // batch_size
+
+    progress = st.progress(0, text=f"Scanning {total_tickers:,} tickers (batch 1/{n_batches})...")
+    bullish_placeholder = st.empty()  # live-updating bullish list
+
+    def _on_batch(batch_num, total_batches, running_results):
+        """Update progress bar and show running bullish hits."""
+        pct = int(batch_num / total_batches * 80)
+        scanned_so_far = min(batch_num * batch_size, total_tickers)
+        progress.progress(pct, text=f"Scanned {scanned_so_far:,}/{total_tickers:,} (batch {batch_num}/{total_batches})")
+
+        # Show bullish tickers found so far
+        bullish = [r for r in running_results if r.get("signal") in BULLISH_SIGNALS]
+        if bullish:
+            lines = []
+            for b in bullish:
+                sig = b.get("signal", "").replace("LONG -- ", "")
+                lines.append(f"**{b['symbol']}** ${b.get('price',0):.2f} — {b.get('regime_label','?')} ({sig})")
+            bullish_placeholder.markdown(
+                f"### Bullish Hits ({len(bullish)})\n" + "\n\n".join(lines)
+            )
 
     try:
-        with st.spinner(f"Scanning {len(tickers):,} tickers..."):
-            results = scan_watchlist(
-                symbols=tickers,
-                interval=interval,
-                n_regimes=n_regimes,
-                min_confirmations=min_confs,
-                regime_confirm_bars=regime_confirm,
-                max_workers=max_workers,
-                strategy=strategy,
-            )
+        results = scan_watchlist(
+            symbols=tickers,
+            interval=interval,
+            n_regimes=n_regimes,
+            min_confirmations=min_confs,
+            regime_confirm_bars=regime_confirm,
+            max_workers=max_workers,
+            strategy=strategy,
+            batch_size=batch_size,
+            progress_callback=_on_batch,
+        )
     except Exception as e:
         st.error(f"Scan failed: {str(e)[:100]}")
         results = []
 
+    bullish_placeholder.empty()  # clear running list, full results render below
     progress.progress(80, text="Finding options...")
 
     # Options scan for all scanned tickers
