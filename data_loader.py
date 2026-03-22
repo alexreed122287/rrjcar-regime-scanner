@@ -1,9 +1,12 @@
 """
-data_loader.py — Market Data Fetcher
-Pulls OHLCV data from Yahoo Finance for regime analysis.
-Handles yfinance API quirks, hourly data limits, and column format changes.
+data_loader.py — Market Data Fetcher (Tradier + Yahoo Finance)
+Pulls OHLCV data using Tradier API as primary source (fast, no rate limits)
+and Yahoo Finance as fallback (crypto, or if Tradier unavailable).
 """
 
+import os
+import json
+import requests
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -12,7 +15,42 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# Ticker mapping for common names / crypto shorthand (BTC, ETH, SOL, AVAX only)
+# ─── Tradier config ───────────────────────────────────────────
+TRADIER_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), ".tradier_settings.json")
+TRADIER_SANDBOX_BASE = "https://sandbox.tradier.com/v1"
+TRADIER_PROD_BASE = "https://api.tradier.com/v1"
+
+
+def _load_tradier_config() -> dict:
+    """Load Tradier config from settings file or env vars."""
+    config = {
+        "access_token": os.environ.get("TRADIER_ACCESS_TOKEN", ""),
+        "account_id": os.environ.get("TRADIER_ACCOUNT_ID", ""),
+        "sandbox": True,
+    }
+    if os.path.exists(TRADIER_SETTINGS_FILE):
+        try:
+            with open(TRADIER_SETTINGS_FILE, "r") as f:
+                saved = json.load(f)
+            config.update({k: v for k, v in saved.items() if v})
+        except Exception:
+            pass
+    return config
+
+
+def _tradier_available() -> bool:
+    """Check if Tradier API is configured."""
+    config = _load_tradier_config()
+    return bool(config.get("access_token"))
+
+
+def _is_crypto(symbol: str) -> bool:
+    """Check if symbol is crypto (Tradier doesn't support crypto)."""
+    upper = symbol.upper().strip()
+    return upper.endswith("-USD") or upper in TICKER_MAP
+
+
+# ─── Ticker mapping ──────────────────────────────────────────
 TICKER_MAP = {
     "BTC": "BTC-USD",
     "BITCOIN": "BTC-USD",
@@ -26,10 +64,97 @@ TICKER_MAP = {
 
 
 def resolve_ticker(symbol: str) -> str:
-    """Resolve common names to Yahoo Finance tickers."""
+    """Resolve common names to tickers."""
     upper = symbol.upper().strip()
     return TICKER_MAP.get(upper, upper)
 
+
+# ─── Tradier data fetcher ────────────────────────────────────
+
+def _fetch_tradier(
+    symbol: str,
+    start: str,
+    end: str,
+    interval: str = "daily",
+) -> pd.DataFrame:
+    """
+    Fetch OHLCV from Tradier Markets API.
+    interval: 'daily', 'weekly', 'monthly'
+    Returns DataFrame with Open, High, Low, Close, Volume or empty DF on failure.
+    """
+    config = _load_tradier_config()
+    base = TRADIER_PROD_BASE if not config.get("sandbox", True) else TRADIER_SANDBOX_BASE
+
+    # Map our intervals to Tradier's
+    tradier_interval = "daily"
+    if interval in ("1wk", "weekly"):
+        tradier_interval = "weekly"
+    elif interval in ("1mo", "monthly"):
+        tradier_interval = "monthly"
+
+    headers = {
+        "Authorization": f"Bearer {config['access_token']}",
+        "Accept": "application/json",
+    }
+
+    try:
+        r = requests.get(
+            f"{base}/markets/history",
+            params={
+                "symbol": symbol.upper(),
+                "interval": tradier_interval,
+                "start": start,
+                "end": end,
+            },
+            headers=headers,
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        # Tradier returns: {"history": {"day": [...]}}
+        history = data.get("history")
+        if not history:
+            return pd.DataFrame()
+
+        days = history.get("day", [])
+        if not days:
+            return pd.DataFrame()
+
+        # Handle single-day response (dict instead of list)
+        if isinstance(days, dict):
+            days = [days]
+
+        df = pd.DataFrame(days)
+
+        # Rename to standard columns
+        col_map = {
+            "date": "Date",
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "Volume",
+        }
+        df = df.rename(columns=col_map)
+
+        # Set date index
+        df["Date"] = pd.to_datetime(df["Date"])
+        df.set_index("Date", inplace=True)
+        df.sort_index(inplace=True)
+
+        # Ensure numeric
+        for col in ["Open", "High", "Low", "Close", "Volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+
+    except Exception as e:
+        print(f"[DataLoader] Tradier fetch failed for {symbol}: {e}")
+        return pd.DataFrame()
+
+
+# ─── Yahoo data fetcher (fallback) ───────────────────────────
 
 def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Handle all yfinance column format variations."""
@@ -74,6 +199,63 @@ def _standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df[required].copy()
 
 
+def _fetch_yahoo(
+    ticker: str,
+    start: str,
+    end: str,
+    interval: str = "1d",
+) -> pd.DataFrame:
+    """Fetch OHLCV from Yahoo Finance with multiple fallback methods."""
+    df = None
+
+    # Method 1: Ticker.history
+    try:
+        t = yf.Ticker(ticker)
+        df = t.history(start=start, end=end, interval=interval)
+        if df is not None and not df.empty:
+            df = _flatten_columns(df)
+            return _standardize_columns(df)
+    except Exception:
+        df = None
+
+    # Method 2: yf.download
+    if df is None or df.empty:
+        try:
+            df = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
+            if df is not None and not df.empty:
+                df = _flatten_columns(df)
+                return _standardize_columns(df)
+        except Exception:
+            df = None
+
+    # Method 3: period string
+    if df is None or df.empty:
+        try:
+            period_str = "2y" if interval == "1d" else "730d"
+            t = yf.Ticker(ticker)
+            df = t.history(period=period_str, interval=interval)
+            if df is not None and not df.empty:
+                df = _flatten_columns(df)
+                return _standardize_columns(df)
+        except Exception:
+            pass
+
+    # Method 4: daily fallback if hourly fails
+    if (df is None or df.empty) and interval != "1d":
+        try:
+            t = yf.Ticker(ticker)
+            df = t.history(period="2y", interval="1d")
+            if df is not None and not df.empty:
+                df = _flatten_columns(df)
+                return _standardize_columns(df)
+        except Exception:
+            pass
+
+    return pd.DataFrame()
+
+
+# ─── Main fetch_data (Tradier primary, Yahoo fallback) ───────
+
 def fetch_data(
     symbol: str,
     period_days: int = 730,
@@ -82,8 +264,9 @@ def fetch_data(
     end_date: str = None,
 ) -> pd.DataFrame:
     """
-    Fetch OHLCV data from Yahoo Finance.
-    Uses multiple fallback methods for reliability.
+    Fetch OHLCV data. Uses Tradier API as primary source for stocks/ETFs
+    (faster, no rate limits). Falls back to Yahoo Finance for crypto or
+    if Tradier is unavailable.
     """
     ticker = resolve_ticker(symbol)
 
@@ -103,72 +286,34 @@ def fetch_data(
         max_start = end_dt - timedelta(days=729)
         if start_dt < max_start:
             start = max_start.strftime("%Y-%m-%d")
-            print(f"[DataLoader] Clamped start to {start} (Yahoo 730-day hourly limit)")
 
-    print(f"[DataLoader] Fetching {ticker} | {interval} | {start} -> {end}")
+    use_tradier = _tradier_available() and not _is_crypto(ticker) and interval in ("1d", "daily")
+    df = pd.DataFrame()
 
-    df = None
+    # ── Try Tradier first (stocks/ETFs, daily only) ──
+    if use_tradier:
+        df = _fetch_tradier(ticker, start, end, interval="daily")
+        if not df.empty:
+            df.dropna(inplace=True)
+            df = df[df["Volume"] > 0]
+            if not df.empty:
+                return df
 
-    # Method 1: Ticker.history (most reliable in newer yfinance)
-    try:
-        t = yf.Ticker(ticker)
-        df = t.history(start=start, end=end, interval=interval)
-        if df is not None and not df.empty:
-            print(f"[DataLoader] Ticker.history returned {len(df)} rows")
-    except Exception as e:
-        print(f"[DataLoader] Ticker.history failed: {e}")
-        df = None
+    # ── Fallback to Yahoo Finance ──
+    df = _fetch_yahoo(ticker, start, end, interval)
 
-    # Method 2: yf.download fallback
-    if df is None or df.empty:
-        try:
-            df = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
-            if df is not None and not df.empty:
-                print(f"[DataLoader] yf.download returned {len(df)} rows")
-        except Exception as e:
-            print(f"[DataLoader] yf.download failed: {e}")
-            df = None
-
-    # Method 3: Use period string instead of date range
-    if df is None or df.empty:
-        try:
-            if interval == "1d":
-                period_str = "2y"
-            else:
-                period_str = "730d"
-            t = yf.Ticker(ticker)
-            df = t.history(period=period_str, interval=interval)
-            if df is not None and not df.empty:
-                print(f"[DataLoader] period={period_str} returned {len(df)} rows")
-        except Exception as e:
-            print(f"[DataLoader] period method failed: {e}")
-
-    # Method 4: Fall back to daily if hourly fails
-    if (df is None or df.empty) and interval != "1d":
-        print(f"[DataLoader] Hourly unavailable, falling back to daily")
-        try:
-            t = yf.Ticker(ticker)
-            df = t.history(period="2y", interval="1d")
-            if df is not None and not df.empty:
-                print(f"[DataLoader] Daily fallback returned {len(df)} rows")
-        except Exception as e:
-            print(f"[DataLoader] Daily fallback failed: {e}")
-
-    if df is None or df.empty:
+    if df.empty:
         raise ValueError(
-            f"No data returned for {ticker}. "
+            f"No data returned for {ticker} from Tradier or Yahoo. "
             f"Try a different symbol or switch to daily interval."
         )
 
-    df = _flatten_columns(df)
-    df = _standardize_columns(df)
     df.dropna(inplace=True)
     df = df[df["Volume"] > 0]
 
     if df.empty:
         raise ValueError(f"Data for {ticker} was all NaN/zero-volume after cleaning.")
 
-    print(f"[DataLoader] Loaded {len(df)} clean candles for {ticker}")
     return df
 
 
