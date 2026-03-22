@@ -80,32 +80,34 @@ st.markdown("""
     .stBottom, .stRunningMan,
     iframe[src*="streamlit"] { display: none !important; visibility: hidden !important; }
 
-    /* Style the Settings expander: no border, no arrow, centered "$" */
-    div[data-testid="stExpander"]:first-of-type {
-        border: none !important;
-        background: transparent !important;
-        box-shadow: none !important;
+    /* Style the "$" expander: no border, no arrow, centered, blended */
+    .stExpander, div[data-testid="stExpander"] {
+        border: none !important; background: transparent !important; box-shadow: none !important;
     }
-    div[data-testid="stExpander"]:first-of-type details {
-        border: none !important;
-        background: transparent !important;
+    .stExpander details, div[data-testid="stExpander"] details,
+    .stExpander > details, [data-testid="stExpander"] > div {
+        border: none !important; background: transparent !important; box-shadow: none !important;
     }
-    div[data-testid="stExpander"]:first-of-type summary {
-        justify-content: center !important;
-        border: none !important;
-        background: transparent !important;
+    .stExpander summary, div[data-testid="stExpander"] summary,
+    details[data-testid="stExpander"] > summary,
+    [data-testid="stExpanderDetails"] {
+        justify-content: center !important; text-align: center !important;
+        border: none !important; background: transparent !important;
         padding: 0.3rem 0 !important;
     }
-    div[data-testid="stExpander"]:first-of-type summary span {
-        font-size: 1.4rem !important;
-        color: #2dd4bf !important;
-        font-weight: 600 !important;
+    .stExpander summary span, div[data-testid="stExpander"] summary span,
+    div[data-testid="stExpander"] summary p {
+        font-size: 1.4rem !important; color: #2dd4bf !important; font-weight: 600 !important;
     }
-    /* Hide the expand/collapse arrow icon */
-    div[data-testid="stExpander"]:first-of-type summary svg,
-    div[data-testid="stExpander"]:first-of-type summary [data-testid="stExpanderToggleIcon"] {
-        display: none !important;
+    /* Hide ALL expander arrow/toggle icons */
+    .stExpander summary svg, div[data-testid="stExpander"] summary svg,
+    [data-testid="stExpanderToggleIcon"],
+    .stExpander summary::before, .stExpander summary::after,
+    .stExpander summary::marker, details summary::marker {
+        display: none !important; content: "" !important; font-size: 0 !important;
+        list-style: none !important;
     }
+    .stExpander summary { list-style: none !important; }
 
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
