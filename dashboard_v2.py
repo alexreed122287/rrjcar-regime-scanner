@@ -274,7 +274,6 @@ def render_screener_table(results, filter_signal="All"):
     for col, h in zip(cols, headers):
         col.markdown(f"**{h}**")
 
-    st.markdown("---")
 
     selected_symbol = None
 
@@ -378,7 +377,7 @@ def plot_price_with_regimes(df, title=""):
     fig.update_layout(
         title=title, template="plotly_dark",
         paper_bgcolor="#101114", plot_bgcolor="#101114",
-        height=450,
+        height=320,
         xaxis=dict(gridcolor="#1f2937"),
         yaxis=dict(gridcolor="#1f2937", title="Price"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
@@ -405,7 +404,7 @@ def plot_equity_curve(equity_curve, df):
         title="Equity Curve - Strategy vs Buy & Hold",
         template="plotly_dark",
         paper_bgcolor="#101114", plot_bgcolor="#101114",
-        height=380,
+        height=280,
         xaxis=dict(gridcolor="#1f2937"),
         yaxis=dict(gridcolor="#1f2937", title="Equity ($)"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
@@ -499,7 +498,7 @@ def plot_signal_distribution(results):
         title="Signal Distribution",
         template="plotly_dark",
         paper_bgcolor="#101114",
-        height=350,
+        height=280,
         margin=dict(l=20, r=20, t=60, b=20),
         showlegend=False,
     )
@@ -566,13 +565,13 @@ def render_drill_down(result):
     tv_html = f'''
     <div style="overflow:hidden;">
     <iframe
-        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=101114&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%232dd4bf&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%233b82f6&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23a855f7&theme=dark&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=420"
+        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=101114&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%232dd4bf&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%233b82f6&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23a855f7&theme=dark&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=300"
         style="width:100%;height:420px;border:none;"
         allowfullscreen>
     </iframe>
     </div>
     '''
-    st.components.v1.html(tv_html, height=425)
+    st.components.v1.html(tv_html, height=305)
 
     # Quick Trade (Tradier)
     if tradier_configured():
@@ -706,7 +705,6 @@ def render_drill_down(result):
 
         # Trade log
         if bt["trades"]:
-            st.markdown("#### Trade Log")
             trade_df = pd.DataFrame(bt["trades"])
             st.dataframe(
                 trade_df, use_container_width=True, hide_index=True,
@@ -767,7 +765,7 @@ def render_drill_down(result):
             else:
                 st.info(f"No suitable options found for {sym}")
         else:
-            st.info(f"{sym} is not in a bullish regime - no call options recommended. Wait for a regime flip to Bull Run, Bull Trend, or Mild Bull.")
+            pass
 
     with tab4:
         if detector.regime_stats is not None:
@@ -784,7 +782,7 @@ def render_drill_down(result):
                     title="Time in Each Regime",
                     template="plotly_dark",
                     paper_bgcolor="#101114", plot_bgcolor="#101114",
-                    height=350,
+                    height=280,
                     yaxis=dict(title="% of Time", gridcolor="#1f2937"),
                     margin=dict(l=60, r=20, t=60, b=40),
                 )
@@ -806,7 +804,7 @@ def render_drill_down(result):
             title="Regime Transition Probabilities",
             template="plotly_dark",
             paper_bgcolor="#101114",
-            height=450,
+            height=300,
         )
         st.plotly_chart(fig_heat, use_container_width=True)
 
@@ -1021,7 +1019,6 @@ if results:
     with s6:
         render_metric("Exit Signals", str(n_exit), "bear" if n_exit > 0 else "cash")
 
-    st.markdown("---")
 
     # Tabs: Screener | Options Picks | Regime Chart | Signal Overview | Drill-Down
     main_tabs = st.tabs(["Screener", "Options", "Holdings", "Performance", "Chart", "Drill-Down"])
@@ -1194,10 +1191,8 @@ if results:
         # ── Options Picks ──
         options_recs = st.session_state.get("options_recs", [])
         if not options_recs:
-            st.info("No options recommendations yet. Enable 'Find Best Options Strikes' in the sidebar and scan bullish tickers.")
+            pass
         else:
-            st.markdown("### Best Call Options for Bullish Regime Tickers")
-            st.caption("Ranked by composite score: delta sweet spot + liquidity + spread + DTE + IV")
 
             for rec in options_recs:
                 sym = rec["symbol"]
@@ -1214,8 +1209,7 @@ if results:
                     if err:
                         st.warning(err)
                     if not picks:
-                        st.info(f"No suitable options found for {sym} (may not have options listed)")
-                        continue
+                                    continue
 
                     # Display top picks as a table
                     pick_rows = []
@@ -1286,10 +1280,6 @@ if results:
                             f"delta {best['delta']:.2f} | ${best['mid']:.2f}"
                         )
 
-            # Summary stats
-            total_picks = sum(len(r.get("recommendations", [])) for r in options_recs)
-            total_evaluated = sum(r.get("total_contracts_evaluated", 0) for r in options_recs)
-            st.caption(f"Evaluated {total_evaluated:,} contracts across {len(options_recs)} bullish tickers. Showing top {total_picks} picks.")
 
     with main_tabs[2]:
         # ── HOLDINGS — Open positions + sell/roll ──
@@ -1355,7 +1345,7 @@ if results:
                                         st.rerun()
                             ac3.caption(f"-> {roll_target['contractSymbol'][-10:]}")
         else:
-            st.caption("No open positions. Buy through the Screener tab.")
+            pass
 
     with main_tabs[3]:
         # ── PERFORMANCE ──
@@ -1380,7 +1370,6 @@ if results:
             # Trade history table
             closed = get_closed_trades(50)
             if closed:
-                st.markdown("#### Recent Trades")
                 ct_df = pd.DataFrame(closed)
                 display_cols = [c for c in ["symbol", "contract", "quantity", "entry_price",
                                 "exit_price", "pnl_dollars", "pnl_pct", "regime_at_entry",
@@ -1389,13 +1378,12 @@ if results:
 
             # Regime performance breakdown
             if perf.get("regime_performance"):
-                st.markdown("#### Performance by Regime")
                 rp = perf["regime_performance"]
                 for regime, stats in rp.items():
                     wr = stats["wins"] / stats["trades"] * 100 if stats["trades"] > 0 else 0
                     st.markdown(f"**{regime}**: {stats['trades']} trades, {wr:.0f}% WR, ${stats['pnl']:+,.0f}")
         else:
-            st.caption("No trades recorded yet. Place trades through the dashboard to track performance.")
+            pass
 
     with main_tabs[4]:
         # ── REGIME MAP ──
