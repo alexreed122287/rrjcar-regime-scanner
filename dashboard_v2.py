@@ -67,15 +67,20 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    #MainMenu, footer {visibility: hidden;}
-    header {visibility: visible !important;}
+    #MainMenu, footer, header {visibility: hidden;}
 
-    /* Hide file change bar, running spinner, status elements — but NOT sidebar toggle */
+    /* Hide all Streamlit chrome: deploy bar, toolbar, branding, decorations */
     .stStatusWidget, div[data-testid="stStatusWidget"],
     div[data-testid="stNotification"],
     .stSpinner > div > div:first-child,
     div[data-testid="stAppDeployButton"],
-    .stRunningMan { display: none !important; visibility: hidden !important; }
+    div[data-testid="stToolbar"],
+    div[data-testid="stDecoration"],
+    .stRunningMan,
+    a[href*="streamlit.io"],
+    ._profileContainer_gzau3_53,
+    div[data-testid="stSidebarCollapsedControl"],
+    section[data-testid="stSidebar"] { display: none !important; visibility: hidden !important; }
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
 
