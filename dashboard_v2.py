@@ -42,9 +42,15 @@ from order_executor import execute_buy_calls, execute_sell_to_close, execute_rol
 
 # ─── Mobile Detection ───
 def is_mobile():
-    """Detect mobile via Sec-Ch-Ua-Mobile header."""
+    """Detect mobile via user-agent or Sec-Ch-Ua-Mobile header."""
     try:
-        return st.context.headers.get("Sec-Ch-Ua-Mobile", "?0") == "?1"
+        headers = st.context.headers
+        # Check Client Hints first (Chrome-based)
+        if headers.get("Sec-Ch-Ua-Mobile", "?0") == "?1":
+            return True
+        # Fall back to user-agent sniffing (Safari, Firefox)
+        ua = (headers.get("User-Agent") or "").lower()
+        return any(k in ua for k in ("iphone", "ipad", "android", "mobile"))
     except Exception:
         return False
 
@@ -237,8 +243,13 @@ st.markdown("""
         .stButton > button { font-size: 0.7rem; padding: 0.4rem 0.6rem; min-height: 44px; border-radius: 6px; }
         .stButton > button[kind="primary"] { font-size: 0.75rem; }
 
-        /* Columns — allow wrapping */
-        div[data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: 0.2rem !important; }
+        /* Columns — force 3 per row on mobile */
+        div[data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important; gap: 0.15rem !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+            min-width: 30% !important; max-width: 33% !important; flex: 1 1 30% !important;
+        }
 
         /* Signal banner */
         .signal-banner { font-size: 0.75rem; padding: 0.4rem 0.6rem; }
@@ -269,6 +280,11 @@ st.markdown("""
         /* Selectbox — compact */
         .stSelectbox { font-size: 0.7rem; }
         .stSelectbox > div > div { min-height: 38px !important; }
+
+        /* Hide Streamlit deploy bar and fork button on mobile */
+        header[data-testid="stHeader"] { display: none !important; }
+        .stApp > header { display: none !important; }
+        .main .block-container { padding-top: 0.5rem !important; }
     }
 </style>
 """, unsafe_allow_html=True)
