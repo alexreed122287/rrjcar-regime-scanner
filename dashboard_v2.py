@@ -6,6 +6,7 @@ Run with: streamlit run dashboard_v2.py
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
@@ -267,6 +268,87 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ─── JS: hide badges + create floating sidebar button ───
+components.html("""
+<script>
+(function() {
+    const doc = window.parent.document;
+
+    // --- Hide Streamlit Cloud badges/branding ---
+    function hideBadges() {
+        // Target iframes (Streamlit badge is often an iframe)
+        doc.querySelectorAll('iframe').forEach(function(el) {
+            var src = el.src || '';
+            var title = el.title || '';
+            if (src.indexOf('badge') !== -1 || src.indexOf('streamlit') !== -1 ||
+                title.indexOf('badge') !== -1 || title.indexOf('streamlit') !== -1) {
+                el.style.display = 'none';
+            }
+        });
+        // Target fixed-position elements at bottom of page
+        doc.querySelectorAll('div').forEach(function(el) {
+            var style = window.parent.getComputedStyle(el);
+            if (style.position === 'fixed' && parseInt(style.bottom) < 50 &&
+                parseInt(style.right) < 200 && el.offsetHeight < 80) {
+                el.style.display = 'none';
+            }
+        });
+        // Target links to streamlit.io
+        doc.querySelectorAll('a[href*="streamlit.io"]').forEach(function(el) {
+            var p = el.closest('div');
+            if (p) p.style.display = 'none';
+            el.style.display = 'none';
+        });
+        // Footer
+        var footer = doc.querySelector('footer');
+        if (footer) footer.style.display = 'none';
+    }
+
+    // --- Create floating sidebar toggle button ---
+    function createToggle() {
+        if (doc.getElementById('sidebar-toggle-btn')) return;
+        var btn = doc.createElement('div');
+        btn.id = 'sidebar-toggle-btn';
+        btn.innerHTML = '&#9776;';
+        btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:99999;' +
+            'width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.08);' +
+            'color:#2dd4bf;font-size:20px;display:flex;align-items:center;justify-content:center;' +
+            'cursor:pointer;border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(8px);' +
+            '-webkit-backdrop-filter:blur(8px);transition:background 0.2s;';
+        btn.onmouseenter = function() { btn.style.background = 'rgba(255,255,255,0.15)'; };
+        btn.onmouseleave = function() { btn.style.background = 'rgba(255,255,255,0.08)'; };
+        btn.onclick = function() {
+            // Try to find and click the native Streamlit sidebar toggle
+            var nativeBtn = doc.querySelector('div[data-testid="stSidebarCollapsedControl"] button') ||
+                            doc.querySelector('button[data-testid="stSidebarCollapsedControl"]') ||
+                            doc.querySelector('[data-testid="stSidebarNavCollapseButton"] button');
+            if (nativeBtn) { nativeBtn.click(); return; }
+            // Fallback: directly toggle sidebar visibility
+            var sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+            if (sidebar) {
+                var isHidden = sidebar.getAttribute('aria-expanded') === 'false' ||
+                               sidebar.style.display === 'none' ||
+                               sidebar.offsetWidth < 10;
+                if (isHidden) {
+                    sidebar.setAttribute('aria-expanded', 'true');
+                    sidebar.style.display = 'block';
+                    sidebar.style.transform = 'translateX(0)';
+                } else {
+                    sidebar.setAttribute('aria-expanded', 'false');
+                    sidebar.style.transform = 'translateX(-100%)';
+                }
+            }
+        };
+        doc.body.appendChild(btn);
+    }
+
+    // Run immediately and on interval (badges load async)
+    hideBadges();
+    createToggle();
+    setInterval(hideBadges, 1500);
+})();
+</script>
+""", height=0)
 
 # ─── Regime Colors (Palantir dark) ───
 REGIME_COLORS = {
