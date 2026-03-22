@@ -80,6 +80,33 @@ st.markdown("""
     .stBottom, .stRunningMan,
     iframe[src*="streamlit"] { display: none !important; visibility: hidden !important; }
 
+    /* Style the Settings expander: no border, no arrow, centered "$" */
+    div[data-testid="stExpander"]:first-of-type {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    div[data-testid="stExpander"]:first-of-type details {
+        border: none !important;
+        background: transparent !important;
+    }
+    div[data-testid="stExpander"]:first-of-type summary {
+        justify-content: center !important;
+        border: none !important;
+        background: transparent !important;
+        padding: 0.3rem 0 !important;
+    }
+    div[data-testid="stExpander"]:first-of-type summary span {
+        font-size: 1.4rem !important;
+        color: #2dd4bf !important;
+        font-weight: 600 !important;
+    }
+    /* Hide the expand/collapse arrow icon */
+    div[data-testid="stExpander"]:first-of-type summary svg,
+    div[data-testid="stExpander"]:first-of-type summary [data-testid="stExpanderToggleIcon"] {
+        display: none !important;
+    }
+
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
 
@@ -787,7 +814,7 @@ if not results:
 # ════════════════════════════════════════════════════════
 #  SETTINGS — Single expander below hero (no sidebar needed)
 # ════════════════════════════════════════════════════════
-with st.expander("Settings", expanded=False):
+with st.expander("$", expanded=False):
     watchlist_keys = list(WATCHLISTS.keys())
     saved_wl = _saved.get("watchlist", "All Stocks (no ETFs)")
     default_idx = watchlist_keys.index(saved_wl) if saved_wl in watchlist_keys else 0
