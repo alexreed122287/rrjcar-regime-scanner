@@ -81,40 +81,39 @@ st.markdown("""
     iframe[src*="streamlit"] { display: none !important; visibility: hidden !important; }
 
     /* "$" expander: no border, no arrow, centered */
-    [data-testid="stExpander"],
-    [data-testid="stExpander"] > div,
-    [data-testid="stExpander"] details,
-    [data-testid="stExpander"] details > div {
+    div[data-testid="stExpander"],
+    div[data-testid="stExpander"] > div,
+    div[data-testid="stExpander"] details,
+    div[data-testid="stExpander"] details > div {
         border: none !important; background: transparent !important;
         box-shadow: none !important; outline: none !important;
     }
-    [data-testid="stExpander"] summary {
+    div[data-testid="stExpander"] details > summary {
         display: flex !important; justify-content: center !important;
         align-items: center !important; text-align: center !important;
         border: none !important; background: transparent !important;
         padding: 0.5rem 0 !important; width: 100% !important;
-        list-style: none !important;
+        list-style: none !important; list-style-type: none !important;
     }
-    /* Center the inner span wrapper */
-    [data-testid="stExpander"] summary > span {
+    div[data-testid="stExpander"] details > summary > span {
         display: flex !important; justify-content: center !important;
         align-items: center !important; width: 100% !important;
     }
-    [data-testid="stExpander"] summary p {
+    div[data-testid="stExpander"] details > summary p {
         font-size: 1.5rem !important; color: #2dd4bf !important;
         font-weight: 700 !important; text-align: center !important;
     }
-    /* Hide the Material icon arrow (keyboard_arrow_right text icon) */
-    [data-testid="stExpander"] [data-testid="stIconMaterial"],
-    [data-testid="stExpander"] summary span:has([data-testid="stIconMaterial"]) > [data-testid="stIconMaterial"] {
-        display: none !important; width: 0 !important; height: 0 !important;
-        font-size: 0 !important; overflow: hidden !important;
-    }
-    [data-testid="stExpander"] summary::marker,
-    [data-testid="stExpander"] summary::-webkit-details-marker {
+    div[data-testid="stExpander"] details > summary::marker,
+    div[data-testid="stExpander"] details > summary::-webkit-details-marker {
         display: none !important; content: "" !important;
     }
-    [data-testid="stExpander"] summary { list-style-type: none !important; }
+    /* Hide the Material icon arrow and its parent wrapper */
+    span[data-testid="stIconMaterial"] {
+        display: none !important;
+    }
+    div[data-testid="stExpander"] summary span:has(> [data-testid="stIconMaterial"]) {
+        display: none !important;
+    }
 
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
@@ -276,6 +275,34 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Inject JS to hide arrow icon and center $ (backup for CSS)
+import streamlit.components.v1 as _components
+_components.html("""
+<script>
+(function fix() {
+    try {
+        var doc = window.parent.document;
+        // Hide material icon arrows
+        doc.querySelectorAll('[data-testid="stIconMaterial"]').forEach(function(el) {
+            el.style.display = 'none';
+            if (el.parentElement) el.parentElement.style.display = 'none';
+        });
+        // Center expander summary inner span
+        doc.querySelectorAll('[data-testid="stExpander"] summary > span').forEach(function(el) {
+            el.style.justifyContent = 'center';
+            el.style.width = '100%';
+        });
+        // Hide Streamlit Cloud badges
+        doc.querySelectorAll('a[href*="streamlit.io"], a[href*="share.streamlit"]').forEach(function(el) {
+            var p = el.closest('div');
+            if (p) p.style.display = 'none';
+        });
+    } catch(e) {}
+    setTimeout(fix, 2000);
+})();
+</script>
+""", height=0)
 
 # ─── Regime Colors (Palantir dark) ───
 REGIME_COLORS = {
