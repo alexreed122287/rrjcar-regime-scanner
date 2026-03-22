@@ -1,6 +1,9 @@
 """API routes for regime scanning."""
 
+import os
+import json
 from fastapi import APIRouter, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import time
@@ -13,16 +16,21 @@ router = APIRouter()
 # In-memory cache for scan results (single-user dashboard)
 _scan_cache: Dict[str, Any] = {"results": [], "timestamp": None, "status": "idle"}
 
+# Detect constrained environments (Render free = 0.1 CPU)
+_IS_CLOUD = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
+_DEFAULT_WORKERS = 2 if _IS_CLOUD else 6
+
 
 class ScanRequest(BaseModel):
     watchlist: str = "Mag 7"
     custom_tickers: str = ""
     strategy: str = "v2"
-    n_regimes: int = 7
+    n_regimes: int = 5 if _IS_CLOUD else 7
     min_confs: int = 6
     regime_confirm: int = 2
-    max_workers: int = 6
+    max_workers: int = _DEFAULT_WORKERS
     bullish_only: bool = False
+    period_days: int = 365 if _IS_CLOUD else 730
 
 
 def _serialize_result(r: dict) -> dict:
@@ -79,6 +87,9 @@ async def run_scan(req: ScanRequest):
         _scan_cache["status"] = "idle"
         return {"error": "No tickers to scan", "results": []}
 
+    # Cap workers on constrained environments
+    workers = min(req.max_workers, _DEFAULT_WORKERS) if _IS_CLOUD else req.max_workers
+
     start = time.time()
     results = scan_watchlist(
         symbols=symbols,
@@ -86,8 +97,9 @@ async def run_scan(req: ScanRequest):
         n_regimes=req.n_regimes,
         min_confirmations=req.min_confs,
         regime_confirm_bars=req.regime_confirm,
-        max_workers=req.max_workers,
+        max_workers=workers,
         bullish_only=req.bullish_only,
+        period_days=req.period_days,
     )
 
     # Cache full results (with _regime_df for drill-down)
@@ -138,6 +150,66 @@ async def get_cached():
         "timestamp": _scan_cache.get("timestamp"),
         "status": _scan_cache["status"],
     }
+
+
+@router.post("/scan/stream")
+async def run_scan_stream(req: ScanRequest):
+    """Stream scan results one ticker at a time via SSE."""
+    if req.custom_tickers.strip():
+        symbols = [t.strip().upper() for t in req.custom_tickers.split(",") if t.strip()]
+    else:
+        symbols = WATCHLISTS.get(req.watchlist, [])
+
+    if not symbols:
+        return {"error": "No tickers to scan", "results": []}
+
+    def generate():
+        global _scan_cache
+        _scan_cache["status"] = "scanning"
+        all_results = []
+        start = time.time()
+
+        for i, sym in enumerate(symbols):
+            result = scan_single_ticker(
+                sym, strategy=req.strategy, n_regimes=req.n_regimes,
+                min_confirmations=req.min_confs,
+                regime_confirm_bars=req.regime_confirm,
+                period_days=req.period_days,
+            )
+            if result:
+                all_results.append(result)
+                serialized = _serialize_result(result)
+                msg = json.dumps({
+                    "type": "result",
+                    "data": serialized,
+                    "progress": {"done": i + 1, "total": len(symbols)},
+                })
+                yield f"data: {msg}\n\n"
+
+        # Final summary
+        _scan_cache["results_full"] = all_results
+        _scan_cache["results"] = [_serialize_result(r) for r in all_results]
+        _scan_cache["timestamp"] = time.time()
+        _scan_cache["status"] = "done"
+        elapsed = round(time.time() - start, 1)
+
+        bulls = sum(1 for r in all_results if r.get("regime_id") is not None and r["regime_id"] <= 2)
+        bears = sum(1 for r in all_results if r.get("regime_id") is not None and r["regime_id"] >= 5)
+        neutrals = sum(1 for r in all_results if r.get("regime_id") is not None and 3 <= r["regime_id"] <= 4)
+        entries = sum(1 for r in all_results if "ENTER" in (r.get("signal") or ""))
+        exits = sum(1 for r in all_results if "EXIT" in (r.get("signal") or ""))
+
+        summary = json.dumps({
+            "type": "done",
+            "summary": {
+                "total": len(all_results), "bullish": bulls, "bearish": bears,
+                "neutral": neutrals, "entries": entries, "exits": exits,
+                "elapsed": elapsed,
+            },
+        })
+        yield f"data: {summary}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.get("/scan/{symbol}")

@@ -56,31 +56,63 @@ const App = {
     async runScan() {
         if (this.scanning) return;
         this.scanning = true;
+        this.scanResults = [];
 
-        const overlay = document.getElementById('loading-overlay');
         const loadingText = document.getElementById('loading-text');
+        const overlay = document.getElementById('loading-overlay');
         overlay.classList.remove('hidden');
         loadingText.textContent = 'Scanning...';
-
         document.getElementById('btn-scan').disabled = true;
 
         try {
             await Settings.save();
             const params = Settings.gather();
 
-            const result = await API.runScan({
+            const body = {
                 watchlist: params.watchlist,
                 custom_tickers: params.custom_tickers,
                 strategy: params.strategy,
-                n_regimes: 7,
                 min_confs: params.min_confs,
                 regime_confirm: params.regime_confirm,
                 max_workers: params.max_workers,
                 bullish_only: false,
+            };
+
+            // Use streaming endpoint — results appear one by one
+            const res = await fetch('/api/scan/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
             });
 
-            this.scanResults = result.results || [];
-            this.renderResults(result);
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const msg = JSON.parse(line.slice(6));
+                        if (msg.type === 'result') {
+                            this.scanResults.push(msg.data);
+                            // Live update
+                            loadingText.textContent = `Scanning... ${msg.progress.done}/${msg.progress.total}`;
+                            this.setMetric('metric-scanned', msg.progress.done);
+                            Screener.render(this.scanResults, document.getElementById('screener-content'));
+                        } else if (msg.type === 'done') {
+                            this.renderResults({ summary: msg.summary });
+                        }
+                    } catch (_) {}
+                }
+            }
 
         } catch (err) {
             console.error('Scan error:', err);
