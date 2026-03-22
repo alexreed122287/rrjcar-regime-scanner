@@ -80,34 +80,39 @@ st.markdown("""
     .stBottom, .stRunningMan,
     iframe[src*="streamlit"] { display: none !important; visibility: hidden !important; }
 
-    /* Style the "$" expander: no border, no arrow, centered, blended */
-    .stExpander, div[data-testid="stExpander"] {
-        border: none !important; background: transparent !important; box-shadow: none !important;
-    }
-    .stExpander details, div[data-testid="stExpander"] details,
-    .stExpander > details, [data-testid="stExpander"] > div {
-        border: none !important; background: transparent !important; box-shadow: none !important;
-    }
-    .stExpander summary, div[data-testid="stExpander"] summary,
-    details[data-testid="stExpander"] > summary,
-    [data-testid="stExpanderDetails"] {
-        justify-content: center !important; text-align: center !important;
+    /* "$" expander: no border, no arrow, centered */
+    [data-testid="stExpander"],
+    [data-testid="stExpander"] > div,
+    [data-testid="stExpander"] details,
+    [data-testid="stExpander"] details > div {
         border: none !important; background: transparent !important;
-        padding: 0.3rem 0 !important;
+        box-shadow: none !important; outline: none !important;
     }
-    .stExpander summary span, div[data-testid="stExpander"] summary span,
-    div[data-testid="stExpander"] summary p {
-        font-size: 1.4rem !important; color: #2dd4bf !important; font-weight: 600 !important;
-    }
-    /* Hide ALL expander arrow/toggle icons */
-    .stExpander summary svg, div[data-testid="stExpander"] summary svg,
-    [data-testid="stExpanderToggleIcon"],
-    .stExpander summary::before, .stExpander summary::after,
-    .stExpander summary::marker, details summary::marker {
-        display: none !important; content: "" !important; font-size: 0 !important;
+    [data-testid="stExpander"] summary {
+        display: flex !important; justify-content: center !important;
+        align-items: center !important; text-align: center !important;
+        border: none !important; background: transparent !important;
+        padding: 0.5rem 0 !important; width: 100% !important;
         list-style: none !important;
     }
-    .stExpander summary { list-style: none !important; }
+    [data-testid="stExpander"] summary span,
+    [data-testid="stExpander"] summary p {
+        font-size: 1.5rem !important; color: #2dd4bf !important;
+        font-weight: 700 !important; text-align: center !important;
+    }
+    /* Kill the arrow icon completely */
+    [data-testid="stExpander"] summary svg,
+    [data-testid="stExpanderToggleIcon"],
+    [data-testid="stExpander"] summary > span:first-child:has(svg),
+    [data-testid="stExpander"] summary [data-testid="stExpanderToggleIcon"] {
+        display: none !important; width: 0 !important; height: 0 !important;
+        overflow: hidden !important; visibility: hidden !important;
+    }
+    [data-testid="stExpander"] summary::marker,
+    [data-testid="stExpander"] summary::-webkit-details-marker {
+        display: none !important; content: "" !important;
+    }
+    [data-testid="stExpander"] summary { list-style-type: none !important; }
 
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
