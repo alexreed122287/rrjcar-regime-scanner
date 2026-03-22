@@ -27,6 +27,7 @@ from strategy_v2 import run_backtest_v2, get_current_signal_v2
 from screener import scan_watchlist, results_to_dataframe, WATCHLISTS
 from options_picker import get_options_recommendations, scan_options_for_watchlist
 from settings_manager import load_settings, save_settings, DEFAULT_SETTINGS
+from alerts import process_alerts
 from tradier_broker import (
     is_configured as tradier_configured, get_account_info, get_positions,
     place_option_order, place_equity_order, save_config as save_tradier_config,
@@ -660,29 +661,22 @@ def render_drill_down(result):
     # Charts — compact, side-by-side
     tab1, tab2, tab3 = st.tabs(["Chart", "Backtest", "Options"])
 
+    # Run backtest (used by Backtest tab)
+    _strat = st.session_state.get("strategy", "v2")
+    _confs = st.session_state.get("min_confs", 6)
+    _cool = st.session_state.get("cooldown", 3)
+    _confirm = st.session_state.get("regime_confirm", 2)
+    _cap = st.session_state.get("initial_capital", 100_000)
+    try:
+        if _strat == "v2":
+            bt = run_backtest_v2(regime_df, min_confirmations=_confs, cooldown_bars=_cool, regime_confirm_bars=_confirm, initial_capital=_cap)
+        else:
+            bt = run_backtest(regime_df, min_confirmations=_confs, cooldown_bars=_cool, regime_confirm_bars=_confirm, initial_capital=_cap)
+    except Exception:
+        bt = None
+
     with tab1:
-        ch1, ch2 = st.columns(2)
-        with ch1:
-            fig = plot_price_with_regimes(regime_df, f"{resolve_ticker(sym)}")
-            fig.update_layout(height=220, margin=dict(l=40, r=10, t=30, b=20))
-            st.plotly_chart(fig, use_container_width=True)
-        with ch2:
-            # Run backtest for equity curve
-            _strat = st.session_state.get("strategy", "v2")
-            _confs = st.session_state.get("min_confs", 6)
-            _cool = st.session_state.get("cooldown", 3)
-            _confirm = st.session_state.get("regime_confirm", 2)
-            _cap = st.session_state.get("initial_capital", 100_000)
-            try:
-                if _strat == "v2":
-                    bt = run_backtest_v2(regime_df, min_confirmations=_confs, cooldown_bars=_cool, regime_confirm_bars=_confirm, initial_capital=_cap)
-                else:
-                    bt = run_backtest(regime_df, min_confirmations=_confs, cooldown_bars=_cool, regime_confirm_bars=_confirm, initial_capital=_cap)
-                fig_eq = plot_equity_curve(bt["equity_curve"], bt["df"])
-                fig_eq.update_layout(height=220, margin=dict(l=40, r=10, t=30, b=20))
-                st.plotly_chart(fig_eq, use_container_width=True)
-            except Exception:
-                pass
+        pass
 
     with tab2:
         try:
@@ -833,6 +827,88 @@ with st.sidebar:
         if auto_refresh:
             refresh_minutes = st.slider("Min", 1, 30, _saved.get("refresh_minutes", 5))
 
+    # ── Alerts & Scheduling ──
+    with st.expander("Alerts & Schedule"):
+        alerts_enabled = st.checkbox("Enable Alerts", value=_saved.get("alerts_enabled", False))
+
+        if alerts_enabled:
+            st.markdown("**Trigger On**")
+            tc1, tc2, tc3 = st.columns(3)
+            alert_on_regime_change = tc1.checkbox("Any Change", value=_saved.get("alert_on_regime_change", True))
+            alert_on_bull_entry = tc2.checkbox("Bull Entry", value=_saved.get("alert_on_bull_entry", True))
+            alert_on_bear_entry = tc3.checkbox("Bear Entry", value=_saved.get("alert_on_bear_entry", False))
+            alert_min_confirmations = st.slider("Min Confirmations", 1, 10, _saved.get("alert_min_confirmations", 6))
+
+            st.markdown("**Email (SMTP)**")
+            alert_email = st.text_input("To Address", value=_saved.get("alert_email", ""))
+            ec1, ec2 = st.columns(2)
+            alert_smtp_server = ec1.text_input("SMTP Server", value=_saved.get("alert_smtp_server", "smtp.gmail.com"))
+            alert_smtp_port = ec2.number_input("Port", value=_saved.get("alert_smtp_port", 587), min_value=1, max_value=65535)
+            alert_smtp_user = st.text_input("SMTP User", value=_saved.get("alert_smtp_user", ""))
+            alert_smtp_password = st.text_input("SMTP Password", value=_saved.get("alert_smtp_password", ""), type="password")
+
+            st.markdown("**Telegram**")
+            alert_telegram_enabled = st.checkbox("Enable Telegram", value=_saved.get("alert_telegram_enabled", False))
+            if alert_telegram_enabled:
+                alert_telegram_bot_token = st.text_input("Bot Token", value=_saved.get("alert_telegram_bot_token", ""), type="password")
+                alert_telegram_chat_id = st.text_input("Chat ID", value=_saved.get("alert_telegram_chat_id", ""))
+            else:
+                alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
+                alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
+
+            st.markdown("**Scheduled Scans**")
+            scheduled_scans_enabled = st.checkbox("Enable Scheduled Scans", value=_saved.get("scheduled_scans_enabled", False))
+            if scheduled_scans_enabled:
+                scheduled_scan_times = st.text_input(
+                    "Scan Times (comma-separated, 24h)",
+                    value=_saved.get("scheduled_scan_times", "09:30,12:00,15:30"),
+                    help="e.g. 09:30,12:00,15:30"
+                )
+                scheduled_scan_timezone = st.selectbox(
+                    "Timezone",
+                    ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"],
+                    index=["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"].index(
+                        _saved.get("scheduled_scan_timezone", "America/Chicago")
+                    ),
+                )
+            else:
+                scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
+                scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
+
+            if st.button("Test Alert", use_container_width=True):
+                from alerts import send_email_alert, send_telegram_alert
+                test_change = [{"symbol": "TEST", "prev_regime": 3, "new_regime": 0, "regime_label": "Bull Run", "price": 100.00, "confirmations": 6}]
+                test_settings = {**_saved,
+                    "alert_email": alert_email, "alert_smtp_server": alert_smtp_server,
+                    "alert_smtp_port": alert_smtp_port, "alert_smtp_user": alert_smtp_user,
+                    "alert_smtp_password": alert_smtp_password,
+                    "alert_telegram_enabled": alert_telegram_enabled,
+                    "alert_telegram_bot_token": alert_telegram_bot_token,
+                    "alert_telegram_chat_id": alert_telegram_chat_id,
+                }
+                if alert_email:
+                    st.info(send_email_alert(test_change, test_settings))
+                if alert_telegram_enabled:
+                    st.info(send_telegram_alert(test_change, test_settings))
+                if not alert_email and not alert_telegram_enabled:
+                    st.warning("No channels configured.")
+        else:
+            alert_email = _saved.get("alert_email", "")
+            alert_smtp_server = _saved.get("alert_smtp_server", "smtp.gmail.com")
+            alert_smtp_port = _saved.get("alert_smtp_port", 587)
+            alert_smtp_user = _saved.get("alert_smtp_user", "")
+            alert_smtp_password = _saved.get("alert_smtp_password", "")
+            alert_telegram_enabled = _saved.get("alert_telegram_enabled", False)
+            alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
+            alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
+            alert_on_regime_change = _saved.get("alert_on_regime_change", True)
+            alert_on_bull_entry = _saved.get("alert_on_bull_entry", True)
+            alert_on_bear_entry = _saved.get("alert_on_bear_entry", False)
+            alert_min_confirmations = _saved.get("alert_min_confirmations", 6)
+            scheduled_scans_enabled = _saved.get("scheduled_scans_enabled", False)
+            scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
+            scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
+
     # Scan + Save
     scan_btn = st.button("SCAN", type="primary", use_container_width=True)
     bc1, bc2 = st.columns(2)
@@ -846,6 +922,20 @@ with st.sidebar:
             "min_dte": min_dte, "max_dte": max_dte, "top_n_options": top_n_options,
             "auto_refresh": auto_refresh, "refresh_minutes": refresh_minutes,
             "risk_pct": risk_pct,
+            "alerts_enabled": alerts_enabled,
+            "alert_email": alert_email, "alert_smtp_server": alert_smtp_server,
+            "alert_smtp_port": alert_smtp_port, "alert_smtp_user": alert_smtp_user,
+            "alert_smtp_password": alert_smtp_password,
+            "alert_telegram_enabled": alert_telegram_enabled,
+            "alert_telegram_bot_token": alert_telegram_bot_token,
+            "alert_telegram_chat_id": alert_telegram_chat_id,
+            "alert_on_regime_change": alert_on_regime_change,
+            "alert_on_bull_entry": alert_on_bull_entry,
+            "alert_on_bear_entry": alert_on_bear_entry,
+            "alert_min_confirmations": alert_min_confirmations,
+            "scheduled_scans_enabled": scheduled_scans_enabled,
+            "scheduled_scan_times": scheduled_scan_times,
+            "scheduled_scan_timezone": scheduled_scan_timezone,
         })
         st.toast("Saved")
 
@@ -951,6 +1041,13 @@ if scan_btn:
     st.session_state.options_recs = options_recs
     st.session_state.last_scan_time = datetime.now()
     st.session_state.selected_ticker = None
+
+    # Process alerts on regime changes
+    if alerts_enabled and results:
+        alert_statuses = process_alerts(results)
+        for s in alert_statuses:
+            st.toast(s)
+
     time.sleep(0.3)
     st.rerun()
 
@@ -1065,23 +1162,42 @@ if results:
             sel_rec = next((r for r in sel_opts if r.get("symbol") == sel), None)
             picks = sel_rec.get("recommendations", []) if sel_rec else []
 
-            if not picks and sel_scan and sel_scan.get("price"):
-                try:
-                    with st.spinner(f"Loading {sel} options..."):
-                        fresh = get_options_recommendations(
-                            symbol=sel,
-                            current_price=sel_scan["price"],
-                            regime_id=sel_scan.get("regime_id", 0),
-                            regime_label=sel_scan.get("regime_label", ""),
-                            confirmations=sel_scan.get("confirmations_met", 0),
-                            signal=sel_scan.get("signal", ""),
-                            min_dte=st.session_state.get("min_dte", 21),
-                            max_dte=st.session_state.get("max_dte", 45),
-                            top_n=st.session_state.get("top_n_options", 5),
-                        )
-                        picks = fresh.get("recommendations", [])
-                except Exception:
-                    picks = []
+            if not picks:
+                # Always fetch on-demand — use scan price or fetch live
+                _price = sel_scan.get("price", 0) if sel_scan else 0
+                _regime_id = sel_scan.get("regime_id", 3) if sel_scan else 3
+                _regime_label = sel_scan.get("regime_label", "") if sel_scan else ""
+                _confs = sel_scan.get("confirmations_met", 0) if sel_scan else 0
+                _signal = sel_scan.get("signal", "") if sel_scan else ""
+
+                if _price <= 0:
+                    # Fetch price from yfinance directly
+                    try:
+                        import yfinance as yf
+                        t = yf.Ticker(sel)
+                        hist = t.history(period="2d")
+                        if hist is not None and not hist.empty:
+                            _price = float(hist["Close"].iloc[-1])
+                    except Exception:
+                        pass
+
+                if _price > 0:
+                    try:
+                        with st.spinner(f"Loading {sel} options..."):
+                            fresh = get_options_recommendations(
+                                symbol=sel,
+                                current_price=_price,
+                                regime_id=_regime_id,
+                                regime_label=_regime_label,
+                                confirmations=_confs,
+                                signal=_signal,
+                                min_dte=int(st.session_state.get("min_dte", 21)),
+                                max_dte=int(st.session_state.get("max_dte", 45)),
+                                top_n=int(st.session_state.get("top_n_options", 5)),
+                            )
+                            picks = fresh.get("recommendations", [])
+                    except Exception:
+                        picks = []
 
             # Ticker info
             price_str = f"${sel_scan['price']:,.2f}" if sel_scan and sel_scan.get("price") else ""
@@ -1393,3 +1509,24 @@ if auto_refresh and st.session_state.last_scan_time:
     elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
     if elapsed >= refresh_minutes * 60:
         st.rerun()
+
+# ── Scheduled Scan Logic ──
+if scheduled_scans_enabled:
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+    now_tz = datetime.now(ZoneInfo(scheduled_scan_timezone))
+    now_hm = now_tz.strftime("%H:%M")
+    scan_times = [t.strip() for t in scheduled_scan_times.split(",") if t.strip()]
+    # Check if we're within 1 minute of a scheduled time and haven't scanned recently
+    for st_time in scan_times:
+        try:
+            sched_h, sched_m = int(st_time.split(":")[0]), int(st_time.split(":")[1])
+            diff = abs((now_tz.hour * 60 + now_tz.minute) - (sched_h * 60 + sched_m))
+            if diff <= 1:
+                last = st.session_state.last_scan_time
+                if last is None or (datetime.now() - last).total_seconds() > 120:
+                    st.rerun()
+        except (ValueError, IndexError):
+            pass

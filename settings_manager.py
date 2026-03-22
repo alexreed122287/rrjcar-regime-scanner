@@ -26,6 +26,24 @@ DEFAULT_SETTINGS = {
     "auto_refresh": False,
     "refresh_minutes": 5,
     "risk_pct": 10,
+    # Alert settings
+    "alerts_enabled": False,
+    "alert_email": "",
+    "alert_smtp_server": "smtp.gmail.com",
+    "alert_smtp_port": 587,
+    "alert_smtp_user": "",
+    "alert_smtp_password": "",
+    "alert_telegram_enabled": False,
+    "alert_telegram_bot_token": "",
+    "alert_telegram_chat_id": "",
+    "alert_on_regime_change": True,
+    "alert_on_bull_entry": True,
+    "alert_on_bear_entry": False,
+    "alert_min_confirmations": 6,
+    # Scheduled scan settings
+    "scheduled_scans_enabled": False,
+    "scheduled_scan_times": "09:30,12:00,15:30",
+    "scheduled_scan_timezone": "America/Chicago",
 }
 
 
