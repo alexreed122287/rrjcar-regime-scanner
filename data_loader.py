@@ -36,23 +36,16 @@ def _load_tradier_config() -> dict:
         "sandbox": True,
     }
 
-    # Priority 1: Streamlit secrets (st.secrets.tradier)
+    # Load from .env if python-dotenv available
     try:
-        import streamlit as st
-        if hasattr(st, "secrets") and "tradier" in st.secrets:
-            tradier_secrets = st.secrets["tradier"]
-            if tradier_secrets.get("access_token"):
-                config["access_token"] = tradier_secrets["access_token"]
-            if tradier_secrets.get("account_id"):
-                config["account_id"] = tradier_secrets["account_id"]
-            if "sandbox" in tradier_secrets:
-                config["sandbox"] = tradier_secrets["sandbox"]
-            _tradier_config_cache = config
-            return config
-    except Exception:
+        from dotenv import load_dotenv
+        load_dotenv()
+        config["access_token"] = os.environ.get("TRADIER_ACCESS_TOKEN", config["access_token"])
+        config["account_id"] = os.environ.get("TRADIER_ACCOUNT_ID", config["account_id"])
+    except ImportError:
         pass
 
-    # Priority 2: Local settings file
+    # Local settings file
     if os.path.exists(TRADIER_SETTINGS_FILE):
         try:
             with open(TRADIER_SETTINGS_FILE, "r") as f:
