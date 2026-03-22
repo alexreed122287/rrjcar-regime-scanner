@@ -25,6 +25,7 @@ DEFAULT_SETTINGS = {
     "top_n_options": 3,
     "auto_refresh": False,
     "refresh_minutes": 5,
+    "risk_pct": 10,
 }
 
 

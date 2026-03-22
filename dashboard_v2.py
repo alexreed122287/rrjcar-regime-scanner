@@ -389,7 +389,7 @@ def plot_price_with_regimes(df, title=""):
     fig.update_layout(
         title=title, template="plotly_dark",
         paper_bgcolor="#101114", plot_bgcolor="#101114",
-        height=320,
+        height=260,
         xaxis=dict(gridcolor="#1f2937"),
         yaxis=dict(gridcolor="#1f2937", title="Price"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
@@ -416,7 +416,7 @@ def plot_equity_curve(equity_curve, df):
         title="Equity Curve - Strategy vs Buy & Hold",
         template="plotly_dark",
         paper_bgcolor="#101114", plot_bgcolor="#101114",
-        height=280,
+        height=240,
         xaxis=dict(gridcolor="#1f2937"),
         yaxis=dict(gridcolor="#1f2937", title="Equity ($)"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
@@ -510,7 +510,7 @@ def plot_signal_distribution(results):
         title="Signal Distribution",
         template="plotly_dark",
         paper_bgcolor="#101114",
-        height=280,
+        height=240,
         margin=dict(l=20, r=20, t=60, b=20),
         showlegend=False,
     )
@@ -577,13 +577,13 @@ def render_drill_down(result):
     tv_html = f'''
     <div style="overflow:hidden;">
     <iframe
-        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=101114&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%232dd4bf&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%233b82f6&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23a855f7&theme=dark&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=300"
+        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=101114&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%232dd4bf&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%233b82f6&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23a855f7&theme=dark&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=250"
         style="width:100%;height:420px;border:none;"
         allowfullscreen>
     </iframe>
     </div>
     '''
-    st.components.v1.html(tv_html, height=305)
+    st.components.v1.html(tv_html, height=260)
 
     # Quick Trade (Tradier)
     if tradier_configured():
@@ -794,7 +794,7 @@ def render_drill_down(result):
                     title="Time in Each Regime",
                     template="plotly_dark",
                     paper_bgcolor="#101114", plot_bgcolor="#101114",
-                    height=280,
+                    height=240,
                     yaxis=dict(title="% of Time", gridcolor="#1f2937"),
                     margin=dict(l=60, r=20, t=60, b=40),
                 )
@@ -816,7 +816,7 @@ def render_drill_down(result):
             title="Regime Transition Probabilities",
             template="plotly_dark",
             paper_bgcolor="#101114",
-            height=300,
+            height=250,
         )
         st.plotly_chart(fig_heat, use_container_width=True)
 
@@ -868,6 +868,8 @@ with st.sidebar:
         regime_confirm = s2.number_input("Confirm Bars", value=_saved.get("regime_confirm", 2), min_value=1, max_value=10)
         cooldown = s1.number_input("Cooldown", value=_saved.get("cooldown", 3), min_value=1, max_value=20)
         initial_capital = s2.number_input("Capital $", value=_saved.get("initial_capital", 100000), min_value=1000, step=10000)
+        risk_pct = s1.number_input("Risk %", value=_saved.get("risk_pct", 10), min_value=1, max_value=25)
+        st.session_state.risk_pct = risk_pct
         options_enabled = st.checkbox("Options Picker", value=_saved.get("options_enabled", True))
         if options_enabled:
             d1, d2, d3 = st.columns(3)
@@ -893,6 +895,7 @@ with st.sidebar:
             "max_workers": max_workers, "options_enabled": options_enabled,
             "min_dte": min_dte, "max_dte": max_dte, "top_n_options": top_n_options,
             "auto_refresh": auto_refresh, "refresh_minutes": refresh_minutes,
+            "risk_pct": risk_pct,
         })
         st.toast("Saved")
 
@@ -1147,10 +1150,11 @@ if results:
 
             if picks:
                 # Column headers
-                hc1, hc2, hc3 = st.columns([5, 1.5, 1])
-                hc1.markdown('<span style="color:#6b7280;font-size:0.6rem;font-family:JetBrains Mono,monospace">STRIKE | DTE | DELTA | IV | MID | QTY</span>', unsafe_allow_html=True)
-                hc2.markdown('<span style="color:#6b7280;font-size:0.6rem">RISK</span>', unsafe_allow_html=True)
-                hc3.markdown("")
+                hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([1, 0.7, 0.7, 0.6, 0.7, 0.6])
+                for col, lbl in zip([hc1,hc2,hc3,hc4,hc5,hc6], ["Strike","DTE","Delta","IV","Mid","Qty"]):
+                    col.markdown(f'<span style="color:#4b5563;font-size:0.6rem">{lbl}</span>', unsafe_allow_html=True)
+
+                _risk_pct = st.session_state.get("risk_pct", 10) / 100
 
                 for i, p in enumerate(picks):
                     atr_est = (sel_scan.get("price", 100) * 0.02) if sel_scan else 2
@@ -1162,18 +1166,17 @@ if results:
                         confirmations_met=sel_scan.get("confirmations_met", 6) if sel_scan else 6,
                         confirmations_total=sel_scan.get("confirmations_total", 12) if sel_scan else 12,
                         option_mid=p["mid"],
+                        max_risk_pct=_risk_pct,
                     )
 
-                    bc1, bc2, bc3 = st.columns([5, 1.5, 1])
-                    bc1.markdown(
-                        f'<span style="color:#e5e7eb;font-family:JetBrains Mono,monospace;font-size:0.75rem">'
-                        f'${p["strike"]:.0f} | {p["dte"]}d | d{p["delta"]:.2f} | IV {p["iv_pct"]:.0f}% | '
-                        f'<span style="color:#2dd4bf">${p["mid"]:.2f}</span> | '
-                        f'{sizing["contracts"]}x</span>',
-                        unsafe_allow_html=True,
-                    )
-                    bc2.markdown(f'<span style="color:#6b7280;font-size:0.7rem">${sizing["risk_dollars"]:,.0f} {sizing["confidence_tier"]}</span>', unsafe_allow_html=True)
-                    if bc3.button("BUY", key=f"buy_{sel}_{i}", type="primary"):
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 0.7, 0.7, 0.6, 0.7, 0.6, 0.6])
+                    c1.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">${p["strike"]:.0f}</span>', unsafe_allow_html=True)
+                    c2.markdown(f'<span style="color:#9ca3af;font-size:0.85rem">{p["dte"]}d</span>', unsafe_allow_html=True)
+                    c3.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">{p["delta"]:.2f}</span>', unsafe_allow_html=True)
+                    c4.markdown(f'<span style="color:#6b7280;font-size:0.85rem">{p["iv_pct"]:.0f}%</span>', unsafe_allow_html=True)
+                    c5.markdown(f'<span style="color:#2dd4bf;font-size:0.85rem">${p["mid"]:.2f}</span>', unsafe_allow_html=True)
+                    c6.markdown(f'<span style="color:#e5e7eb;font-size:0.85rem">{sizing["contracts"]}</span>', unsafe_allow_html=True)
+                    if c7.button("BUY", key=f"buy_{sel}_{i}", type="primary"):
                         if tradier_configured():
                             with st.spinner(f"Buying {sizing['contracts']}x {p['contractSymbol']}..."):
                                 result = execute_buy_calls(
