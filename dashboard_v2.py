@@ -67,9 +67,9 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    #MainMenu, footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
 
-    /* Hide Streamlit chrome BUT keep sidebar + its toggle visible */
+    /* Hide Streamlit chrome BUT keep header + sidebar toggle visible */
     .stStatusWidget, div[data-testid="stStatusWidget"],
     div[data-testid="stNotification"],
     .stSpinner > div > div:first-child,
@@ -80,7 +80,8 @@ st.markdown("""
     iframe[src*="streamlit"],
     div[data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; }
 
-    /* Hide footer badges / branding / watermarks */
+    /* Hide ALL footer / badge / branding elements (bottom-right icons) */
+    footer,
     a[href*="streamlit.io"],
     ._profileContainer_gzau3_53,
     .viewerBadge_container__r5tak,
@@ -88,10 +89,18 @@ st.markdown("""
     ._container_gzau3_1,
     div[class*="viewerBadge"],
     div[class*="stBottomBlockContainer"] iframe,
-    .stApp > div:last-child > div[style*="position: fixed"],
-    footer, header,
     div[data-testid="stBottom"],
-    .stBottom { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; }
+    .stBottom,
+    .stApp > div:last-child > div[style*="position: fixed"],
+    div[data-testid="stDecoration"],
+    [data-testid="stAppViewBlockContainer"] > div:last-child iframe,
+    .stApp iframe[title="streamlit_app_badge"],
+    div[style*="position: fixed"][style*="bottom"] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; }
+
+    /* Make header transparent but keep sidebar toggle clickable */
+    header[data-testid="stHeader"] { background: transparent !important; }
+    /* Ensure sidebar toggle is visible */
+    div[data-testid="stSidebarCollapsedControl"] { display: flex !important; visibility: visible !important; z-index: 999; }
 
     /* Style the sidebar toggle button */
     div[data-testid="stSidebarCollapsedControl"] { z-index: 999; }
