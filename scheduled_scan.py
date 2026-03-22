@@ -97,11 +97,11 @@ def run_scan():
         strategy="v2",
         batch_size=200,
         progress_callback=progress,
+        bullish_only=True,
     )
 
-    bullish = [r for r in results if r.get("signal") in BULLISH_SIGNALS]
-    print(f"[Scan] Complete: {len(results)} scanned, {len(bullish)} bullish")
-    return bullish
+    print(f"[Scan] Complete: {len(results)} bullish signals found")
+    return results
 
 
 def format_email(bullish: list) -> str:

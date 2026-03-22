@@ -281,12 +281,15 @@ def scan_watchlist(
     strategy: str = "v2",
     batch_size: int = 200,
     progress_callback=None,
+    bullish_only: bool = False,
 ) -> List[Dict]:
     """
     Scan multiple tickers in batches of `batch_size` (default 200).
 
     progress_callback: optional callable(batch_num, total_batches, running_results)
         called after each batch completes so the UI can show progressive results.
+    bullish_only: if True, discard bearish/neutral results after each batch
+        to save memory and only return bullish signals.
 
     Returns list of scan result dicts, sorted by signal priority.
     """
@@ -301,6 +304,11 @@ def scan_watchlist(
             batch, interval, period_days, n_regimes,
             min_confirmations, regime_confirm_bars, max_workers, strategy,
         )
+
+        if bullish_only:
+            # Only keep bullish signals — discard bearish/neutral immediately
+            batch_results = [r for r in batch_results if r.get("signal") in BULLISH_SIGNALS]
+
         results.extend(batch_results)
 
         # Notify caller of progress
