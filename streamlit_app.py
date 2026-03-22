@@ -812,7 +812,6 @@ if st.session_state.show_settings:
     watchlist_name = st.selectbox("Watchlist", watchlist_keys, index=default_idx)
     strategy = "v2" if st.selectbox("Version", ["V2", "V1"]) == "V2" else "v1"
     custom_tickers = st.text_input("Add tickers", value=_saved.get("custom_tickers", ""), placeholder="AAPL, TSLA...")
-    scan_btn = st.button("SCAN", type="primary", use_container_width=True)
     st.markdown("---")
     st.caption("Advanced")
     n_regimes = st.number_input("Regimes", value=_saved.get("n_regimes",7), min_value=3, max_value=10)
@@ -948,6 +947,9 @@ else:
     scheduled_scans_enabled = _saved.get("scheduled_scans_enabled", False)
     scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
     scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
+
+# SCAN button — always visible outside settings toggle
+scan_btn = st.button("SCAN", type="primary", use_container_width=True)
 
 # Ticker list
 tickers = list(WATCHLISTS.get(watchlist_name, []))
