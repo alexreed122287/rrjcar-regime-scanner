@@ -42,7 +42,7 @@ from order_executor import execute_buy_calls, execute_sell_to_close, execute_rol
 # ─── Page Config ───
 st.set_page_config(
     page_title="RRJCAR Regime Scanner",
-    page_icon="📡",
+    page_icon="R",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -247,17 +247,8 @@ def signal_css_class(signal: str) -> str:
 
 
 def signal_icon(signal: str) -> str:
-    if "ENTER" in signal:
-        return "🟢"
-    elif "CONFIRMING" in signal:
-        return "🟡"
-    elif "HOLD" in signal:
-        return "🔵"
-    elif "EXIT" in signal:
-        return "🔴"
-    elif "BEARISH" in signal:
-        return "⛔"
-    return "🟡"
+    """No icons — return empty string."""
+    return ""
 
 
 def regime_badge_html(regime_id, regime_label, confidence=None):
@@ -468,7 +459,7 @@ def plot_regime_heatmap(results):
             ))
 
     fig.update_layout(
-        title="Regime Map - All Tickers",
+        title="Regime Chart - All Tickers",
         template="plotly_dark",
         paper_bgcolor="#101114",
         plot_bgcolor="#101114",
@@ -525,7 +516,7 @@ def render_drill_down(result):
         st.warning(f"No detailed data available for {sym}. Re-run the scan.")
         return
 
-    st.markdown(f"## 🔍 {sym} - Deep Dive")
+    st.markdown(f"## {sym}")
 
     # Signal banner
     sig = result["signal"]
@@ -567,7 +558,7 @@ def render_drill_down(result):
         conf_cols = st.columns(4)
         for idx, (name, passed) in enumerate(conf_detail.items()):
             with conf_cols[idx % 4]:
-                icon_c = "✅" if passed else "❌"
+                icon_c = "+" if passed else "-"
                 st.markdown(f"{icon_c} **{name}**")
 
     # TradingView Chart
@@ -648,7 +639,7 @@ def render_drill_down(result):
                         st.json(preview)
 
     # Charts
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Regime Map", "Backtest", "Options Picks", "Regime Stats", "Transition Matrix"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Regime Chart", "Backtest", "Options Picks", "Regime Stats", "Transition Matrix"])
 
     with tab1:
         fig = plot_price_with_regimes(regime_df, f"{resolve_ticker(sym)} - Regime Overlay")
@@ -850,7 +841,7 @@ with st.sidebar:
     wl1, wl2 = st.columns([3, 1])
     watchlist_name = wl1.selectbox("Watchlist", watchlist_keys, index=default_idx, label_visibility="collapsed")
     strategy = "v2" if wl2.selectbox("V", ["V2", "V1"], label_visibility="collapsed") == "V2" else "v1"
-    custom_tickers = st.text_input("Add", value=_saved.get("custom_tickers", ""), placeholder="+AAPL,GOOG", label_visibility="collapsed")
+    custom_tickers = st.text_input("Add", value=_saved.get("custom_tickers", ""), placeholder="Add tickers...", label_visibility="collapsed")
 
     tickers = list(WATCHLISTS[watchlist_name])
     if custom_tickers.strip():
@@ -896,16 +887,8 @@ with st.sidebar:
         })
         st.toast("Saved")
 
-    # Tradier (compact)
-    if tradier_configured():
-        try:
-            acct = get_account_info()
-            if "error" not in acct:
-                mode = "SB" if acct.get("sandbox") else "LIVE"
-                bc2.caption(f"Tradier {mode} | ${acct.get('option_buying_power',0):,.0f} BP")
-        except Exception:
-            pass
-    else:
+    # Tradier (hidden unless not connected)
+    if not tradier_configured():
         with st.expander("Connect Tradier"):
             t_token = st.text_input("Token", type="password")
             t_acct = st.text_input("Account ID")
@@ -1040,7 +1023,7 @@ if results:
 
     st.markdown("---")
 
-    # Tabs: Screener | Options Picks | Regime Map | Signal Overview | Drill-Down
+    # Tabs: Screener | Options Picks | Regime Chart | Signal Overview | Drill-Down
     main_tabs = st.tabs(["Screener", "Options", "Holdings", "Performance", "Chart", "Drill-Down"])
 
     with main_tabs[0]:
@@ -1225,7 +1208,7 @@ if results:
                     continue  # skip non-bullish or errored
 
                 with st.expander(
-                    f"{'🟢' if picks else '⚠️'} **{sym}** — ${rec['price']:,.2f} | {rec['regime_label']} | {rec['signal']}",
+                    f"**{sym}** — ${rec['price']:,.2f} | {rec['regime_label']} | {rec['signal']}",
                     expanded=bool(picks),
                 ):
                     if err:
