@@ -863,13 +863,13 @@ with st.sidebar:
         min_confs = s1.number_input("Min Confs", value=_saved.get("min_confs", 6), min_value=3, max_value=12)
         regime_confirm = s2.number_input("Confirm Bars", value=_saved.get("regime_confirm", 2), min_value=1, max_value=10)
         cooldown = s1.number_input("Cooldown", value=_saved.get("cooldown", 3), min_value=1, max_value=20)
-        initial_capital = s2.number_input("Capital $K", value=int(_saved.get("initial_capital", 100000)/1000), min_value=1) * 1000
+        initial_capital = s2.number_input("Capital $", value=_saved.get("initial_capital", 100000), min_value=1000, step=10000)
         options_enabled = st.checkbox("Options Picker", value=_saved.get("options_enabled", True))
         if options_enabled:
             d1, d2, d3 = st.columns(3)
             min_dte = d1.number_input("Min DTE", value=_saved.get("min_dte", 21), min_value=7, max_value=30)
             max_dte = d2.number_input("Max DTE", value=_saved.get("max_dte", 45), min_value=30, max_value=180)
-            top_n_options = d3.number_input("Top N", value=_saved.get("top_n_options", 3), min_value=1, max_value=10)
+            top_n_options = d3.number_input("Picks", value=_saved.get("top_n_options", 3), min_value=1, max_value=10)
         else:
             min_dte, max_dte, top_n_options = 21, 45, 3
         auto_refresh = st.checkbox("Auto-Refresh", value=_saved.get("auto_refresh", False))
@@ -1142,6 +1142,12 @@ if results:
             )
 
             if picks:
+                # Column headers
+                hc1, hc2, hc3 = st.columns([5, 1.5, 1])
+                hc1.markdown('<span style="color:#6b7280;font-size:0.6rem;font-family:JetBrains Mono,monospace">STRIKE | DTE | DELTA | IV | MID | QTY</span>', unsafe_allow_html=True)
+                hc2.markdown('<span style="color:#6b7280;font-size:0.6rem">RISK</span>', unsafe_allow_html=True)
+                hc3.markdown("")
+
                 for i, p in enumerate(picks):
                     atr_est = (sel_scan.get("price", 100) * 0.02) if sel_scan else 2
                     sizing = compute_position_size(
@@ -1154,16 +1160,16 @@ if results:
                         option_mid=p["mid"],
                     )
 
-                    bc1, bc2, bc3, bc4, bc5 = st.columns([3.5, 1, 0.8, 0.8, 1])
+                    bc1, bc2, bc3 = st.columns([5, 1.5, 1])
                     bc1.markdown(
                         f'<span style="color:#e5e7eb;font-family:JetBrains Mono,monospace;font-size:0.75rem">'
-                        f'${p["strike"]:.0f} | {p["dte"]}d | d{p["delta"]:.2f} | IV {p["iv_pct"]:.0f}%</span>',
+                        f'${p["strike"]:.0f} | {p["dte"]}d | d{p["delta"]:.2f} | IV {p["iv_pct"]:.0f}% | '
+                        f'<span style="color:#2dd4bf">${p["mid"]:.2f}</span> | '
+                        f'{sizing["contracts"]}x</span>',
                         unsafe_allow_html=True,
                     )
-                    bc2.markdown(f'<span style="color:#2dd4bf;font-weight:600">${p["mid"]:.2f}</span>', unsafe_allow_html=True)
-                    bc3.markdown(f'<span style="color:#e5e7eb">{sizing["contracts"]}x</span>', unsafe_allow_html=True)
-                    bc4.markdown(f'<span style="color:#6b7280;font-size:0.7rem">{sizing["confidence_tier"]}</span>', unsafe_allow_html=True)
-                    if bc5.button("BUY", key=f"buy_{sel}_{i}", type="primary"):
+                    bc2.markdown(f'<span style="color:#6b7280;font-size:0.7rem">${sizing["risk_dollars"]:,.0f} {sizing["confidence_tier"]}</span>', unsafe_allow_html=True)
+                    if bc3.button("BUY", key=f"buy_{sel}_{i}", type="primary"):
                         if tradier_configured():
                             with st.spinner(f"Buying {sizing['contracts']}x {p['contractSymbol']}..."):
                                 result = execute_buy_calls(

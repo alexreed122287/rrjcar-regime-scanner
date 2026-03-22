@@ -36,13 +36,26 @@ WATCHLISTS = {
     "3x Leveraged Bull": [
         "TQQQ", "SPXL", "UPRO", "SOXL", "TNA", "LABU", "FNGU", "TECL", "FAS",
         "DFEN", "DRN", "NAIL", "KORU", "YINN", "NVDL", "TSLL", "BULZ",
+        "HIBL", "PILL", "WANT", "WEBL", "RETL", "MIDU", "CURE", "TPOR",
+        "EURL", "EDC", "BNKU", "INDL", "MEXX", "UBOT", "CONL", "DUSL",
     ],
     "3x Leveraged Bear": [
         "SQQQ", "SPXS", "SOXS", "TZA", "LABD", "FNGD", "TECS", "FAZ", "DRV", "YANG",
+        "HIBS", "WEBS", "ERY", "EDZ", "BERZ", "SH", "SPDN",
     ],
-    "2x Leveraged": [
+    "3x Inverse Single-Stock": [
+        "NVDD", "TSLS", "AMZD", "MSFD", "AAPLD",
+    ],
+    "2x Leveraged Bull": [
         "QLD", "SSO", "UWM", "ROM", "UYG", "DIG", "UCO", "AGQ", "NUGT", "BOIL",
+        "BIB", "UGE", "UCC", "UPW", "SAA", "URE", "UXI", "MVV", "CWEB", "JNUG",
+    ],
+    "2x Leveraged Bear": [
         "QID", "SDS", "TWM", "SKF", "DUG", "SCO", "ZSL", "DUST", "KOLD",
+        "REK", "SZK", "SCC", "SRS", "SIJ", "SDD", "MZZ", "BIS", "JDST",
+    ],
+    "Volatility": [
+        "UVXY", "SVXY", "VXX", "VIXY", "SVOL",
     ],
     "Crypto": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD"],
     "Crypto Stocks": ["COIN", "MSTR", "HOOD", "RIOT", "MARA", "CLSK"],
