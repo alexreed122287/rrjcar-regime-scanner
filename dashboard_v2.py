@@ -769,7 +769,8 @@ if "options_recs" not in st.session_state:
 # ════════════════════════════════════════════════════════
 #  SETTINGS (main page expander — works on mobile + desktop sidebar)
 # ════════════════════════════════════════════════════════
-_settings_container = st.expander("Settings", expanded=False)
+_first_visit = st.session_state.scan_results is None
+_settings_container = st.expander("Settings", expanded=_first_visit)
 with _settings_container:
 
     # Watchlist + Strategy (compact)
@@ -1477,14 +1478,17 @@ if results:
                 render_drill_down(match)
 
 else:
-    # Landing — clean hero, nothing else
+    # Landing — hero + hint to scroll up for settings
     st.markdown("""
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:15vh 1rem 10vh;">
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem 1rem 2rem;">
         <div style="font-family:'Inter',sans-serif; font-weight:600; font-size:clamp(2.5rem, 10vw, 5rem); letter-spacing:0.4rem; color:#f3f4f6; line-height:1;">
             RRJCAR
         </div>
         <div style="font-family:'JetBrains Mono',monospace; font-weight:400; font-size:clamp(0.5rem, 2vw, 0.7rem); letter-spacing:0.4rem; color:#2dd4bf; text-transform:uppercase; margin-top:0.6rem;">
             regime scanner
+        </div>
+        <div style="color:#4b5563; font-size:0.7rem; margin-top:2rem;">
+            Open Settings above to configure, then tap SCAN
         </div>
     </div>
     """, unsafe_allow_html=True)
