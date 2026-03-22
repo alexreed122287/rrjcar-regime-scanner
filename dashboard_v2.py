@@ -136,7 +136,9 @@ st.markdown("""
     section[data-testid="stSidebar"] button {
         background: #1f2937 !important; color: #f3f4f6 !important; border-color: #374151 !important;
     }
-    section[data-testid="stSidebar"] button[kind="primary"] {
+    section[data-testid="stSidebar"] button[kind="primary"],
+    section[data-testid="stSidebar"] button[kind="primary"] span,
+    section[data-testid="stSidebar"] button[kind="primary"] p {
         background: #2dd4bf !important; color: #101114 !important; border: none !important;
     }
 
@@ -165,10 +167,12 @@ st.markdown("""
     .streamlit-expanderHeader { font-family: 'Inter', sans-serif; font-size: 0.75rem; font-weight: 500; color: #9ca3af !important; }
 
     .stButton > button { border-radius: 4px; font-weight: 500; font-size: 0.75rem;
-        background: #1f2937; color: #d1d5db; border: 1px solid #374151; }
-    .stButton > button[kind="primary"] { background: #2dd4bf; color: #101114; border: none; }
-    .stButton > button:hover { background: #374151; }
-    .stButton > button[kind="primary"]:hover { background: #14b8a6; }
+        background: #1f2937 !important; color: #d1d5db !important; border: 1px solid #374151 !important; }
+    .stButton > button[kind="primary"],
+    .stButton > button[kind="primary"] span,
+    .stButton > button[kind="primary"] p { background: #2dd4bf !important; color: #101114 !important; border: none !important; }
+    .stButton > button:hover { background: #374151 !important; }
+    .stButton > button[kind="primary"]:hover { background: #14b8a6 !important; color: #101114 !important; }
 
     .stProgress > div > div { background: #1f2937; }
     .stProgress > div > div > div { background: #2dd4bf; }
