@@ -77,7 +77,7 @@ st.markdown("""
         font-size: 0.55rem; font-weight: 400; text-transform: uppercase; letter-spacing: 1px;
     }
     .metric-card .value {
-        font-family: 'Inter', sans-serif; font-size: 1.2rem; font-weight: 600;
+        font-family: 'Inter', sans-serif; font-size: 1rem; font-weight: 600;
         color: #f3f4f6; margin-top: 0;
     }
     .bull { color: #2dd4bf !important; }
@@ -281,10 +281,9 @@ def render_screener_table(results, filter_signal="All"):
         return None
 
     # Header
-    cols = st.columns([1.2, 1.2, 1, 1.5, 1, 1.5, 0.8, 0.8, 0.8])
-    headers = ["Symbol", "Price", "1D Chg", "Regime", "Conf", "Signal", "Confs", "RSI", "ADX"]
-    for col, h in zip(cols, headers):
-        col.markdown(f"**{h}**")
+    cols = st.columns([1, 1, 0.8, 1.3, 1.3, 0.7, 0.5, 0.5, 0.5])
+    for col, h in zip(cols, ["", "Price", "1D", "Regime", "Signal", "Confs", "RSI", "ADX", ""]):
+        col.markdown(f'<span style="color:#4b5563;font-size:0.6rem">{h}</span>', unsafe_allow_html=True)
 
 
     selected_symbol = None
@@ -294,75 +293,91 @@ def render_screener_table(results, filter_signal="All"):
     filtered = [r for r in filtered if not (r.get("error") and r.get("price") is None)]
 
     for r in filtered:
+        cols = st.columns([1, 1, 0.8, 1.3, 1.3, 0.7, 0.5, 0.5, 0.5])
 
-        cols = st.columns([1.2, 1.2, 1, 1.5, 1, 1.5, 0.8, 0.8, 0.8])
-
-        # Symbol — clickable button
+        # Symbol
         if cols[0].button(r["symbol"], key=f"btn_{r['symbol']}", use_container_width=True):
             selected_symbol = r["symbol"]
 
         # Price
-        cols[1].markdown(f"${r['price']:,.2f}" if r.get("price") else "--")
+        cols[1].markdown(f'<span style="color:#e5e7eb;font-size:0.8rem">${r["price"]:,.2f}</span>' if r.get("price") else "--", unsafe_allow_html=True)
 
         # 1D Change
         chg = r.get("change_1d")
         if chg is not None:
             c_hex = "#34d399" if chg >= 0 else "#f87171"
-            cols[2].markdown(f'<span style="color:{c_hex}">{chg:+.2f}%</span>', unsafe_allow_html=True)
+            cols[2].markdown(f'<span style="color:{c_hex};font-size:0.8rem">{chg:+.1f}%</span>', unsafe_allow_html=True)
         else:
             cols[2].markdown("--")
 
-        # Regime
+        # Regime with trend arrow
         rid = r.get("regime_id")
         if rid is not None:
-            cols[3].markdown(regime_badge_html(rid, r["regime_label"]), unsafe_allow_html=True)
+            # Determine trend direction
+            changed = r.get("regime_changed", False)
+            prev = r.get("prev_regime", "")
+            if changed and rid is not None:
+                # Compare to previous — lower regime_id = more bullish
+                # If regime improved (moved toward bull), show up arrow
+                prev_rid = None
+                for pi, pl in enumerate(REGIME_LABELS):
+                    if pl == prev:
+                        prev_rid = pi
+                        break
+                if prev_rid is not None and rid < prev_rid:
+                    trend = '<span style="color:#34d399"> ^</span>'
+                elif prev_rid is not None and rid > prev_rid:
+                    trend = '<span style="color:#f87171"> v</span>'
+                else:
+                    trend = ""
+            else:
+                trend = ""
+            cols[3].markdown(f'{regime_badge_html(rid, r["regime_label"])}{trend}', unsafe_allow_html=True)
         else:
             cols[3].markdown("--")
 
-        # Confidence
-        conf = r.get("regime_confidence")
-        cols[4].markdown(f"{conf:.0%}" if conf else "--")
-
-        # Signal — colored text, no circle icons
+        # Signal
         sig = r.get("signal", "")
         short_sig = sig.replace("LONG -- ", "").replace("CASH -- ", "").replace("EXIT -- ", "EXIT: ")
-        if "ENTER" in sig:
-            sig_hex = "#34d399"
-        elif "CONFIRMING" in sig:
-            sig_hex = "#5eead4"
-        elif "HOLD" in sig:
-            sig_hex = "#2dd4bf"
-        elif "EXIT" in sig:
-            sig_hex = "#f87171"
-        elif "BEARISH" in sig:
-            sig_hex = "#fb923c"
-        else:
-            sig_hex = "#6b7280"
+        sig_colors = {"ENTER": "#34d399", "CONFIRMING": "#5eead4", "HOLD": "#2dd4bf", "EXIT": "#f87171", "BEARISH": "#f87171"}
+        sig_hex = next((v for k, v in sig_colors.items() if k in sig), "#6b7280")
         flash = ' class="alert-flash"' if "ENTER" in sig or "EXIT" in sig else ""
-        cols[5].markdown(f'<span{flash} style="color:{sig_hex};font-weight:600">{short_sig}</span>', unsafe_allow_html=True)
+        cols[4].markdown(f'<span{flash} style="color:{sig_hex};font-weight:600;font-size:0.75rem">{short_sig}</span>', unsafe_allow_html=True)
 
         # Confirmations
         cmet = r.get("confirmations_met", 0)
         conf_total = r.get("confirmations_total", 12)
         ct_ratio = cmet / max(conf_total, 1)
         ct_hex = "#34d399" if ct_ratio >= 0.6 else ("#5eead4" if ct_ratio >= 0.4 else "#f87171")
-        cols[6].markdown(f'<span style="color:{ct_hex}">{cmet}/{conf_total}</span>', unsafe_allow_html=True)
+        cols[5].markdown(f'<span style="color:{ct_hex};font-size:0.8rem">{cmet}/{conf_total}</span>', unsafe_allow_html=True)
 
         # RSI
         rsi = r.get("rsi")
         if rsi is not None:
-            rsi_hex = "#f87171" if rsi > 70 else ("#34d399" if rsi < 30 else "#e5e7eb")
-            cols[7].markdown(f'<span style="color:{rsi_hex}">{rsi:.0f}</span>', unsafe_allow_html=True)
+            rsi_hex = "#f87171" if rsi > 70 else ("#34d399" if rsi < 30 else "#9ca3af")
+            cols[6].markdown(f'<span style="color:{rsi_hex};font-size:0.8rem">{rsi:.0f}</span>', unsafe_allow_html=True)
         else:
-            cols[7].markdown("--")
+            cols[6].markdown("--")
 
         # ADX
         adx = r.get("adx")
         if adx is not None:
             adx_hex = "#34d399" if adx > 25 else "#6b7280"
-            cols[8].markdown(f'<span style="color:{adx_hex}">{adx:.0f}</span>', unsafe_allow_html=True)
+            cols[7].markdown(f'<span style="color:{adx_hex};font-size:0.8rem">{adx:.0f}</span>', unsafe_allow_html=True)
         else:
-            cols[8].markdown("--")
+            cols[7].markdown("--")
+
+        # Trend arrow in last column
+        _rid = r.get("regime_id")
+        _chg1d = r.get("change_1d", 0) or 0
+        _confs = r.get("confirmations_met", 0)
+        _conf_total = r.get("confirmations_total", 12)
+        if _rid is not None and _rid <= 2 and _confs >= _conf_total * 0.5 and _chg1d > 0:
+            cols[8].markdown('<span style="color:#34d399;font-size:0.9rem">^</span>', unsafe_allow_html=True)
+        elif _rid is not None and _rid >= 5:
+            cols[8].markdown('<span style="color:#f87171;font-size:0.9rem">v</span>', unsafe_allow_html=True)
+        else:
+            cols[8].markdown('<span style="color:#4b5563;font-size:0.9rem">-</span>', unsafe_allow_html=True)
 
     # Show errored tickers in collapsed expander
     if errored:
@@ -426,7 +441,7 @@ def plot_equity_curve(equity_curve, df):
 
 
 def plot_regime_heatmap(results):
-    """Heatmap showing regime state across all scanned tickers."""
+    """Heatmap showing regime state across all scanned tickers. Bearish left → Bullish right."""
     symbols = []
     regime_ids = []
     for r in results:
@@ -437,46 +452,39 @@ def plot_regime_heatmap(results):
     if not symbols:
         return None
 
-    # Create a matrix: 1 row per ticker, 7 columns for regimes
-    # Value = 1 if ticker is in that regime, 0 otherwise
+    # Inverted order: bearish (6) on left → bullish (0) on right
+    inv_order = [6, 5, 4, 3, 2, 1, 0]
+    inv_labels = [REGIME_LABELS[i] for i in inv_order]
+
     matrix = np.zeros((len(symbols), 7))
     for i, rid in enumerate(regime_ids):
         if rid < 7:
-            matrix[i, rid] = 1.0
+            col_idx = inv_order.index(rid)
+            matrix[i, col_idx] = 1.0
 
     fig = go.Figure(go.Heatmap(
-        z=matrix,
-        x=[REGIME_LABELS[i] for i in range(7)],
-        y=symbols,
-        colorscale=[
-            [0, "#0a0a0f"],
-            [0.5, "#1a1a2e"],
-            [1, "#2dd4bf"],
-        ],
+        z=matrix, x=inv_labels, y=symbols,
+        colorscale=[[0, "#101114"], [0.5, "#1a1f2e"], [1, "#2dd4bf"]],
         showscale=False,
         hovertemplate="<b>%{y}</b><br>%{x}<extra></extra>",
     ))
 
-    # Overlay colored markers for each ticker's current regime
     for i, (sym, rid) in enumerate(zip(symbols, regime_ids)):
         if rid < 7:
+            col_idx = inv_order.index(rid)
             fig.add_trace(go.Scatter(
-                x=[REGIME_LABELS[rid]],
-                y=[sym],
-                mode="markers",
-                marker=dict(size=18, color=REGIME_COLORS.get(rid, "#666"), symbol="square"),
+                x=[inv_labels[col_idx]], y=[sym], mode="markers",
+                marker=dict(size=14, color=REGIME_COLORS.get(rid, "#666"), symbol="square"),
                 showlegend=False,
                 hovertemplate=f"<b>{sym}</b><br>{REGIME_LABELS[rid]}<extra></extra>",
             ))
 
     fig.update_layout(
-        title="Regime Chart - All Tickers",
-        template="plotly_dark",
-        paper_bgcolor="#101114",
-        plot_bgcolor="#101114",
-        height=max(300, len(symbols) * 35 + 100),
-        margin=dict(l=80, r=20, t=60, b=40),
-        xaxis=dict(side="top"),
+        template="plotly_dark", paper_bgcolor="#101114", plot_bgcolor="#101114",
+        height=min(400, max(200, len(symbols) * 22 + 60)),
+        margin=dict(l=60, r=10, t=30, b=20),
+        xaxis=dict(side="top", tickfont=dict(size=9)),
+        yaxis=dict(tickfont=dict(size=9)),
     )
     return fig
 
@@ -801,7 +809,7 @@ with st.sidebar:
         _rc = _saved.get("regime_confirm", 2)
         _cd = _saved.get("cooldown", 3)
         n_regimes = s1.number_input(f"Regimes ({_nr}/10)", value=_nr, min_value=3, max_value=10)
-        max_workers = s2.number_input(f"Workers ({_mw}/8)", value=_mw, min_value=1, max_value=8)
+        max_workers = s2.number_input(f"Speed ({_mw}/8)", value=_mw, min_value=1, max_value=8)
         min_confs = s1.number_input(f"Confs ({_mc}/12)", value=_mc, min_value=3, max_value=12)
         regime_confirm = s2.number_input(f"Confirm ({_rc}/10)", value=_rc, min_value=1, max_value=10)
         cooldown = s1.number_input(f"Cooldown ({_cd}/20)", value=_cd, min_value=1, max_value=20)
