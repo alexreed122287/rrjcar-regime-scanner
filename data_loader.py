@@ -21,8 +21,15 @@ TRADIER_SANDBOX_BASE = "https://sandbox.tradier.com/v1"
 TRADIER_PROD_BASE = "https://api.tradier.com/v1"
 
 
+_tradier_config_cache = None
+
+
 def _load_tradier_config() -> dict:
-    """Load Tradier config from Streamlit secrets, settings file, or env vars."""
+    """Load Tradier config (cached after first call)."""
+    global _tradier_config_cache
+    if _tradier_config_cache is not None:
+        return _tradier_config_cache
+
     config = {
         "access_token": os.environ.get("TRADIER_ACCESS_TOKEN", ""),
         "account_id": os.environ.get("TRADIER_ACCOUNT_ID", ""),
@@ -40,6 +47,7 @@ def _load_tradier_config() -> dict:
                 config["account_id"] = tradier_secrets["account_id"]
             if "sandbox" in tradier_secrets:
                 config["sandbox"] = tradier_secrets["sandbox"]
+            _tradier_config_cache = config
             return config
     except Exception:
         pass
@@ -52,6 +60,8 @@ def _load_tradier_config() -> dict:
             config.update({k: v for k, v in saved.items() if v})
         except Exception:
             pass
+
+    _tradier_config_cache = config
     return config
 
 
@@ -88,6 +98,23 @@ def resolve_ticker(symbol: str) -> str:
 
 # ─── Tradier data fetcher ────────────────────────────────────
 
+# Reusable session for connection pooling (much faster for batch requests)
+_tradier_session = None
+
+
+def _get_tradier_session():
+    """Get or create a reusable requests.Session with Tradier auth."""
+    global _tradier_session
+    if _tradier_session is None:
+        config = _load_tradier_config()
+        _tradier_session = requests.Session()
+        _tradier_session.headers.update({
+            "Authorization": f"Bearer {config['access_token']}",
+            "Accept": "application/json",
+        })
+    return _tradier_session
+
+
 def _fetch_tradier(
     symbol: str,
     start: str,
@@ -109,13 +136,10 @@ def _fetch_tradier(
     elif interval in ("1mo", "monthly"):
         tradier_interval = "monthly"
 
-    headers = {
-        "Authorization": f"Bearer {config['access_token']}",
-        "Accept": "application/json",
-    }
+    session = _get_tradier_session()
 
     try:
-        r = requests.get(
+        r = session.get(
             f"{base}/markets/history",
             params={
                 "symbol": symbol.upper(),
@@ -123,8 +147,7 @@ def _fetch_tradier(
                 "start": start,
                 "end": end,
             },
-            headers=headers,
-            timeout=15,
+            timeout=10,
         )
         r.raise_for_status()
         data = r.json()

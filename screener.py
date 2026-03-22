@@ -277,7 +277,7 @@ def scan_watchlist(
     n_regimes: int = 7,
     min_confirmations: int = 6,
     regime_confirm_bars: int = 2,
-    max_workers: int = 6,
+    max_workers: int = 10,
     strategy: str = "v2",
     batch_size: int = 200,
     progress_callback=None,
