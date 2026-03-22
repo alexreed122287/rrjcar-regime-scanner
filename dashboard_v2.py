@@ -570,20 +570,18 @@ def render_drill_down(result):
                 icon_c = "✅" if passed else "❌"
                 st.markdown(f"{icon_c} **{name}**")
 
-    # TradingView Chart (embedded widget — daily with 10/20/50 EMAs)
+    # TradingView Chart
     tv_symbol = resolve_ticker(sym).replace("-", "")
-    if tv_symbol.endswith("USD"):
-        tv_symbol = tv_symbol  # crypto pairs work as-is on TV
     tv_html = f'''
-    <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 0.8rem;">
+    <div style="overflow:hidden;">
     <iframe
-        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=f8f9fa&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%230091ea&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%23ff6d00&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23e91e63&theme=light&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=450"
-        style="width: 100%; height: 450px; border: none;"
+        src="https://s.tradingview.com/widgetembed/?symbol={tv_symbol}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=101114&studies=MAExp%407%7C10%7Cclose%7C0%7C0%7C0%7C%232dd4bf&studies=MAExp%407%7C20%7Cclose%7C0%7C0%7C0%7C%233b82f6&studies=MAExp%407%7C50%7Cclose%7C0%7C0%7C0%7C%23a855f7&theme=dark&style=1&timezone=America%2FChicago&withdateranges=1&hideideas=1&width=100%25&height=420"
+        style="width:100%;height:420px;border:none;"
         allowfullscreen>
     </iframe>
     </div>
     '''
-    st.components.v1.html(tv_html, height=460)
+    st.components.v1.html(tv_html, height=425)
 
     # Quick Trade (Tradier)
     if tradier_configured():
@@ -1103,10 +1101,19 @@ if results:
         elif sort_by == "1D Change":
             display_results.sort(key=lambda r: -(r.get("change_1d") or -999))
 
-        # Check if a ticker is selected — show contracts INSTEAD of screener
+        # Ticker selector dropdown — pick any scanned ticker to see contracts
+        available_syms = ["-- Select Ticker --"] + [r["symbol"] for r in display_results if r.get("price")]
+        sel_idx = 0
+        if st.session_state.get("selected_ticker") in available_syms:
+            sel_idx = available_syms.index(st.session_state["selected_ticker"])
+
+        picked = st.selectbox("Trade", available_syms, index=sel_idx, key="ticker_pick", label_visibility="collapsed")
+        if picked != "-- Select Ticker --":
+            st.session_state.selected_ticker = picked
         sel = st.session_state.get("selected_ticker")
-        if sel:
-            # ── CONTRACT VIEW (replaces screener) ──
+
+        if sel and sel != "-- Select Ticker --":
+            # ── CONTRACT VIEW ──
             sel_scan = next((r for r in results if r["symbol"] == sel), None)
 
             # Fetch options on-demand
@@ -1116,7 +1123,7 @@ if results:
 
             if not picks and sel_scan and sel_scan.get("price"):
                 try:
-                    with st.spinner(f"Loading options for {sel}..."):
+                    with st.spinner(f"Loading {sel} options..."):
                         fresh = get_options_recommendations(
                             symbol=sel,
                             current_price=sel_scan["price"],
@@ -1132,35 +1139,22 @@ if results:
                 except Exception:
                     picks = []
 
-            # Header with back button
-            hc1, hc2 = st.columns([1, 6])
-            if hc1.button("< Back", key="back_to_screener"):
-                st.session_state.selected_ticker = None
-                st.rerun()
-
+            # Ticker info
             price_str = f"${sel_scan['price']:,.2f}" if sel_scan and sel_scan.get("price") else ""
-            sig_str = sel_scan.get("signal", "") if sel_scan else ""
             regime_str = sel_scan.get("regime_label", "") if sel_scan else ""
-            hc2.markdown(
-                f'<span style="font-size:1.2rem;font-weight:600;color:#f3f4f6">{sel}</span>'
-                f'<span style="color:#6b7280;margin-left:1rem">{price_str}</span>'
-                f'<span style="color:#2dd4bf;margin-left:1rem;font-size:0.8rem">{regime_str}</span>',
+            sig_str = sel_scan.get("signal", "") if sel_scan else ""
+            sig_hex = "#2dd4bf" if "ENTER" in sig_str or "HOLD" in sig_str else ("#f87171" if "EXIT" in sig_str else "#6b7280")
+            st.markdown(
+                f'<div style="padding:0.3rem 0">'
+                f'<span style="font-size:1.1rem;font-weight:600;color:#f3f4f6">{sel}</span>'
+                f'<span style="color:#6b7280;margin-left:0.8rem">{price_str}</span>'
+                f'<span style="color:#2dd4bf;margin-left:0.8rem;font-size:0.75rem">{regime_str}</span>'
+                f'<span style="color:{sig_hex};margin-left:0.8rem;font-size:0.75rem">{sig_str}</span>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
 
-            # Contract header
             if picks:
-                st.markdown(
-                    '<div style="display:flex;gap:0;padding:0.3rem 0;color:#6b7280;font-size:0.65rem;font-family:JetBrains Mono,monospace">'
-                    '<div style="flex:3.5">CONTRACT</div>'
-                    '<div style="flex:1">MID</div>'
-                    '<div style="flex:0.8">QTY</div>'
-                    '<div style="flex:0.8">TIER</div>'
-                    '<div style="flex:1"></div>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-
                 for i, p in enumerate(picks):
                     atr_est = (sel_scan.get("price", 100) * 0.02) if sel_scan else 2
                     sizing = compute_position_size(
@@ -1211,10 +1205,7 @@ if results:
 
         else:
             # ── SCREENER TABLE (default view) ──
-            selected = render_screener_table(display_results, filter_signal)
-            if selected:
-                st.session_state.selected_ticker = selected
-                st.rerun()
+            render_screener_table(display_results, filter_signal)
 
     with main_tabs[1]:
         # ── Options Picks ──
