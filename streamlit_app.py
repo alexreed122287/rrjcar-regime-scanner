@@ -80,7 +80,7 @@ st.markdown("""
     .stBottom, .stRunningMan,
     iframe[src*="streamlit"] { display: none !important; visibility: hidden !important; }
 
-    /* "$" expander: no border, no arrow, centered */
+    /* "$" expander: no border, transparent */
     div[data-testid="stExpander"],
     div[data-testid="stExpander"] > div,
     div[data-testid="stExpander"] details,
@@ -89,30 +89,21 @@ st.markdown("""
         box-shadow: none !important; outline: none !important;
     }
     div[data-testid="stExpander"] details > summary {
-        display: flex !important; justify-content: center !important;
-        align-items: center !important; text-align: center !important;
         border: none !important; background: transparent !important;
-        padding: 0.5rem 0 !important; width: 100% !important;
         list-style: none !important; list-style-type: none !important;
-    }
-    div[data-testid="stExpander"] details > summary > span {
-        display: flex !important; justify-content: center !important;
-        align-items: center !important; width: 100% !important;
-    }
-    div[data-testid="stExpander"] details > summary p {
-        font-size: 1.5rem !important; color: #2dd4bf !important;
-        font-weight: 700 !important; text-align: center !important;
     }
     div[data-testid="stExpander"] details > summary::marker,
     div[data-testid="stExpander"] details > summary::-webkit-details-marker {
         display: none !important; content: "" !important;
     }
-    /* Hide the Material icon arrow and its parent wrapper */
-    span[data-testid="stIconMaterial"] {
-        display: none !important;
+    div[data-testid="stExpander"] details > summary p {
+        font-size: 1.5rem !important; color: #2dd4bf !important;
+        font-weight: 700 !important;
     }
-    div[data-testid="stExpander"] summary span:has(> [data-testid="stIconMaterial"]) {
-        display: none !important;
+    /* Make arrow icon invisible by matching background color */
+    span[data-testid="stIconMaterial"] {
+        color: #101114 !important; font-size: 0px !important;
+        width: 0px !important; overflow: hidden !important;
     }
 
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
@@ -276,33 +267,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inject JS to hide arrow icon and center $ (backup for CSS)
-import streamlit.components.v1 as _components
-_components.html("""
-<script>
-(function fix() {
-    try {
-        var doc = window.parent.document;
-        // Hide material icon arrows
-        doc.querySelectorAll('[data-testid="stIconMaterial"]').forEach(function(el) {
-            el.style.display = 'none';
-            if (el.parentElement) el.parentElement.style.display = 'none';
-        });
-        // Center expander summary inner span
-        doc.querySelectorAll('[data-testid="stExpander"] summary > span').forEach(function(el) {
-            el.style.justifyContent = 'center';
-            el.style.width = '100%';
-        });
-        // Hide Streamlit Cloud badges
-        doc.querySelectorAll('a[href*="streamlit.io"], a[href*="share.streamlit"]').forEach(function(el) {
-            var p = el.closest('div');
-            if (p) p.style.display = 'none';
-        });
-    } catch(e) {}
-    setTimeout(fix, 2000);
-})();
-</script>
-""", height=0)
 
 # ─── Regime Colors (Palantir dark) ───
 REGIME_COLORS = {
@@ -848,9 +812,12 @@ if not results:
     """, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════
-#  SETTINGS — Single expander below hero (no sidebar needed)
+#  SETTINGS — Single expander below hero, centered via columns
 # ════════════════════════════════════════════════════════
-with st.expander("$", expanded=False):
+_left, _center, _right = st.columns([2, 1, 2])
+with _center:
+    _settings_expander = st.expander("$", expanded=False)
+with _settings_expander:
     watchlist_keys = list(WATCHLISTS.keys())
     saved_wl = _saved.get("watchlist", "All Stocks (no ETFs)")
     default_idx = watchlist_keys.index(saved_wl) if saved_wl in watchlist_keys else 0
