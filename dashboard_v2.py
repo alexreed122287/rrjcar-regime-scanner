@@ -69,7 +69,7 @@ st.markdown("""
 
     #MainMenu, footer, header {visibility: hidden;}
 
-    /* Hide all Streamlit chrome: deploy bar, toolbar, branding, decorations */
+    /* Hide all Streamlit chrome: deploy bar, toolbar, branding, badges, watermarks */
     .stStatusWidget, div[data-testid="stStatusWidget"],
     div[data-testid="stNotification"],
     .stSpinner > div > div:first-child,
@@ -80,7 +80,15 @@ st.markdown("""
     a[href*="streamlit.io"],
     ._profileContainer_gzau3_53,
     div[data-testid="stSidebarCollapsedControl"],
-    section[data-testid="stSidebar"] { display: none !important; visibility: hidden !important; }
+    section[data-testid="stSidebar"],
+    iframe[src*="streamlit"],
+    div[data-testid="manage-app-button"],
+    .viewerBadge_container__r5tak,
+    .viewerBadge_link__qRIco,
+    ._container_gzau3_1,
+    div[class*="viewerBadge"],
+    div[class*="stBottomBlockContainer"] iframe,
+    .stApp > div:last-child > div[style*="position: fixed"] { display: none !important; visibility: hidden !important; }
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
 
