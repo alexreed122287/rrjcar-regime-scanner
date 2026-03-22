@@ -45,7 +45,7 @@ st.set_page_config(
     page_title="RRJCAR Regime Scanner",
     page_icon="R",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 # ─── PWA Meta Tags ───
@@ -232,43 +232,10 @@ st.markdown("""
         .streamlit-expanderHeader { font-size: 0.7rem; }
         iframe { max-height: 180px !important; }
         .stSelectbox { font-size: 0.7rem; }
-        header[data-testid="stHeader"] { background: #101114 !important; height: auto !important; display: flex !important; }
-        header[data-testid="stHeader"] div[data-testid="stAppDeployButton"],
-        header[data-testid="stHeader"] .stActionButton,
-        header[data-testid="stHeader"] a[href*="github"] { display: none !important; }
-        header[data-testid="stHeader"] button[data-testid="stSidebarCollapseButton"],
-        header[data-testid="stHeader"] button[kind="headerNoPadding"] {
-            display: block !important; visibility: visible !important;
-            opacity: 1 !important; position: relative !important; z-index: 999 !important;
-        }
-        .main .block-container { padding-top: 0.5rem !important; }
         .screener-row { font-size: 0.75rem; gap: 0.3rem 0.6rem; }
         .opt-card { font-size: 0.8rem; }
-
-        /* Floating settings button fallback */
-        .mobile-settings-btn {
-            position: fixed; top: 12px; left: 12px; z-index: 9999;
-            background: #1f2937; border: 1px solid #374151; border-radius: 8px;
-            color: #2dd4bf; font-size: 1.2rem; width: 40px; height: 40px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; -webkit-tap-highlight-color: transparent;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-        }
-        .mobile-settings-btn:active { background: #374151; }
     }
 </style>
-""", unsafe_allow_html=True)
-
-# Floating sidebar button for mobile (JS clicks the hidden Streamlit sidebar toggle)
-st.markdown("""
-<div class="mobile-settings-btn" onclick="
-    var btn = document.querySelector('button[data-testid=\\'stSidebarCollapseButton\\']')
-        || document.querySelector('button[data-testid=\\'baseButton-headerNoPadding\\']')
-        || document.querySelector('[data-testid=\\'stSidebarNav\\']');
-    if (btn) btn.click();
-    else { var sb = document.querySelector('section[data-testid=\\'stSidebar\\']');
-           if (sb) sb.style.marginLeft = '0px'; }
-">&#9776;</div>
 """, unsafe_allow_html=True)
 
 
