@@ -80,30 +80,14 @@ st.markdown("""
     .stBottom, .stRunningMan,
     iframe[src*="streamlit"] { display: none !important; visibility: hidden !important; }
 
-    /* "$" expander: no border, transparent */
-    div[data-testid="stExpander"],
-    div[data-testid="stExpander"] > div,
-    div[data-testid="stExpander"] details,
-    div[data-testid="stExpander"] details > div {
-        border: none !important; background: transparent !important;
-        box-shadow: none !important; outline: none !important;
+    /* Style the "$" toggle button: transparent background, teal text */
+    div[data-testid="stColumns"] button[kind="secondary"] {
+        background: transparent !important; border: none !important;
+        color: #2dd4bf !important; font-size: 1.5rem !important;
+        font-weight: 700 !important; box-shadow: none !important;
     }
-    div[data-testid="stExpander"] details > summary {
-        border: none !important; background: transparent !important;
-        list-style: none !important; list-style-type: none !important;
-    }
-    div[data-testid="stExpander"] details > summary::marker,
-    div[data-testid="stExpander"] details > summary::-webkit-details-marker {
-        display: none !important; content: "" !important;
-    }
-    div[data-testid="stExpander"] details > summary p {
-        font-size: 1.5rem !important; color: #2dd4bf !important;
-        font-weight: 700 !important;
-    }
-    /* Make arrow icon invisible by matching background color */
-    span[data-testid="stIconMaterial"] {
-        color: #101114 !important; font-size: 0px !important;
-        width: 0px !important; overflow: hidden !important;
+    div[data-testid="stColumns"] button[kind="secondary"]:hover {
+        background: rgba(45,212,191,0.1) !important;
     }
 
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
@@ -812,12 +796,16 @@ if not results:
     """, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════
-#  SETTINGS — Single expander below hero, centered via columns
+#  SETTINGS — Toggle via button (no expander arrow issues)
 # ════════════════════════════════════════════════════════
+if "show_settings" not in st.session_state:
+    st.session_state.show_settings = False
 _left, _center, _right = st.columns([2, 1, 2])
 with _center:
-    _settings_expander = st.expander("$", expanded=False)
-with _settings_expander:
+    if st.button("$", use_container_width=True):
+        st.session_state.show_settings = not st.session_state.show_settings
+        st.rerun()
+if st.session_state.show_settings:
     watchlist_keys = list(WATCHLISTS.keys())
     saved_wl = _saved.get("watchlist", "All Stocks (no ETFs)")
     default_idx = watchlist_keys.index(saved_wl) if saved_wl in watchlist_keys else 0
@@ -925,6 +913,41 @@ with _settings_expander:
             "scheduled_scan_timezone": scheduled_scan_timezone,
         })
         st.toast("Saved")
+
+else:
+    # Settings hidden — use saved defaults
+    watchlist_name = _saved.get("watchlist", "All Stocks (no ETFs)")
+    strategy = _saved.get("strategy", "v2")
+    custom_tickers = _saved.get("custom_tickers", "")
+    n_regimes = _saved.get("n_regimes", 7)
+    max_workers = _saved.get("max_workers", 6)
+    min_confs = _saved.get("min_confs", 6)
+    regime_confirm = _saved.get("regime_confirm", 2)
+    cooldown = _saved.get("cooldown", 3)
+    initial_capital = _saved.get("initial_capital", 100000)
+    risk_pct = _saved.get("risk_pct", 10)
+    options_enabled = _saved.get("options_enabled", True)
+    min_dte = _saved.get("min_dte", 21)
+    max_dte = _saved.get("max_dte", 45)
+    top_n_options = _saved.get("top_n_options", 3)
+    auto_refresh = _saved.get("auto_refresh", False)
+    refresh_minutes = _saved.get("refresh_minutes", 5)
+    alerts_enabled = _saved.get("alerts_enabled", False)
+    alert_email = _saved.get("alert_email", "")
+    alert_smtp_server = _saved.get("alert_smtp_server", "smtp.gmail.com")
+    alert_smtp_port = _saved.get("alert_smtp_port", 587)
+    alert_smtp_user = _saved.get("alert_smtp_user", "")
+    alert_smtp_password = _saved.get("alert_smtp_password", "")
+    alert_telegram_enabled = _saved.get("alert_telegram_enabled", False)
+    alert_telegram_bot_token = _saved.get("alert_telegram_bot_token", "")
+    alert_telegram_chat_id = _saved.get("alert_telegram_chat_id", "")
+    alert_on_regime_change = _saved.get("alert_on_regime_change", True)
+    alert_on_bull_entry = _saved.get("alert_on_bull_entry", True)
+    alert_on_bear_entry = _saved.get("alert_on_bear_entry", False)
+    alert_min_confirmations = _saved.get("alert_min_confirmations", 6)
+    scheduled_scans_enabled = _saved.get("scheduled_scans_enabled", False)
+    scheduled_scan_times = _saved.get("scheduled_scan_times", "09:30,12:00,15:30")
+    scheduled_scan_timezone = _saved.get("scheduled_scan_timezone", "America/Chicago")
 
 # Ticker list
 tickers = list(WATCHLISTS.get(watchlist_name, []))
