@@ -232,8 +232,9 @@ st.markdown("""
         .streamlit-expanderHeader { font-size: 0.7rem; }
         iframe { max-height: 180px !important; }
         .stSelectbox { font-size: 0.7rem; }
-        header[data-testid="stHeader"] { display: none !important; }
-        .stApp > header { display: none !important; }
+        header[data-testid="stHeader"] { background: #101114 !important; }
+        header[data-testid="stHeader"] div[data-testid="stAppDeployButton"],
+        header[data-testid="stHeader"] .stActionButton { display: none !important; }
         .main .block-container { padding-top: 0.5rem !important; }
         .screener-row { font-size: 0.75rem; gap: 0.3rem 0.6rem; }
         .opt-card { font-size: 0.8rem; }
