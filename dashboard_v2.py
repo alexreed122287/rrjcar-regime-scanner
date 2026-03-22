@@ -60,6 +60,14 @@ st.markdown("""
 
     #MainMenu, footer {visibility: hidden;}
     header {visibility: visible !important;}
+
+    /* Hide file change bar, running spinner, status elements */
+    .stStatusWidget, div[data-testid="stStatusWidget"],
+    div[data-testid="stNotification"],
+    .stSpinner > div > div:first-child,
+    div[data-testid="stAppDeployButton"],
+    div[data-testid="stToolbar"] > div:nth-child(2),
+    .stRunningMan { display: none !important; visibility: hidden !important; }
     .main .block-container { padding: 0.4rem 0.8rem 1rem; max-width: 1600px; }
     .stApp { background: #101114; color: #e5e7eb; }
 
@@ -830,7 +838,6 @@ if "options_recs" not in st.session_state:
 #  SIDEBAR
 # ════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## Regime Screener")
 
     # Watchlist + Strategy (compact)
     watchlist_keys = list(WATCHLISTS.keys())
