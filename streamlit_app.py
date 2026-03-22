@@ -95,18 +95,20 @@ st.markdown("""
         padding: 0.5rem 0 !important; width: 100% !important;
         list-style: none !important;
     }
-    [data-testid="stExpander"] summary span,
+    /* Center the inner span wrapper */
+    [data-testid="stExpander"] summary > span {
+        display: flex !important; justify-content: center !important;
+        align-items: center !important; width: 100% !important;
+    }
     [data-testid="stExpander"] summary p {
         font-size: 1.5rem !important; color: #2dd4bf !important;
         font-weight: 700 !important; text-align: center !important;
     }
-    /* Kill the arrow icon completely */
-    [data-testid="stExpander"] summary svg,
-    [data-testid="stExpanderToggleIcon"],
-    [data-testid="stExpander"] summary > span:first-child:has(svg),
-    [data-testid="stExpander"] summary [data-testid="stExpanderToggleIcon"] {
+    /* Hide the Material icon arrow (keyboard_arrow_right text icon) */
+    [data-testid="stExpander"] [data-testid="stIconMaterial"],
+    [data-testid="stExpander"] summary span:has([data-testid="stIconMaterial"]) > [data-testid="stIconMaterial"] {
         display: none !important; width: 0 !important; height: 0 !important;
-        overflow: hidden !important; visibility: hidden !important;
+        font-size: 0 !important; overflow: hidden !important;
     }
     [data-testid="stExpander"] summary::marker,
     [data-testid="stExpander"] summary::-webkit-details-marker {
