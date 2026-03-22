@@ -1,0 +1,37 @@
+name: Daily Regime Scan
+
+on:
+  schedule:
+    - cron: '0 18 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scheduled scan
+        env:
+          TRADIER_ACCESS_TOKEN: ${{wCuxyUT4wiTLN8f6tG9T65cB0qS8}}
+          TRADIER_ACCOUNT_ID: ${{ VA21850433 }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_EMAIL: ${{alexander.s.reed@gmail.com}}
+          TELEGRAM_BOT_TOKEN: ${{ 8680884328:AAG0LK9Ae3XeMGCXIFSJ8s_H8xh7bUs1SlM }}
+          TELEGRAM_CHAT_ID: ${{ 7396516349 }}
+        run: python scheduled_scan.py
