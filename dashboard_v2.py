@@ -779,6 +779,9 @@ if "options_recs" not in st.session_state:
     st.session_state.options_recs = []
 if "show_settings" not in st.session_state:
     st.session_state.show_settings = False
+# Reset settings panel on fresh page load (no scan yet)
+if st.session_state.scan_results is None and st.session_state.last_scan_time is None:
+    st.session_state.show_settings = False
 
 
 # ════════════════════════════════════════════════════════
