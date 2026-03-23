@@ -6,40 +6,30 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
-    <title>RRJCAR Regime Scanner</title>
+    <title>RRJCAR</title>
     <link rel="stylesheet" href="/static/css/terminal.css">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
 
-<div class="app-container">
+<!-- ═══ HOMEPAGE: Logo + $ ═══ -->
+<div class="home" id="home">
+    <div class="home-logo">
+        <img src="/static/img/logo.svg" alt="RRJCAR" class="logo-img">
+    </div>
+    <div class="home-dollar" id="home-dollar">$</div>
+</div>
 
-    <!-- ═══ HERO / HOME ═══ -->
-    <div class="hero" id="hero-section">
-        <div class="hero-logo">
-            <svg viewBox="0 0 400 120" class="logo-svg" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <linearGradient id="chrome" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style="stop-color:#e8e8e8"/>
-                        <stop offset="30%" style="stop-color:#b0b0b0"/>
-                        <stop offset="50%" style="stop-color:#f0f0f0"/>
-                        <stop offset="70%" style="stop-color:#a0a0a0"/>
-                        <stop offset="100%" style="stop-color:#d0d0d0"/>
-                    </linearGradient>
-                    <filter id="glow">
-                        <feGaussianBlur stdDeviation="3" result="blur"/>
-                        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                    </filter>
-                </defs>
-                <text x="200" y="85" text-anchor="middle" font-family="'Inter', sans-serif" font-weight="800"
-                      font-size="80" fill="url(#chrome)" filter="url(#glow)" letter-spacing="8">RRJCAR</text>
-            </svg>
-        </div>
-        <div class="hero-dollar" id="hero-dollar">$</div>
+<!-- ═══ SIDEBAR (settings + results + everything) ═══ -->
+<div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span class="sidebar-close" id="sidebar-close">&times;</span>
+        <span class="sidebar-title">Scanner</span>
     </div>
 
-    <!-- ═══ SETTINGS DRAWER (slides under $) ═══ -->
-    <div class="settings-drawer" id="settings-drawer">
+    <!-- Settings -->
+    <div class="sidebar-section">
         <div class="settings-grid">
             <div class="setting-group">
                 <label>Watchlist</label>
@@ -52,90 +42,78 @@
             <div class="setting-group">
                 <label>Strategy</label>
                 <select id="setting-strategy">
-                    <option value="v2">V2 (12-conf, calls)</option>
-                    <option value="v1">V1 (8-conf, classic)</option>
+                    <option value="v2">V2 (12-conf)</option>
+                    <option value="v1">V1 (8-conf)</option>
                 </select>
             </div>
             <div class="setting-group">
-                <label>Min Confirmations</label>
+                <label>Min Confs</label>
                 <input type="number" id="setting-min-confs" min="1" max="12" value="6">
             </div>
             <div class="setting-group">
-                <label>Regime Confirm Bars</label>
+                <label>Regime Bars</label>
                 <input type="number" id="setting-regime-confirm" min="1" max="10" value="2">
             </div>
             <div class="setting-group">
-                <label>Cooldown Bars</label>
+                <label>Cooldown</label>
                 <input type="number" id="setting-cooldown" min="0" max="20" value="3">
             </div>
             <div class="setting-group">
-                <label>Capital ($)</label>
+                <label>Capital</label>
                 <input type="number" id="setting-capital" min="1000" step="1000" value="100000">
             </div>
             <div class="setting-group">
-                <label>Max Workers</label>
+                <label>Workers</label>
                 <input type="number" id="setting-max-workers" min="1" max="20" value="6">
             </div>
         </div>
-        <div class="settings-actions">
-            <button class="btn-scan-go" id="btn-scan">Scan</button>
+        <button class="btn-scan-go" id="btn-scan">Scan</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="sidebar-progress hidden" id="sidebar-progress">
+        <div class="batch-bar"><div class="batch-fill" id="batch-fill"></div></div>
+        <div class="batch-text" id="batch-text">Scanning...</div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="sidebar-metrics hidden" id="sidebar-metrics">
+        <div class="sm-row">
+            <span class="sm-label">Scanned</span><span class="sm-val" id="metric-scanned">0</span>
+        </div>
+        <div class="sm-row">
+            <span class="sm-label">Bullish Entries</span><span class="sm-val bull" id="metric-entries">0</span>
+        </div>
+        <div class="sm-row">
+            <span class="sm-label">Time</span><span class="sm-val" id="scan-time">--</span>
         </div>
     </div>
 
-    <!-- ═══ SCANNER RESULTS (hidden until scan) ═══ -->
-    <div class="scanner-results hidden" id="scanner-results">
-        <!-- Progress bar for batch scanning -->
-        <div class="batch-progress hidden" id="batch-progress">
-            <div class="batch-bar"><div class="batch-fill" id="batch-fill"></div></div>
-            <div class="batch-text" id="batch-text">Scanning...</div>
-        </div>
+    <!-- Tabs -->
+    <div class="sidebar-tabs hidden" id="sidebar-tabs">
+        <button class="tab-btn active" data-tab="screener">Hits</button>
+        <button class="tab-btn" data-tab="drilldown">Chart</button>
+        <button class="tab-btn" data-tab="heatmap">Heatmap</button>
+    </div>
 
-        <!-- Summary Metrics -->
-        <div class="metrics-grid">
-            <div class="metric-card"><div class="label">Scanned</div><div class="value" id="metric-scanned">--</div></div>
-            <div class="metric-card"><div class="label">Bullish</div><div class="value bull" id="metric-bullish">--</div></div>
-            <div class="metric-card"><div class="label">Entries</div><div class="value bull" id="metric-entries">--</div></div>
-            <div class="metric-card"><div class="label">Scan Time</div><div class="value" id="scan-time">--</div></div>
-        </div>
+    <!-- Tab: Hits -->
+    <div class="tab-content active" id="tab-screener">
+        <div id="screener-content"></div>
+    </div>
 
-        <!-- Tabs -->
-        <div class="tab-bar">
-            <button class="tab-btn active" data-tab="screener">Hits</button>
-            <button class="tab-btn" data-tab="drilldown">Drill-Down</button>
-            <button class="tab-btn" data-tab="heatmap">Heatmap</button>
-            <button class="tab-btn" data-tab="distribution">Distribution</button>
-        </div>
+    <!-- Tab: Drill-Down -->
+    <div class="tab-content" id="tab-drilldown">
+        <div id="drilldown-content"></div>
+    </div>
 
-        <!-- Tab: Screener (bullish hits only) -->
-        <div class="tab-content active" id="tab-screener">
-            <div id="screener-content">
-                <div style="text-align:center; padding:2rem; color:var(--text-dim);">
-                    Scanning for bullish entries...
-                </div>
-            </div>
-        </div>
+    <!-- Tab: Heatmap -->
+    <div class="tab-content" id="tab-heatmap">
+        <div class="chart-container" id="heatmap-chart"></div>
+    </div>
 
-        <!-- Tab: Drill-Down -->
-        <div class="tab-content" id="tab-drilldown">
-            <div id="drilldown-content">
-                <div style="text-align:center; padding:2rem; color:var(--text-dim);">
-                    Click a ticker in Hits to view analysis.
-                </div>
-            </div>
-        </div>
-
-        <!-- Tab: Heatmap -->
-        <div class="tab-content" id="tab-heatmap">
-            <div class="chart-container" id="heatmap-chart"></div>
-        </div>
-
-        <!-- Tab: Distribution -->
-        <div class="tab-content" id="tab-distribution">
-            <div class="chart-container" id="signal-dist-chart"></div>
-        </div>
-
-        <!-- Back to home -->
-        <div class="back-home" id="back-home">&larr; New Scan</div>
+    <!-- Tab: Distribution (hidden, accessible from heatmap) -->
+    <div class="tab-content" id="tab-distribution">
+        <div class="chart-container" id="signal-dist-chart"></div>
     </div>
 </div>
 

@@ -1,11 +1,11 @@
 /**
- * app.js — Main application controller
- * Clean homepage -> $ dropdown -> scan -> bullish hits only
+ * app.js — Main controller
+ * Homepage: Logo + $ → clicking $ opens sidebar with scanner
  */
 
 const App = {
-    scanResults: [],    // Only bullish ENTER hits
-    allScanned: 0,      // Total tickers scanned
+    scanResults: [],
+    allScanned: 0,
     scanning: false,
 
     async init() {
@@ -14,31 +14,28 @@ const App = {
     },
 
     bindEvents() {
-        // $ toggle opens settings drawer
-        const dollar = document.getElementById('hero-dollar');
-        const drawer = document.getElementById('settings-drawer');
-        dollar.onclick = () => {
-            dollar.classList.toggle('open');
-            drawer.classList.toggle('open');
-        };
+        // $ opens sidebar
+        document.getElementById('home-dollar').onclick = () => this.openSidebar();
+        document.getElementById('sidebar-close').onclick = () => this.closeSidebar();
+        document.getElementById('sidebar-overlay').onclick = () => this.closeSidebar();
 
-        // Scan button
+        // Scan
         document.getElementById('btn-scan').onclick = () => this.runScan();
 
-        // Tab buttons
+        // Tabs
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => this.showTab(btn.dataset.tab);
         });
-
-        // Back to home
-        document.getElementById('back-home').onclick = () => this.goHome();
     },
 
-    goHome() {
-        document.getElementById('scanner-results').classList.add('hidden');
-        document.getElementById('hero-section').classList.remove('compact');
-        document.getElementById('settings-drawer').classList.remove('open');
-        document.getElementById('hero-dollar').classList.remove('open');
+    openSidebar() {
+        document.getElementById('sidebar').classList.add('open');
+        document.getElementById('sidebar-overlay').classList.remove('hidden');
+    },
+
+    closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebar-overlay').classList.add('hidden');
     },
 
     showTab(tabName) {
@@ -52,27 +49,22 @@ const App = {
         this.scanResults = [];
         this.allScanned = 0;
 
-        // Collapse hero, show results area
-        document.getElementById('hero-section').classList.add('compact');
-        document.getElementById('settings-drawer').classList.remove('open');
-        document.getElementById('hero-dollar').classList.remove('open');
-
-        const resultsArea = document.getElementById('scanner-results');
-        resultsArea.classList.remove('hidden');
-
-        const progress = document.getElementById('batch-progress');
+        const progress = document.getElementById('sidebar-progress');
         const progressFill = document.getElementById('batch-fill');
         const progressText = document.getElementById('batch-text');
+        const metrics = document.getElementById('sidebar-metrics');
+        const tabs = document.getElementById('sidebar-tabs');
+
         progress.classList.remove('hidden');
+        metrics.classList.remove('hidden');
+        tabs.classList.remove('hidden');
+        progressFill.style.width = '0%';
 
         document.getElementById('btn-scan').disabled = true;
-        this.showTab('screener');
-
-        // Reset metrics
-        this.setMetric('metric-scanned', '0');
-        this.setMetric('metric-bullish', '0', 'bull');
-        this.setMetric('metric-entries', '0', 'bull');
+        document.getElementById('metric-scanned').textContent = '0';
+        document.getElementById('metric-entries').textContent = '0';
         document.getElementById('scan-time').textContent = '--';
+        this.showTab('screener');
 
         try {
             await Settings.save();
@@ -85,10 +77,9 @@ const App = {
                 min_confs: params.min_confs,
                 regime_confirm: params.regime_confirm,
                 max_workers: params.max_workers,
-                bullish_only: false,  // we filter client-side for running list
+                bullish_only: false,
             };
 
-            // Use streaming endpoint
             const res = await fetch('/api/scan/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -115,65 +106,44 @@ const App = {
                             this.allScanned = msg.progress.done;
                             const r = msg.data;
 
-                            // Only keep bullish ENTER hits
-                            const sig = r.signal || '';
-                            if (sig === 'LONG -- ENTER') {
+                            // Only keep bullish ENTER
+                            if ((r.signal || '') === 'LONG -- ENTER') {
                                 this.scanResults.push(r);
                             }
 
-                            // Update progress
                             const pct = (msg.progress.done / msg.progress.total * 100).toFixed(0);
                             progressFill.style.width = `${pct}%`;
-                            progressText.textContent = `${msg.progress.done} / ${msg.progress.total} scanned | ${this.scanResults.length} bullish hits`;
-
-                            // Live update metrics
-                            this.setMetric('metric-scanned', msg.progress.done);
-                            this.setMetric('metric-bullish', this.scanResults.length, 'bull');
-                            this.setMetric('metric-entries', this.scanResults.length, 'bull');
-
-                            // Re-render hits table progressively
+                            progressText.textContent = `${msg.progress.done}/${msg.progress.total} | ${this.scanResults.length} hits`;
+                            document.getElementById('metric-scanned').textContent = msg.progress.done;
+                            document.getElementById('metric-entries').textContent = this.scanResults.length;
                             Screener.render(this.scanResults, document.getElementById('screener-content'));
 
                         } else if (msg.type === 'done') {
-                            const s = msg.summary;
-                            document.getElementById('scan-time').textContent = `${s.elapsed}s`;
-                            progressText.textContent = `Done! ${this.allScanned} scanned | ${this.scanResults.length} bullish entries found | ${s.elapsed}s`;
+                            document.getElementById('scan-time').textContent = `${msg.summary.elapsed}s`;
+                            progressText.textContent = `Done | ${this.allScanned} scanned | ${this.scanResults.length} entries | ${msg.summary.elapsed}s`;
                         }
                     } catch (_) {}
                 }
             }
 
-            // Final render
             Screener.render(this.scanResults, document.getElementById('screener-content'));
             if (this.scanResults.length) {
                 Charts.regimeHeatmap('heatmap-chart', this.scanResults);
-                Charts.signalDistribution('signal-dist-chart', this.scanResults);
             }
 
         } catch (err) {
-            console.error('Scan error:', err);
             document.getElementById('screener-content').innerHTML =
-                `<div style="color:var(--red); padding:1rem;">${err.message}</div>`;
+                `<div style="color:var(--red); padding:0.5rem;">${err.message}</div>`;
         } finally {
             document.getElementById('btn-scan').disabled = false;
             this.scanning = false;
         }
     },
 
-    setMetric(id, value, cls = '') {
-        const el = document.getElementById(id);
-        if (el) {
-            el.textContent = value;
-            el.className = 'value ' + cls;
-        }
-    },
-
     async drillDown(symbol) {
         this.showTab('drilldown');
-        const container = document.getElementById('drilldown-content');
-        await DrillDown.render(symbol, container);
+        await DrillDown.render(symbol, document.getElementById('drilldown-content'));
     },
 };
 
-// Boot
 document.addEventListener('DOMContentLoaded', () => App.init());
