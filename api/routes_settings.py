@@ -1,11 +1,56 @@
 """API routes for dashboard settings."""
 
+import os
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
 from settings_manager import load_settings, save_settings, DEFAULT_SETTINGS
 
 router = APIRouter()
+
+
+@router.get("/apis")
+async def api_status():
+    """Show which data APIs are configured and available."""
+    from data_loader import _tradier_available
+    return {
+        "tradier": {
+            "configured": _tradier_available(),
+            "type": "primary",
+            "limits": "Unlimited (sandbox) / 120 req/min (prod)",
+            "note": "OHLCV, options chains, account data",
+        },
+        "yahoo_finance": {
+            "configured": True,  # always available via yfinance
+            "type": "fallback",
+            "limits": "Soft rate limit (~2000 req/hr)",
+            "note": "OHLCV, crypto, fundamentals (via yfinance)",
+        },
+        "alpha_vantage": {
+            "configured": bool(os.environ.get("ALPHA_VANTAGE_API_KEY")),
+            "type": "fallback",
+            "limits": "25 calls/day (free), 75/min (premium)",
+            "note": "OHLCV, technicals, fundamentals. Free key: alphavantage.co/support/#api-key",
+        },
+        "fmp": {
+            "configured": bool(os.environ.get("FMP_API_KEY")),
+            "type": "fallback",
+            "limits": "250 calls/day (free)",
+            "note": "OHLCV, financials, SEC filings. Free key: financialmodelingprep.com",
+        },
+        "twelve_data": {
+            "configured": bool(os.environ.get("TWELVE_DATA_API_KEY")),
+            "type": "fallback",
+            "limits": "800 calls/day, 8/min (free)",
+            "note": "OHLCV, technicals, forex, crypto. Free key: twelvedata.com",
+        },
+        "nasdaq_feeds": {
+            "configured": True,  # always available
+            "type": "universe",
+            "limits": "Unlimited",
+            "note": "NYSE + NASDAQ ticker universe (~10K symbols, refreshed daily)",
+        },
+    }
 
 
 class SettingsUpdate(BaseModel):

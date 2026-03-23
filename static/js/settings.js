@@ -1,5 +1,6 @@
 /**
  * settings.js — Settings panel logic
+ * Uses /api/watchlists/all to include the 10K+ universe lists
  */
 
 const Settings = {
@@ -8,7 +9,7 @@ const Settings = {
     async init() {
         try {
             const [wl, settings] = await Promise.all([
-                API.getWatchlists(),
+                API.getAllWatchlists(),   // includes ALL TICKERS, All Stocks, All ETFs
                 API.getSettings(),
             ]);
             this.watchlists = wl;
@@ -19,20 +20,48 @@ const Settings = {
     },
 
     populate(settings) {
-        // Watchlist dropdown
         const wlSelect = document.getElementById('setting-watchlist');
         if (wlSelect) {
             wlSelect.innerHTML = '';
+
+            // Sort: curated first, then big universes
+            const curated = [];
+            const universes = [];
             Object.keys(this.watchlists).forEach(name => {
+                const count = this.watchlists[name].length;
+                if (count > 500) {
+                    universes.push(name);
+                } else {
+                    curated.push(name);
+                }
+            });
+
+            // Add curated
+            curated.forEach(name => {
                 const opt = document.createElement('option');
                 opt.value = name;
                 opt.textContent = `${name} (${this.watchlists[name].length})`;
                 if (name === settings.watchlist) opt.selected = true;
                 wlSelect.appendChild(opt);
             });
+
+            // Separator
+            if (universes.length) {
+                const sep = document.createElement('option');
+                sep.disabled = true;
+                sep.textContent = '────── Full Universe ──────';
+                wlSelect.appendChild(sep);
+
+                universes.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = `${name} (${this.watchlists[name].length})`;
+                    if (name === settings.watchlist) opt.selected = true;
+                    wlSelect.appendChild(opt);
+                });
+            }
         }
 
-        // Other fields
         this.setVal('setting-custom-tickers', settings.custom_tickers || '');
         this.setVal('setting-strategy', settings.strategy || 'v2');
         this.setVal('setting-min-confs', settings.min_confs || 6);

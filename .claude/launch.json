@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "regime-terminal",
+      "runtimeExecutable": "/Users/alex/Downloads/hmm-regime-terminal/.venv/bin/uvicorn",
+      "runtimeArgs": ["app:app", "--reload", "--port", "8000"],
+      "port": 8000,
+      "cwd": "/Users/alex/Downloads/hmm-regime-terminal"
+    }
+  ]
+}

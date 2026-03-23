@@ -1,51 +1,44 @@
 /**
  * app.js — Main application controller
+ * Clean homepage -> $ dropdown -> scan -> bullish hits only
  */
 
 const App = {
-    scanResults: [],
+    scanResults: [],    // Only bullish ENTER hits
+    allScanned: 0,      // Total tickers scanned
     scanning: false,
 
     async init() {
         await Settings.init();
         this.bindEvents();
-        this.showTab('screener');
-
-        // Try loading cached results
-        try {
-            const cached = await API.getCached();
-            if (cached.results && cached.results.length) {
-                this.scanResults = cached.results;
-                this.renderResults(cached);
-            }
-        } catch (_) {}
     },
 
     bindEvents() {
-        // Settings toggle
-        const toggle = document.getElementById('settings-toggle');
-        const body = document.getElementById('settings-body');
-        if (toggle && body) {
-            toggle.onclick = () => body.classList.toggle('open');
-        }
+        // $ toggle opens settings drawer
+        const dollar = document.getElementById('hero-dollar');
+        const drawer = document.getElementById('settings-drawer');
+        dollar.onclick = () => {
+            dollar.classList.toggle('open');
+            drawer.classList.toggle('open');
+        };
 
         // Scan button
         document.getElementById('btn-scan').onclick = () => this.runScan();
-
-        // Filter & sort
-        document.getElementById('filter-signal').onchange = (e) => {
-            Screener.currentFilter = e.target.value;
-            Screener.render(this.scanResults, document.getElementById('screener-content'));
-        };
-        document.getElementById('sort-by').onchange = (e) => {
-            Screener.currentSort = e.target.value;
-            Screener.render(this.scanResults, document.getElementById('screener-content'));
-        };
 
         // Tab buttons
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => this.showTab(btn.dataset.tab);
         });
+
+        // Back to home
+        document.getElementById('back-home').onclick = () => this.goHome();
+    },
+
+    goHome() {
+        document.getElementById('scanner-results').classList.add('hidden');
+        document.getElementById('hero-section').classList.remove('compact');
+        document.getElementById('settings-drawer').classList.remove('open');
+        document.getElementById('hero-dollar').classList.remove('open');
     },
 
     showTab(tabName) {
@@ -57,12 +50,29 @@ const App = {
         if (this.scanning) return;
         this.scanning = true;
         this.scanResults = [];
+        this.allScanned = 0;
 
-        const loadingText = document.getElementById('loading-text');
-        const overlay = document.getElementById('loading-overlay');
-        overlay.classList.remove('hidden');
-        loadingText.textContent = 'Scanning...';
+        // Collapse hero, show results area
+        document.getElementById('hero-section').classList.add('compact');
+        document.getElementById('settings-drawer').classList.remove('open');
+        document.getElementById('hero-dollar').classList.remove('open');
+
+        const resultsArea = document.getElementById('scanner-results');
+        resultsArea.classList.remove('hidden');
+
+        const progress = document.getElementById('batch-progress');
+        const progressFill = document.getElementById('batch-fill');
+        const progressText = document.getElementById('batch-text');
+        progress.classList.remove('hidden');
+
         document.getElementById('btn-scan').disabled = true;
+        this.showTab('screener');
+
+        // Reset metrics
+        this.setMetric('metric-scanned', '0');
+        this.setMetric('metric-bullish', '0', 'bull');
+        this.setMetric('metric-entries', '0', 'bull');
+        document.getElementById('scan-time').textContent = '--';
 
         try {
             await Settings.save();
@@ -75,10 +85,10 @@ const App = {
                 min_confs: params.min_confs,
                 regime_confirm: params.regime_confirm,
                 max_workers: params.max_workers,
-                bullish_only: false,
+                bullish_only: false,  // we filter client-side for running list
             };
 
-            // Use streaming endpoint — results appear one by one
+            // Use streaming endpoint
             const res = await fetch('/api/scan/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -95,23 +105,49 @@ const App = {
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
-                buffer = lines.pop(); // keep incomplete line
+                buffer = lines.pop();
 
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     try {
                         const msg = JSON.parse(line.slice(6));
                         if (msg.type === 'result') {
-                            this.scanResults.push(msg.data);
-                            // Live update
-                            loadingText.textContent = `Scanning... ${msg.progress.done}/${msg.progress.total}`;
+                            this.allScanned = msg.progress.done;
+                            const r = msg.data;
+
+                            // Only keep bullish ENTER hits
+                            const sig = r.signal || '';
+                            if (sig === 'LONG -- ENTER') {
+                                this.scanResults.push(r);
+                            }
+
+                            // Update progress
+                            const pct = (msg.progress.done / msg.progress.total * 100).toFixed(0);
+                            progressFill.style.width = `${pct}%`;
+                            progressText.textContent = `${msg.progress.done} / ${msg.progress.total} scanned | ${this.scanResults.length} bullish hits`;
+
+                            // Live update metrics
                             this.setMetric('metric-scanned', msg.progress.done);
+                            this.setMetric('metric-bullish', this.scanResults.length, 'bull');
+                            this.setMetric('metric-entries', this.scanResults.length, 'bull');
+
+                            // Re-render hits table progressively
                             Screener.render(this.scanResults, document.getElementById('screener-content'));
+
                         } else if (msg.type === 'done') {
-                            this.renderResults({ summary: msg.summary });
+                            const s = msg.summary;
+                            document.getElementById('scan-time').textContent = `${s.elapsed}s`;
+                            progressText.textContent = `Done! ${this.allScanned} scanned | ${this.scanResults.length} bullish entries found | ${s.elapsed}s`;
                         }
                     } catch (_) {}
                 }
+            }
+
+            // Final render
+            Screener.render(this.scanResults, document.getElementById('screener-content'));
+            if (this.scanResults.length) {
+                Charts.regimeHeatmap('heatmap-chart', this.scanResults);
+                Charts.signalDistribution('signal-dist-chart', this.scanResults);
             }
 
         } catch (err) {
@@ -119,34 +155,8 @@ const App = {
             document.getElementById('screener-content').innerHTML =
                 `<div style="color:var(--red); padding:1rem;">${err.message}</div>`;
         } finally {
-            overlay.classList.add('hidden');
             document.getElementById('btn-scan').disabled = false;
             this.scanning = false;
-        }
-    },
-
-    renderResults(result) {
-        const summary = result.summary || {};
-
-        // Update metrics
-        this.setMetric('metric-scanned', summary.total || this.scanResults.length);
-        this.setMetric('metric-bullish', summary.bullish || 0, 'bull');
-        this.setMetric('metric-bearish', summary.bearish || 0, 'bear');
-        this.setMetric('metric-neutral', summary.neutral || 0, 'neutral');
-        this.setMetric('metric-entries', summary.entries || 0, 'bull');
-        this.setMetric('metric-exits', summary.exits || 0, 'bear');
-
-        if (summary.elapsed) {
-            document.getElementById('scan-time').textContent = `${summary.elapsed}s`;
-        }
-
-        // Render screener
-        Screener.render(this.scanResults, document.getElementById('screener-content'));
-
-        // Render charts
-        if (this.scanResults.length) {
-            Charts.regimeHeatmap('heatmap-chart', this.scanResults);
-            Charts.signalDistribution('signal-dist-chart', this.scanResults);
         }
     },
 

@@ -66,6 +66,46 @@ WATCHLISTS = {
         "XLK", "XLF", "XLE", "XLV", "XLI", "XLC", "XLY", "XLP", "XLU", "XLB",
         "SMH", "SOXX", "IGV", "ARKK", "XBI", "GDX", "GLD", "TLT",
     ],
+    "Biotech / Healthcare": [
+        "MRNA", "BNTX", "REGN", "VRTX", "AMGN", "GILD", "BIIB", "ISRG", "DXCM",
+        "ILMN", "TMO", "ABT", "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "BMY",
+    ],
+    "Energy / Oil": [
+        "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "VLO", "PSX", "DVN", "OXY",
+        "HES", "HAL", "FANG", "BKR", "MRO", "APA",
+    ],
+    "Financials / Banks": [
+        "JPM", "BAC", "WFC", "GS", "MS", "C", "SCHW", "BLK", "AXP", "USB",
+        "PNC", "TFC", "COF", "ICE", "CME", "MCO", "SPGI",
+    ],
+    "Consumer / Retail": [
+        "AMZN", "WMT", "COST", "TGT", "HD", "LOW", "NKE", "SBUX", "MCD",
+        "DIS", "NFLX", "ABNB", "BKNG", "UBER", "LYFT", "DASH", "ETSY",
+    ],
+    "Industrial / Defense": [
+        "BA", "LMT", "RTX", "NOC", "GD", "GE", "HON", "CAT", "DE", "UPS",
+        "FDX", "UNP", "CSX", "NSC", "WM", "RSG",
+    ],
+    "S&P 100": [
+        "AAPL", "ABBV", "ABT", "ACN", "ADBE", "AIG", "AMGN", "AMT", "AMZN", "AVGO",
+        "AXP", "BA", "BAC", "BK", "BKNG", "BLK", "BMY", "BRK-B", "C", "CAT",
+        "CHTR", "CL", "CMCSA", "COF", "COP", "COST", "CRM", "CSCO", "CVS", "CVX",
+        "DE", "DHR", "DIS", "DOW", "DUK", "EMR", "EXC", "F", "FDX", "GD",
+        "GE", "GILD", "GM", "GOOG", "GOOGL", "GS", "HD", "HON", "IBM", "INTC",
+        "INTU", "JNJ", "JPM", "KHC", "KO", "LIN", "LLY", "LMT", "LOW", "MA",
+        "MCD", "MDLZ", "MDT", "MET", "META", "MMM", "MO", "MRK", "MS", "MSFT",
+        "NEE", "NFLX", "NKE", "NVDA", "ORCL", "PEP", "PFE", "PG", "PM", "PYPL",
+        "QCOM", "RTX", "SBUX", "SCHW", "SO", "SPG", "T", "TGT", "TMO", "TMUS",
+        "TSLA", "TXN", "UNH", "UNP", "UPS", "USB", "V", "VZ", "WBA", "WFC",
+        "WMT", "XOM",
+    ],
+    "Russell 2000 Highlights": [
+        "SMCI", "AEHR", "CRNX", "IREN", "CLSK", "BTBT", "CIFR", "HIVE", "BITF",
+        "GENI", "ASAN", "DKNG", "PENN", "MGNI", "TTD", "PUBM", "CRSP", "BEAM",
+        "NTLA", "EDIT", "RXRX", "DOCS", "GDRX", "TDOC", "HIMS", "ACHR", "JOBY",
+        "LILM", "EVTL", "RKLB", "ASTR", "MNTS", "RDW", "ASTS", "BKSY", "PL",
+        "LUNR", "SPCE", "AFRM", "UPST", "SOFI", "LC", "NU",
+    ],
 }
 
 

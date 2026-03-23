@@ -287,7 +287,140 @@ def _fetch_yahoo(
     return pd.DataFrame()
 
 
-# ─── Main fetch_data (Tradier primary, Yahoo fallback) ───────
+# ─── Alpha Vantage (free: 25 calls/day) ──────────────────────
+
+def _fetch_alpha_vantage(symbol: str, start: str, end: str) -> pd.DataFrame:
+    """Fetch daily OHLCV from Alpha Vantage (free tier, 25 req/day)."""
+    api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
+    if not api_key:
+        return pd.DataFrame()
+
+    try:
+        r = requests.get(
+            "https://www.alphavantage.co/query",
+            params={
+                "function": "TIME_SERIES_DAILY",
+                "symbol": symbol,
+                "outputsize": "full",
+                "apikey": api_key,
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        ts = data.get("Time Series (Daily)", {})
+        if not ts:
+            return pd.DataFrame()
+
+        rows = []
+        for date_str, vals in ts.items():
+            rows.append({
+                "Date": date_str,
+                "Open": float(vals["1. open"]),
+                "High": float(vals["2. high"]),
+                "Low": float(vals["3. low"]),
+                "Close": float(vals["4. close"]),
+                "Volume": int(vals["5. volume"]),
+            })
+
+        df = pd.DataFrame(rows)
+        df["Date"] = pd.to_datetime(df["Date"])
+        df.set_index("Date", inplace=True)
+        df.sort_index(inplace=True)
+
+        # Filter to date range
+        df = df.loc[start:end]
+        return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+
+    except Exception as e:
+        print(f"[DataLoader] Alpha Vantage failed for {symbol}: {e}")
+        return pd.DataFrame()
+
+
+# ─── Financial Modeling Prep (free: 250 calls/day) ───────────
+
+def _fetch_fmp(symbol: str, start: str, end: str) -> pd.DataFrame:
+    """Fetch daily OHLCV from Financial Modeling Prep (free tier, 250 req/day)."""
+    api_key = os.environ.get("FMP_API_KEY", "")
+    if not api_key:
+        return pd.DataFrame()
+
+    try:
+        r = requests.get(
+            f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}",
+            params={"from": start, "to": end, "apikey": api_key},
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        historical = data.get("historical", [])
+        if not historical:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(historical)
+        col_map = {"date": "Date", "open": "Open", "high": "High",
+                    "low": "Low", "close": "Close", "volume": "Volume"}
+        df = df.rename(columns=col_map)
+        df["Date"] = pd.to_datetime(df["Date"])
+        df.set_index("Date", inplace=True)
+        df.sort_index(inplace=True)
+
+        return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+
+    except Exception as e:
+        print(f"[DataLoader] FMP failed for {symbol}: {e}")
+        return pd.DataFrame()
+
+
+# ─── Twelve Data (free: 800 calls/day, 8 per min) ───────────
+
+def _fetch_twelve_data(symbol: str, start: str, end: str) -> pd.DataFrame:
+    """Fetch daily OHLCV from Twelve Data (free tier, 800 req/day)."""
+    api_key = os.environ.get("TWELVE_DATA_API_KEY", "")
+    if not api_key:
+        return pd.DataFrame()
+
+    try:
+        r = requests.get(
+            "https://api.twelvedata.com/time_series",
+            params={
+                "symbol": symbol,
+                "interval": "1day",
+                "start_date": start,
+                "end_date": end,
+                "outputsize": 5000,
+                "apikey": api_key,
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        values = data.get("values", [])
+        if not values:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(values)
+        col_map = {"datetime": "Date", "open": "Open", "high": "High",
+                    "low": "Low", "close": "Close", "volume": "Volume"}
+        df = df.rename(columns=col_map)
+        df["Date"] = pd.to_datetime(df["Date"])
+        df.set_index("Date", inplace=True)
+        df.sort_index(inplace=True)
+
+        for col in ["Open", "High", "Low", "Close", "Volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+
+    except Exception as e:
+        print(f"[DataLoader] Twelve Data failed for {symbol}: {e}")
+        return pd.DataFrame()
+
+
+# ─── Main fetch_data (Tradier > Yahoo > Alpha Vantage > FMP > Twelve Data) ───
 
 def fetch_data(
     symbol: str,
@@ -297,9 +430,12 @@ def fetch_data(
     end_date: str = None,
 ) -> pd.DataFrame:
     """
-    Fetch OHLCV data. Uses Tradier API as primary source for stocks/ETFs
-    (faster, no rate limits). Falls back to Yahoo Finance for crypto or
-    if Tradier is unavailable.
+    Fetch OHLCV data with multi-source fallback chain:
+      1. Tradier API (primary, unlimited for stocks/ETFs)
+      2. Yahoo Finance (free, reliable, occasionally rate-limited)
+      3. Alpha Vantage (free tier: 25 calls/day)
+      4. Financial Modeling Prep (free tier: 250 calls/day)
+      5. Twelve Data (free tier: 800 calls/day)
     """
     ticker = resolve_ticker(symbol)
 
@@ -323,7 +459,7 @@ def fetch_data(
     use_tradier = _tradier_available() and not _is_crypto(ticker) and interval in ("1d", "daily")
     df = pd.DataFrame()
 
-    # ── Try Tradier first (stocks/ETFs, daily only) ──
+    # ── 1. Tradier (stocks/ETFs, daily only, unlimited) ──
     if use_tradier:
         df = _fetch_tradier(ticker, start, end, interval="daily")
         if not df.empty:
@@ -332,22 +468,45 @@ def fetch_data(
             if not df.empty:
                 return df
 
-    # ── Fallback to Yahoo Finance ──
+    # ── 2. Yahoo Finance (free, reliable) ──
     df = _fetch_yahoo(ticker, start, end, interval)
+    if not df.empty:
+        df.dropna(inplace=True)
+        df = df[df["Volume"] > 0]
+        if not df.empty:
+            return df
 
-    if df.empty:
-        raise ValueError(
-            f"No data returned for {ticker} from Tradier or Yahoo. "
-            f"Try a different symbol or switch to daily interval."
-        )
+    # ── 3. Alpha Vantage (25 calls/day free) ──
+    if interval in ("1d", "daily") and not _is_crypto(ticker):
+        df = _fetch_alpha_vantage(ticker, start, end)
+        if not df.empty:
+            df.dropna(inplace=True)
+            df = df[df["Volume"] > 0]
+            if not df.empty:
+                return df
 
-    df.dropna(inplace=True)
-    df = df[df["Volume"] > 0]
+    # ── 4. Financial Modeling Prep (250 calls/day free) ──
+    if interval in ("1d", "daily") and not _is_crypto(ticker):
+        df = _fetch_fmp(ticker, start, end)
+        if not df.empty:
+            df.dropna(inplace=True)
+            df = df[df["Volume"] > 0]
+            if not df.empty:
+                return df
 
-    if df.empty:
-        raise ValueError(f"Data for {ticker} was all NaN/zero-volume after cleaning.")
+    # ── 5. Twelve Data (800 calls/day free) ──
+    if interval in ("1d", "daily") and not _is_crypto(ticker):
+        df = _fetch_twelve_data(ticker, start, end)
+        if not df.empty:
+            df.dropna(inplace=True)
+            df = df[df["Volume"] > 0]
+            if not df.empty:
+                return df
 
-    return df
+    raise ValueError(
+        f"No data returned for {ticker} from any source (Tradier, Yahoo, "
+        f"Alpha Vantage, FMP, Twelve Data). Check symbol or try daily interval."
+    )
 
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
