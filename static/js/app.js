@@ -23,6 +23,7 @@ const App = {
         document.getElementById('sidebar-overlay').onclick = () => this.closeSidebar();
         document.getElementById('btn-scan').onclick = () => this.runScan();
         document.getElementById('btn-save-config').onclick = () => this.saveConfig();
+        document.getElementById('btn-connect-tradier').onclick = () => this.connectTradier();
 
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => this.showTab(btn.dataset.tab);
@@ -53,7 +54,7 @@ const App = {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tabName}`));
     },
 
-    // ── Config: email, schedule, API keys ──
+    // ── Config: Tradier, email, schedule, API keys ──
     loadConfig() {
         try {
             const cfg = JSON.parse(localStorage.getItem('rrjcar_config') || '{}');
@@ -64,6 +65,69 @@ const App = {
             if (cfg.fmp_key) document.getElementById('cfg-fmp-key').value = cfg.fmp_key;
             if (cfg.twelve_data_key) document.getElementById('cfg-td-key').value = cfg.twelve_data_key;
         } catch (_) {}
+
+        // Load Tradier status from backend
+        this.loadTradierStatus();
+    },
+
+    async loadTradierStatus() {
+        const statusEl = document.getElementById('tradier-status');
+        try {
+            const res = await API.brokerStatus();
+            if (res.configured && res.account_info && !res.account_info.error) {
+                const info = res.account_info;
+                const mode = info.sandbox ? 'SANDBOX' : 'PRODUCTION';
+                statusEl.innerHTML = `<span style="color:var(--green);">Connected</span> | ${mode} | Acct: ${info.account_id} | Equity: $${(info.total_equity || 0).toLocaleString()}`;
+                // Pre-fill fields
+                document.getElementById('cfg-tradier-account').value = info.account_id || '';
+                document.getElementById('cfg-tradier-mode').value = info.sandbox ? 'sandbox' : 'production';
+                document.getElementById('cfg-tradier-token').placeholder = 'Token saved (enter new to change)';
+            } else if (res.configured) {
+                statusEl.innerHTML = `<span style="color:#eab308;">Configured but connection failed</span> — check token`;
+            } else {
+                statusEl.innerHTML = `<span style="color:var(--text-dim);">Not connected</span> — enter credentials below`;
+            }
+        } catch (_) {
+            statusEl.textContent = 'Could not check status';
+        }
+    },
+
+    async connectTradier() {
+        const token = document.getElementById('cfg-tradier-token').value.trim();
+        const account = document.getElementById('cfg-tradier-account').value.trim();
+        const mode = document.getElementById('cfg-tradier-mode').value;
+
+        if (!token || !account) {
+            document.getElementById('tradier-status').innerHTML = '<span style="color:var(--red);">Enter both token and account ID</span>';
+            return;
+        }
+
+        const btn = document.getElementById('btn-connect-tradier');
+        btn.disabled = true;
+        btn.textContent = 'Connecting...';
+
+        try {
+            const res = await API.brokerConnect({
+                access_token: token,
+                account_id: account,
+                sandbox: mode === 'sandbox',
+            });
+
+            if (res.success) {
+                btn.textContent = 'Connected';
+                btn.style.background = '#22c55e';
+                this.loadTradierStatus();
+            } else {
+                document.getElementById('tradier-status').innerHTML = `<span style="color:var(--red);">Failed: ${res.error || 'Unknown error'}</span>`;
+                btn.textContent = 'Connect Tradier';
+            }
+        } catch (err) {
+            document.getElementById('tradier-status').innerHTML = `<span style="color:var(--red);">Error: ${err.message}</span>`;
+            btn.textContent = 'Connect Tradier';
+        } finally {
+            btn.disabled = false;
+            setTimeout(() => { btn.textContent = 'Connect Tradier'; btn.style.background = ''; }, 2000);
+        }
     },
 
     async saveConfig() {

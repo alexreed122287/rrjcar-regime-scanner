@@ -75,9 +75,11 @@ const DrillDown = {
                 <!-- Backtest trade history -->
                 <div id="dd-backtest-area"></div>
 
-                <div style="margin-top:0.5rem;">
-                    <button class="btn btn-sm" onclick="DrillDown.loadOptions('${data.symbol}')">Options Picks</button>
+                <!-- Position Sizing + Optimal Contract (auto-loaded) -->
+                <div id="dd-position-area" style="margin:0.5rem 0;">
+                    <div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">Loading optimal contracts...</div>
                 </div>
+
                 <div id="dd-options-area"></div>
             `;
 
@@ -89,8 +91,9 @@ const DrillDown = {
                 Charts.priceWithRegimes('dd-price-chart', data.chart_data, `${data.symbol} Regime Analysis`);
             }
 
-            // Auto-load backtest
+            // Auto-load backtest + options
             this.loadBacktest(data.symbol);
+            this.loadPositionSizing(data.symbol);
 
         } catch (err) {
             container.innerHTML = `<div style="color:var(--red); padding:1rem;">Error: ${err.message}</div>`;
@@ -297,6 +300,66 @@ const DrillDown = {
 
         html += '</tbody></table>';
         return html;
+    },
+
+    async loadPositionSizing(symbol) {
+        const area = document.getElementById('dd-position-area');
+        try {
+            const opts = await API.getOptions(symbol, 14, 60, 3);
+
+            if (opts.error || !opts.recommendations || !opts.recommendations.length) {
+                area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">No options data available</div>`;
+                return;
+            }
+
+            const ps = opts.position_sizing || {};
+            const top = opts.recommendations[0];
+
+            // Position sizing summary
+            let html = `
+                <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.3rem;">Position Sizing (${ps.risk_pct || 2}% risk)</div>
+                <div class="bt-summary" style="grid-template-columns: repeat(3,1fr);">
+                    <div class="bt-stat"><div class="bt-label">Equity Shares</div><div class="bt-val">${ps.shares_equity || 0}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Share Cost</div><div class="bt-val">$${(ps.shares_cost || 0).toLocaleString()}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Risk Budget</div><div class="bt-val">$${(ps.risk_amount || 0).toLocaleString()}</div></div>
+                </div>
+
+                <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin:0.4rem 0 0.3rem;">Optimal Long Call</div>
+            `;
+
+            // Top contract card
+            opts.recommendations.forEach((r, i) => {
+                const isBest = i === 0;
+                const border = isBest ? 'border-left:3px solid var(--green);' : '';
+                const label = isBest ? '<span style="color:var(--green); font-size:0.55rem; font-weight:600;">BEST</span> ' : '';
+                html += `
+                <div style="padding:0.4rem 0.5rem; margin-bottom:0.3rem; ${border} background:rgba(255,255,255,0.02); border-radius:3px;">
+                    <div style="display:flex; flex-wrap:wrap; gap:0.3rem 0.8rem; align-items:center; font-size:0.75rem;">
+                        ${label}
+                        <span style="color:var(--chrome); font-family:var(--mono); font-weight:600;">$${(r.strike || 0)} C</span>
+                        <span style="color:var(--text-dim);">${r.dte}d</span>
+                        <span style="color:var(--text-dim);">$${(r.mid || 0).toFixed(2)} mid</span>
+                        <span style="color:var(--green);">d=${(r.delta || 0).toFixed(2)}</span>
+                        <span style="color:var(--text-dim);">IV ${(r.iv_pct || 0).toFixed(0)}%</span>
+                        <span style="color:var(--text-dim);">Vol ${r.volume || 0}</span>
+                        <span style="color:var(--text-dim);">OI ${r.openInterest || 0}</span>
+                    </div>
+                    <div style="font-size:0.65rem; color:var(--chrome); margin-top:0.2rem; font-family:var(--mono);">
+                        <span style="color:var(--green); font-weight:600;">${r.contracts || 0} contracts</span>
+                        &nbsp;= $${(r.total_cost || 0).toLocaleString()} (${(r.pct_of_capital || 0).toFixed(1)}% of capital)
+                        &nbsp;| Score: ${(r.score || 0).toFixed(0)}
+                    </div>
+                </div>`;
+            });
+
+            area.innerHTML = html;
+
+            // Also populate the options area below
+            document.getElementById('dd-options-area').innerHTML = '';
+
+        } catch (err) {
+            area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem;">Options: ${err.message}</div>`;
+        }
     },
 
     async loadOptions(symbol) {

@@ -118,8 +118,34 @@
         <div class="chart-container" id="signal-dist-chart"></div>
     </div>
 
-    <!-- Tab: Config (email, schedule, API keys) -->
+    <!-- Tab: Config (Tradier, email, schedule, API keys) -->
     <div class="tab-content" id="tab-config">
+
+        <div class="config-section">
+            <div class="section-toggle open">Tradier Brokerage (Primary)</div>
+            <div class="section-body">
+                <div id="tradier-status" style="font-size:0.65rem; font-family:var(--mono); margin-bottom:0.4rem; color:var(--text-dim);">Checking...</div>
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label>Access Token</label>
+                        <input type="password" id="cfg-tradier-token" placeholder="Your Tradier API token">
+                    </div>
+                    <div class="setting-group">
+                        <label>Account ID</label>
+                        <input type="text" id="cfg-tradier-account" placeholder="e.g. VA12345678">
+                    </div>
+                </div>
+                <div class="setting-group" style="margin-top:0.3rem">
+                    <label>Mode</label>
+                    <select id="cfg-tradier-mode">
+                        <option value="sandbox">Sandbox (paper trading)</option>
+                        <option value="production">Production (real money)</option>
+                    </select>
+                </div>
+                <button class="btn-scan-go" id="btn-connect-tradier" style="margin-top:0.5rem; font-size:0.7rem; padding:0.4rem 0;">Connect Tradier</button>
+            </div>
+        </div>
+
         <div class="config-section">
             <div class="section-toggle open">Notifications</div>
             <div class="section-body">
@@ -152,7 +178,7 @@
         </div>
 
         <div class="config-section">
-            <div class="section-toggle">API Keys (Free Tiers)</div>
+            <div class="section-toggle">Fallback API Keys (Free Tiers)</div>
             <div class="section-body collapsed">
                 <div class="setting-group" style="margin-bottom:0.4rem">
                     <label>Alpha Vantage (25/day)</label>
