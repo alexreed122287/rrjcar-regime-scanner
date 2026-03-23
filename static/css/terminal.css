@@ -328,6 +328,23 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { color: var(--text-muted); font-size: 0.8rem; }
 
+/* Config sections */
+.config-section { margin-bottom: 0.6rem; }
+.section-toggle {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--chrome);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    padding: 0.3rem 0;
+    user-select: none;
+}
+.section-toggle::before { content: '+ '; color: #555; }
+.section-toggle.open::before { content: '- '; color: var(--chrome); }
+.section-body { transition: max-height 0.3s; overflow: hidden; }
+.section-body.collapsed { max-height: 0 !important; padding: 0; }
+
 .hidden { display: none !important; }
 
 /* Mobile */

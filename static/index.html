@@ -90,10 +90,11 @@
     </div>
 
     <!-- Tabs -->
-    <div class="sidebar-tabs hidden" id="sidebar-tabs">
+    <div class="sidebar-tabs" id="sidebar-tabs">
         <button class="tab-btn active" data-tab="screener">Hits</button>
         <button class="tab-btn" data-tab="drilldown">Chart</button>
         <button class="tab-btn" data-tab="heatmap">Heatmap</button>
+        <button class="tab-btn" data-tab="config">Config</button>
     </div>
 
     <!-- Tab: Hits -->
@@ -111,9 +112,63 @@
         <div class="chart-container" id="heatmap-chart"></div>
     </div>
 
-    <!-- Tab: Distribution (hidden, accessible from heatmap) -->
+    <!-- Tab: Distribution -->
     <div class="tab-content" id="tab-distribution">
         <div class="chart-container" id="signal-dist-chart"></div>
+    </div>
+
+    <!-- Tab: Config (email, schedule, API keys) -->
+    <div class="tab-content" id="tab-config">
+        <div class="config-section">
+            <div class="section-toggle open">Notifications</div>
+            <div class="section-body">
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Alert Email</label>
+                    <input type="email" id="cfg-email" placeholder="your@email.com">
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="section-toggle open">Daily Auto-Scan</div>
+            <div class="section-body">
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label>Scan Time (CST)</label>
+                        <input type="time" id="cfg-scan-time" value="12:30">
+                    </div>
+                    <div class="setting-group">
+                        <label>Watchlist</label>
+                        <select id="cfg-scan-watchlist">
+                            <option value="S&P 100">S&P 100</option>
+                            <option value="Mag 7">Mag 7</option>
+                            <option value="Semiconductors">Semiconductors</option>
+                            <option value="ALL TICKERS">ALL TICKERS</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="section-toggle">API Keys (Free Tiers)</div>
+            <div class="section-body collapsed">
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Alpha Vantage (25/day)</label>
+                    <input type="text" id="cfg-av-key" placeholder="Get free key: alphavantage.co">
+                </div>
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Financial Modeling Prep (250/day)</label>
+                    <input type="text" id="cfg-fmp-key" placeholder="Get free key: financialmodelingprep.com">
+                </div>
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Twelve Data (800/day)</label>
+                    <input type="text" id="cfg-td-key" placeholder="Get free key: twelvedata.com">
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-scan-go" id="btn-save-config" style="margin-top:0.6rem">Save</button>
     </div>
 </div>
 

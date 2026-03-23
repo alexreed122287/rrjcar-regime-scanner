@@ -1,7 +1,10 @@
 /**
  * app.js — Main controller
  * Homepage: Logo + $ → clicking $ opens sidebar with scanner
+ * Includes ENTER + CONFIRMING hits (bullish signals)
  */
+
+const BULLISH_SIGNALS = ['LONG -- ENTER', 'LONG -- CONFIRMING'];
 
 const App = {
     scanResults: [],
@@ -11,20 +14,27 @@ const App = {
     async init() {
         await Settings.init();
         this.bindEvents();
+        this.loadConfig();
     },
 
     bindEvents() {
-        // $ opens sidebar
         document.getElementById('home-dollar').onclick = () => this.openSidebar();
         document.getElementById('sidebar-close').onclick = () => this.closeSidebar();
         document.getElementById('sidebar-overlay').onclick = () => this.closeSidebar();
-
-        // Scan
         document.getElementById('btn-scan').onclick = () => this.runScan();
+        document.getElementById('btn-save-config').onclick = () => this.saveConfig();
 
-        // Tabs
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => this.showTab(btn.dataset.tab);
+        });
+
+        // Section toggles
+        document.querySelectorAll('.section-toggle').forEach(t => {
+            t.onclick = () => {
+                const body = t.nextElementSibling;
+                body.classList.toggle('collapsed');
+                t.classList.toggle('open');
+            };
         });
     },
 
@@ -43,6 +53,51 @@ const App = {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tabName}`));
     },
 
+    // ── Config: email, schedule, API keys ──
+    loadConfig() {
+        try {
+            const cfg = JSON.parse(localStorage.getItem('rrjcar_config') || '{}');
+            if (cfg.alert_email) document.getElementById('cfg-email').value = cfg.alert_email;
+            if (cfg.scan_time) document.getElementById('cfg-scan-time').value = cfg.scan_time;
+            if (cfg.scan_watchlist) document.getElementById('cfg-scan-watchlist').value = cfg.scan_watchlist;
+            if (cfg.alpha_vantage_key) document.getElementById('cfg-av-key').value = cfg.alpha_vantage_key;
+            if (cfg.fmp_key) document.getElementById('cfg-fmp-key').value = cfg.fmp_key;
+            if (cfg.twelve_data_key) document.getElementById('cfg-td-key').value = cfg.twelve_data_key;
+        } catch (_) {}
+    },
+
+    async saveConfig() {
+        const cfg = {
+            alert_email: document.getElementById('cfg-email').value.trim(),
+            scan_time: document.getElementById('cfg-scan-time').value,
+            scan_watchlist: document.getElementById('cfg-scan-watchlist').value,
+            alpha_vantage_key: document.getElementById('cfg-av-key').value.trim(),
+            fmp_key: document.getElementById('cfg-fmp-key').value.trim(),
+            twelve_data_key: document.getElementById('cfg-td-key').value.trim(),
+        };
+        localStorage.setItem('rrjcar_config', JSON.stringify(cfg));
+
+        // Save email + schedule to backend
+        try {
+            await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    alert_email: cfg.alert_email,
+                    alerts_enabled: !!cfg.alert_email,
+                    alert_on_bull_entry: true,
+                }),
+            });
+        } catch (_) {}
+
+        // Flash save confirmation
+        const btn = document.getElementById('btn-save-config');
+        btn.textContent = 'Saved';
+        btn.style.background = '#22c55e';
+        setTimeout(() => { btn.textContent = 'Save'; btn.style.background = ''; }, 1500);
+    },
+
+    // ── Scanner ──
     async runScan() {
         if (this.scanning) return;
         this.scanning = true;
@@ -106,8 +161,8 @@ const App = {
                             this.allScanned = msg.progress.done;
                             const r = msg.data;
 
-                            // Only keep bullish ENTER
-                            if ((r.signal || '') === 'LONG -- ENTER') {
+                            // Keep ENTER + CONFIRMING (bullish signals)
+                            if (BULLISH_SIGNALS.includes(r.signal || '')) {
                                 this.scanResults.push(r);
                             }
 
@@ -120,7 +175,7 @@ const App = {
 
                         } else if (msg.type === 'done') {
                             document.getElementById('scan-time').textContent = `${msg.summary.elapsed}s`;
-                            progressText.textContent = `Done | ${this.allScanned} scanned | ${this.scanResults.length} entries | ${msg.summary.elapsed}s`;
+                            progressText.textContent = `Done | ${this.allScanned} scanned | ${this.scanResults.length} hits | ${msg.summary.elapsed}s`;
                         }
                     } catch (_) {}
                 }
