@@ -44,7 +44,18 @@ const API = {
     getSettings() { return this.get('/api/settings'); },
     saveSettings(data) { return this.post('/api/settings', data); },
 
+    // APIs status
+    getApis() { return this.get('/api/apis'); },
+
     // Broker
     brokerStatus() { return this.get('/api/broker/status'); },
     brokerConnect(data) { return this.post('/api/broker/connect', data); },
+    brokerPositions() { return this.get('/api/broker/positions'); },
+    brokerOrders(status = 'all') { return this.get(`/api/broker/orders?status=${status}`); },
+
+    // Ladder orders (incremental pricing)
+    ladderOrder(symbol, side, quantity = 1) {
+        return this.post('/api/broker/ladder', { symbol, side, quantity });
+    },
+    ladderStatus(orderId) { return this.get(`/api/broker/ladder/${orderId}`); },
 };

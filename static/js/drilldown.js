@@ -1,12 +1,15 @@
 /**
  * drilldown.js — Single-ticker deep analysis view
- * Includes embedded TradingView chart with EMAs + Order Blocks
+ * TradingView chart with EMAs + Order Blocks
+ * Buy/Sell ladder order buttons + auto-backtest
  */
 
 const DrillDown = {
-    tvWidgetLoaded: false,
+    currentSymbol: null,
+    activeOrderId: null,
 
     async render(symbol, container) {
+        this.currentSymbol = symbol;
         container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-dim);">Loading analysis...</div>';
 
         try {
@@ -25,25 +28,43 @@ const DrillDown = {
 
             container.innerHTML = `
                 <span class="back-link" onclick="App.showTab('screener')">&larr; Back to Hits</span>
-                <h2 style="font-size:1.1rem; color:var(--text-primary); margin:0.3rem 0;">${data.symbol}</h2>
+                <h2 style="font-size:1.1rem; color:var(--chrome); margin:0.3rem 0;">${data.symbol}
+                    <span style="font-size:0.8rem; font-weight:400; color:var(--text-dim);">$${(data.price || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+                    <span style="font-size:0.8rem; font-weight:400;" class="${chgCss}">${chgStr}</span>
+                </h2>
 
                 <div class="signal-banner ${sigCss}">
                     ${data.signal || 'N/A'}
-                    <div style="font-size:0.8rem; font-weight:400; margin-top:3px; opacity:0.85;">
+                    <div style="font-size:0.75rem; font-weight:400; margin-top:2px; opacity:0.85;">
                         ${data.action || ''}
                     </div>
                 </div>
 
+                <!-- Order Panel -->
+                <div class="order-panel">
+                    <input type="number" class="order-qty" id="order-qty" value="1" min="1" placeholder="Qty">
+                    <button class="btn-buy" onclick="DrillDown.placeLadder('${data.symbol}', 'buy')">Buy</button>
+                    <button class="btn-sell" onclick="DrillDown.placeLadder('${data.symbol}', 'sell')">Sell</button>
+                    <span style="font-size:0.55rem; color:var(--text-dim); font-family:var(--mono);">Ladder: ±$0.10 × 15</span>
+                </div>
+                <div class="order-status" id="order-status"></div>
+
+                <!-- Metrics -->
                 <div class="metrics-grid">
-                    <div class="metric-card"><div class="label">Price</div><div class="value">$${(data.price || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
                     <div class="metric-card"><div class="label">Regime</div><div class="value ${regCss}">${data.regime_label || '?'}</div></div>
                     <div class="metric-card"><div class="label">Confidence</div><div class="value">${data.regime_confidence ? Math.round(data.regime_confidence * 100) + '%' : '?'}</div></div>
-                    <div class="metric-card"><div class="label">Confirmations</div><div class="value">${data.confirmations_met || 0}/${data.confirmations_total || 12}</div></div>
-                    <div class="metric-card"><div class="label">Streak</div><div class="value">${data.regime_streak || '?'} bars</div></div>
-                    <div class="metric-card"><div class="label">1D Change</div><div class="value ${chgCss}">${chgStr}</div></div>
+                    <div class="metric-card"><div class="label">Confs</div><div class="value">${data.confirmations_met || 0}/${data.confirmations_total || 12}</div></div>
+                    <div class="metric-card"><div class="label">Streak</div><div class="value">${data.regime_streak || '?'}b</div></div>
+                    <div class="metric-card"><div class="label">RSI</div><div class="value">${data.rsi ? Math.round(data.rsi) : '?'}</div></div>
+                    <div class="metric-card"><div class="label">ADX</div><div class="value">${data.adx ? Math.round(data.adx) : '?'}</div></div>
                 </div>
 
                 ${this.renderConfirmations(data.confirmation_detail)}
+
+                <!-- Backtest Summary (auto-loaded) -->
+                <div id="dd-backtest-summary" style="margin:0.3rem 0;">
+                    <div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">Loading backtest...</div>
+                </div>
 
                 <!-- TradingView Chart -->
                 <div id="tv-chart-container" style="margin:0.6rem 0; border-radius:6px; overflow:hidden; height:500px;"></div>
@@ -51,36 +72,89 @@ const DrillDown = {
                 <!-- Regime Chart (Plotly) -->
                 <div class="chart-container" id="dd-price-chart"></div>
 
-                <div style="margin-top:0.5rem;">
-                    <button class="btn btn-sm" onclick="DrillDown.loadBacktest('${data.symbol}')">Run Backtest</button>
-                    <button class="btn btn-sm" onclick="DrillDown.loadOptions('${data.symbol}')">Show Options</button>
-                </div>
-
+                <!-- Backtest trade history -->
                 <div id="dd-backtest-area"></div>
+
+                <div style="margin-top:0.5rem;">
+                    <button class="btn btn-sm" onclick="DrillDown.loadOptions('${data.symbol}')">Options Picks</button>
+                </div>
                 <div id="dd-options-area"></div>
             `;
 
-            // Embed TradingView Advanced Chart
+            // Embed TradingView
             this.embedTradingView(data.symbol);
 
-            // Regime chart (Plotly)
+            // Regime chart
             if (data.chart_data) {
                 Charts.priceWithRegimes('dd-price-chart', data.chart_data, `${data.symbol} Regime Analysis`);
             }
+
+            // Auto-load backtest
+            this.loadBacktest(data.symbol);
 
         } catch (err) {
             container.innerHTML = `<div style="color:var(--red); padding:1rem;">Error: ${err.message}</div>`;
         }
     },
 
+    // ── Ladder Order ──
+    async placeLadder(symbol, side) {
+        const qty = parseInt(document.getElementById('order-qty').value) || 1;
+        const statusEl = document.getElementById('order-status');
+        statusEl.className = 'order-status pending';
+        statusEl.textContent = `Placing ${side.toUpperCase()} ladder for ${qty} ${symbol}...`;
+
+        try {
+            const res = await API.ladderOrder(symbol, side, qty);
+            if (res.error) {
+                statusEl.className = 'order-status error';
+                statusEl.textContent = res.error;
+                return;
+            }
+
+            this.activeOrderId = res.order_id;
+            this.pollLadder(res.order_id, statusEl);
+
+        } catch (err) {
+            statusEl.className = 'order-status error';
+            statusEl.textContent = `Error: ${err.message}`;
+        }
+    },
+
+    async pollLadder(orderId, statusEl) {
+        const poll = async () => {
+            try {
+                const s = await API.ladderStatus(orderId);
+                if (s.status === 'filled') {
+                    statusEl.className = 'order-status success';
+                    statusEl.textContent = `Filled @ $${s.fill_price} (attempt ${s.filled_attempt}/${s.max_attempts})`;
+                    return;
+                } else if (s.status === 'exhausted') {
+                    statusEl.className = 'order-status error';
+                    statusEl.textContent = `Not filled after ${s.max_attempts} attempts (last: $${s.current_price})`;
+                    return;
+                } else if (s.status === 'error') {
+                    statusEl.className = 'order-status error';
+                    statusEl.textContent = `Error: ${s.error || 'Unknown'}`;
+                    return;
+                } else {
+                    statusEl.className = 'order-status pending';
+                    statusEl.textContent = `${s.side?.toUpperCase()} attempt ${s.attempt}/${s.max_attempts} @ $${s.current_price || '...'}`;
+                    setTimeout(poll, 1500);
+                }
+            } catch (_) {
+                setTimeout(poll, 2000);
+            }
+        };
+        poll();
+    },
+
+    // ── TradingView Chart ──
     embedTradingView(symbol) {
         const container = document.getElementById('tv-chart-container');
         if (!container) return;
-
-        // Clean up any previous widget
         container.innerHTML = '';
 
-        // TradingView Advanced Chart Widget with EMAs + Order Blocks
         const script = document.createElement('script');
         script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
         script.type = 'text/javascript';
@@ -103,30 +177,10 @@ const DrillDown = {
             "hide_volume": false,
             "support_host": "https://www.tradingview.com",
             "studies": [
-                {
-                    "id": "MAExp@tv-basicstudies",
-                    "inputs": { "length": 10 },
-                    "styles": {
-                        "plot": { "color": "#22c55e", "linewidth": 2 }
-                    }
-                },
-                {
-                    "id": "MAExp@tv-basicstudies",
-                    "inputs": { "length": 20 },
-                    "styles": {
-                        "plot": { "color": "#eab308", "linewidth": 2 }
-                    }
-                },
-                {
-                    "id": "MAExp@tv-basicstudies",
-                    "inputs": { "length": 50 },
-                    "styles": {
-                        "plot": { "color": "#ef4444", "linewidth": 2 }
-                    }
-                },
-                {
-                    "id": "STD;Order_Block_Breaker_Block"
-                }
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 10 }, "styles": { "plot": { "color": "#22c55e", "linewidth": 2 } } },
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 20 }, "styles": { "plot": { "color": "#eab308", "linewidth": 2 } } },
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 50 }, "styles": { "plot": { "color": "#ef4444", "linewidth": 2 } } },
+                { "id": "STD;Order_Block_Breaker_Block" }
             ]
         });
 
@@ -166,9 +220,10 @@ const DrillDown = {
         return html;
     },
 
+    // ── Auto Backtest ──
     async loadBacktest(symbol) {
+        const summary = document.getElementById('dd-backtest-summary');
         const area = document.getElementById('dd-backtest-area');
-        area.innerHTML = '<div style="color:var(--text-dim); padding:0.5rem;">Running backtest...</div>';
 
         try {
             const settings = await API.getSettings();
@@ -181,37 +236,53 @@ const DrillDown = {
             });
 
             if (bt.error) {
-                area.innerHTML = `<div style="color:var(--red);">${bt.error}</div>`;
+                summary.innerHTML = `<div style="color:var(--red); font-size:0.7rem;">${bt.error}</div>`;
                 return;
             }
 
             const m = bt.metrics;
-            area.innerHTML = `
-                <h3 style="font-size:0.9rem; color:var(--text-primary); margin:0.5rem 0 0.3rem;">Backtest Results</h3>
-                <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="metric-card"><div class="label">Total Return</div><div class="value ${(m.total_return_pct||0) >= 0 ? 'bull' : 'bear'}">${(m.total_return_pct||0).toFixed(1)}%</div></div>
-                    <div class="metric-card"><div class="label">Win Rate</div><div class="value">${(m.win_rate||0).toFixed(0)}%</div></div>
-                    <div class="metric-card"><div class="label">Sharpe</div><div class="value">${(m.sharpe_ratio||0).toFixed(2)}</div></div>
-                    <div class="metric-card"><div class="label">Max DD</div><div class="value bear">${(m.max_drawdown_pct||0).toFixed(1)}%</div></div>
+            const retCss = (m.total_return_pct || 0) >= 0 ? 'bull' : 'bear';
+
+            // Summary card
+            summary.innerHTML = `
+                <div class="bt-summary">
+                    <div class="bt-stat"><div class="bt-label">Return</div><div class="bt-val ${retCss}">${(m.total_return_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Win Rate</div><div class="bt-val">${(m.win_rate||0).toFixed(0)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Sharpe</div><div class="bt-val">${(m.sharpe_ratio||0).toFixed(2)}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Max DD</div><div class="bt-val bear">${(m.max_drawdown_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Trades</div><div class="bt-val">${m.total_trades || 0}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Avg Win</div><div class="bt-val bull">${(m.avg_win_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Avg Loss</div><div class="bt-val bear">${(m.avg_loss_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Profit Factor</div><div class="bt-val">${(m.profit_factor||0).toFixed(2)}</div></div>
                 </div>
-                <div class="chart-container" id="dd-equity-chart"></div>
-                ${this.renderTradeTable(bt.trades)}
             `;
 
-            Charts.equityCurve('dd-equity-chart', bt.equity_curve);
+            // Trade history
+            if (area) {
+                let tradeHtml = '';
+                if (bt.equity_curve) {
+                    tradeHtml += '<div class="chart-container" id="dd-equity-chart"></div>';
+                }
+                tradeHtml += this.renderTradeTable(bt.trades);
+                area.innerHTML = tradeHtml;
+
+                if (bt.equity_curve) {
+                    Charts.equityCurve('dd-equity-chart', bt.equity_curve);
+                }
+            }
 
         } catch (err) {
-            area.innerHTML = `<div style="color:var(--red);">Backtest error: ${err.message}</div>`;
+            summary.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem;">Backtest unavailable</div>`;
         }
     },
 
     renderTradeTable(trades) {
-        if (!trades || !trades.length) return '<div style="color:var(--text-dim); font-size:0.8rem;">No trades.</div>';
+        if (!trades || !trades.length) return '';
         let html = `<table class="trade-table"><thead><tr>
             <th>Entry</th><th>Exit</th><th>Entry $</th><th>Exit $</th><th>P&L %</th><th>Reason</th>
         </tr></thead><tbody>`;
 
-        trades.forEach(t => {
+        trades.slice(-20).forEach(t => {
             const pnl = t.pnl_pct || 0;
             const pnlCss = pnl >= 0 ? 'color:#34d399' : 'color:#f87171';
             html += `<tr>
@@ -220,7 +291,7 @@ const DrillDown = {
                 <td>$${(t.entry_price || 0).toFixed(2)}</td>
                 <td>$${(t.exit_price || 0).toFixed(2)}</td>
                 <td style="${pnlCss}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%</td>
-                <td style="color:var(--text-dim); max-width:150px; overflow:hidden; text-overflow:ellipsis;">${t.exit_reason || ''}</td>
+                <td style="color:var(--text-dim); max-width:120px; overflow:hidden; text-overflow:ellipsis;">${t.exit_reason || ''}</td>
             </tr>`;
         });
 
@@ -242,11 +313,11 @@ const DrillDown = {
             }
 
             if (!opts.recommendations || !opts.recommendations.length) {
-                area.innerHTML = '<div style="color:var(--text-dim); font-size:0.8rem;">No options recommendations.</div>';
+                area.innerHTML = '<div style="color:var(--text-dim); font-size:0.7rem;">No options recommendations.</div>';
                 return;
             }
 
-            let html = '<h3 style="font-size:0.9rem; color:var(--text-primary); margin:0.5rem 0 0.3rem;">Options Picks</h3>';
+            let html = '';
             opts.recommendations.forEach(r => {
                 html += `
                 <div class="opt-card">
@@ -256,12 +327,10 @@ const DrillDown = {
                     <span class="opt-detail">$${(r.mid || 0).toFixed(2)} mid</span>
                     <span class="opt-detail" style="color:var(--accent);">d=${(r.delta || 0).toFixed(2)}</span>
                     <span class="opt-detail">IV ${((r.iv || 0) * 100).toFixed(0)}%</span>
-                    <span class="opt-detail">Score: ${(r.score || 0).toFixed(0)}</span>
                 </div>`;
             });
 
             area.innerHTML = html;
-
         } catch (err) {
             area.innerHTML = `<div style="color:var(--red);">Options error: ${err.message}</div>`;
         }

@@ -1,64 +1,94 @@
 <svg viewBox="0 0 600 160" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="chrome" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#e0e0e0"/>
-      <stop offset="20%" stop-color="#c8c8c8"/>
-      <stop offset="40%" stop-color="#f5f5f5"/>
-      <stop offset="50%" stop-color="#b8b8b8"/>
-      <stop offset="60%" stop-color="#f0f0f0"/>
-      <stop offset="80%" stop-color="#a8a8a8"/>
-      <stop offset="100%" stop-color="#d8d8d8"/>
+    <!-- Multi-stop chrome gradient for 3D metallic look -->
+    <linearGradient id="chrome3d" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#c8c8c8"/>
+      <stop offset="12%" stop-color="#8a8a8a"/>
+      <stop offset="28%" stop-color="#e0e0e0"/>
+      <stop offset="42%" stop-color="#a8a8a8"/>
+      <stop offset="50%" stop-color="#f2f2f2"/>
+      <stop offset="58%" stop-color="#a0a0a0"/>
+      <stop offset="72%" stop-color="#d8d8d8"/>
+      <stop offset="88%" stop-color="#888888"/>
+      <stop offset="100%" stop-color="#b8b8b8"/>
     </linearGradient>
-    <linearGradient id="chrome-stroke" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
-      <stop offset="50%" stop-color="#888888" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#cccccc" stop-opacity="0.5"/>
+    <!-- Inner highlight for 3D depth -->
+    <linearGradient id="innerLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.0"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.15"/>
     </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
+    <!-- Ambient glow -->
+    <filter id="ambientGlow">
+      <feGaussianBlur stdDeviation="4" result="glow"/>
+      <feColorMatrix in="glow" type="matrix" values="0.8 0.8 0.8 0 0  0.8 0.8 0.8 0 0  0.8 0.8 0.8 0 0  0 0 0 0.12 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Subtle inner shadow for depth -->
+    <filter id="innerDepth">
+      <feGaussianBlur stdDeviation="0.8" result="blur"/>
       <feMerge>
         <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-    <filter id="shadow">
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.5"/>
-    </filter>
   </defs>
-  <!-- Stylized cursive RRJCAR -->
-  <g filter="url(#shadow)">
-    <!-- R1 - flowing R -->
-    <path d="M30,130 L30,40 Q30,25 45,25 L70,25 Q90,25 90,45 Q90,65 70,65 L50,65 L95,130"
-          fill="none" stroke="url(#chrome)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-    <!-- R2 - flowing R -->
-    <path d="M110,130 L110,40 Q110,25 125,25 L150,25 Q170,25 170,45 Q170,65 150,65 L130,65 L175,130"
-          fill="none" stroke="url(#chrome)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-    <!-- J - swooping J -->
-    <path d="M195,25 L195,95 Q195,135 165,135 Q155,135 150,128"
-          fill="none" stroke="url(#chrome)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-    <!-- C - open curve -->
-    <path d="M280,40 Q260,20 240,30 Q215,45 215,80 Q215,115 240,128 Q260,138 280,120"
-          fill="none" stroke="url(#chrome)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-    <!-- A - pointed with crossbar -->
-    <path d="M295,130 L325,30 L355,130 M305,90 L345,90"
-          fill="none" stroke="url(#chrome)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-    <!-- R3 - flowing R -->
-    <path d="M370,130 L370,40 Q370,25 385,25 L410,25 Q430,25 430,45 Q430,65 410,65 L390,65 L435,130"
-          fill="none" stroke="url(#chrome)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-  </g>
-  <!-- Highlight stroke -->
-  <g opacity="0.15">
-    <path d="M30,130 L30,40 Q30,25 45,25 L70,25 Q90,25 90,45 Q90,65 70,65 L50,65 L95,130"
-          fill="none" stroke="url(#chrome-stroke)" stroke-width="3" stroke-linecap="round"/>
-    <path d="M110,130 L110,40 Q110,25 125,25 L150,25 Q170,25 170,45 Q170,65 150,65 L130,65 L175,130"
-          fill="none" stroke="url(#chrome-stroke)" stroke-width="3" stroke-linecap="round"/>
-    <path d="M195,25 L195,95 Q195,135 165,135 Q155,135 150,128"
-          fill="none" stroke="url(#chrome-stroke)" stroke-width="3" stroke-linecap="round"/>
-    <path d="M280,40 Q260,20 240,30 Q215,45 215,80 Q215,115 240,128 Q260,138 280,120"
-          fill="none" stroke="url(#chrome-stroke)" stroke-width="3" stroke-linecap="round"/>
-    <path d="M295,130 L325,30 L355,130 M305,90 L345,90"
-          fill="none" stroke="url(#chrome-stroke)" stroke-width="3" stroke-linecap="round"/>
-    <path d="M370,130 L370,40 Q370,25 385,25 L410,25 Q430,25 430,45 Q430,65 410,65 L390,65 L435,130"
-          fill="none" stroke="url(#chrome-stroke)" stroke-width="3" stroke-linecap="round"/>
+
+  <g filter="url(#ambientGlow)">
+    <!-- R1: Flowing rounded R with curved bowl and sweeping leg -->
+    <g filter="url(#innerDepth)">
+      <path d="M30,130 L30,42 Q30,25 48,25 L68,25 Q95,25 95,50 Q95,68 78,73 L58,76 Q48,77 56,87 L90,130"
+            fill="none" stroke="url(#chrome3d)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M30,130 L30,42 Q30,25 48,25 L68,25 Q95,25 95,50 Q95,68 78,73 L58,76 Q48,77 56,87 L90,130"
+            fill="none" stroke="url(#innerLight)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- R2: Second R, slightly connected feel -->
+    <g filter="url(#innerDepth)">
+      <path d="M110,130 L110,42 Q110,25 128,25 L148,25 Q175,25 175,50 Q175,68 158,73 L138,76 Q128,77 136,87 L170,130"
+            fill="none" stroke="url(#chrome3d)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M110,130 L110,42 Q110,25 128,25 L148,25 Q175,25 175,50 Q175,68 158,73 L138,76 Q128,77 136,87 L170,130"
+            fill="none" stroke="url(#innerLight)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- J: Tall stem with deep swooping hook -->
+    <g filter="url(#innerDepth)">
+      <path d="M210,25 L210,100 Q210,138 180,138 Q162,138 155,120"
+            fill="none" stroke="url(#chrome3d)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M210,25 L210,100 Q210,138 180,138 Q162,138 155,120"
+            fill="none" stroke="url(#innerLight)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- C: Wide elegant open curve -->
+    <g filter="url(#innerDepth)">
+      <path d="M295,42 Q275,20 252,30 Q225,45 225,78 Q225,115 252,128 Q275,138 295,120"
+            fill="none" stroke="url(#chrome3d)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M295,42 Q275,20 252,30 Q225,45 225,78 Q225,115 252,128 Q275,138 295,120"
+            fill="none" stroke="url(#innerLight)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- A: Smooth pointed arch with floating crossbar -->
+    <g filter="url(#innerDepth)">
+      <path d="M315,130 L348,28 L381,130"
+            fill="none" stroke="url(#chrome3d)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M328,92 L368,92"
+            fill="none" stroke="url(#chrome3d)" stroke-width="11" stroke-linecap="round"/>
+      <path d="M315,130 L348,28 L381,130"
+            fill="none" stroke="url(#innerLight)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M328,92 L368,92"
+            fill="none" stroke="url(#innerLight)" stroke-width="4" stroke-linecap="round"/>
+    </g>
+
+    <!-- R3: Final R, matching style -->
+    <g filter="url(#innerDepth)">
+      <path d="M405,130 L405,42 Q405,25 423,25 L443,25 Q470,25 470,50 Q470,68 453,73 L433,76 Q423,77 431,87 L465,130"
+            fill="none" stroke="url(#chrome3d)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M405,130 L405,42 Q405,25 423,25 L443,25 Q470,25 470,50 Q470,68 453,73 L433,76 Q423,77 431,87 L465,130"
+            fill="none" stroke="url(#innerLight)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
   </g>
 </svg>
