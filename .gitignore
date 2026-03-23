@@ -3,3 +3,8 @@ __pycache__/
 .venv/
 *.pyc
 .ticker_cache.json
+.tradier_settings.json
+.dashboard_settings.json
+.trade_history.db
+.regime_cache.json
+.env
