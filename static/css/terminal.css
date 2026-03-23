@@ -56,19 +56,21 @@ html, body {
     height: auto;
 }
 .home-dollar {
-    font-size: 2.2rem;
+    font-size: 2.4rem;
     font-weight: 700;
-    color: var(--accent);
     cursor: pointer;
     user-select: none;
     transition: all 0.25s ease;
     line-height: 1;
-    opacity: 0.85;
+    background: linear-gradient(180deg, #c8c8c8 0%, #888 25%, #e0e0e0 45%, #a0a0a0 55%, #d0d0d0 75%, #999 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 6px rgba(180,180,180,0.15));
 }
 .home-dollar:hover {
-    opacity: 1;
     transform: scale(1.2);
-    text-shadow: 0 0 25px rgba(45,212,191,0.5);
+    filter: drop-shadow(0 0 12px rgba(200,200,200,0.3));
 }
 
 /* ══════════════════════════════════════════
