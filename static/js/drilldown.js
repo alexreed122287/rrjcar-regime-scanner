@@ -1,8 +1,11 @@
 /**
  * drilldown.js — Single-ticker deep analysis view
+ * Includes embedded TradingView chart with EMAs + Order Blocks
  */
 
 const DrillDown = {
+    tvWidgetLoaded: false,
+
     async render(symbol, container) {
         container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-dim);">Loading analysis...</div>';
 
@@ -21,7 +24,7 @@ const DrillDown = {
             const chgCss = chg != null ? (chg >= 0 ? 'bull' : 'bear') : '';
 
             container.innerHTML = `
-                <span class="back-link" onclick="App.showTab('screener')">&larr; Back to Screener</span>
+                <span class="back-link" onclick="App.showTab('screener')">&larr; Back to Hits</span>
                 <h2 style="font-size:1.1rem; color:var(--text-primary); margin:0.3rem 0;">${data.symbol}</h2>
 
                 <div class="signal-banner ${sigCss}">
@@ -42,6 +45,10 @@ const DrillDown = {
 
                 ${this.renderConfirmations(data.confirmation_detail)}
 
+                <!-- TradingView Chart -->
+                <div id="tv-chart-container" style="margin:0.6rem 0; border-radius:6px; overflow:hidden; height:500px;"></div>
+
+                <!-- Regime Chart (Plotly) -->
                 <div class="chart-container" id="dd-price-chart"></div>
 
                 <div style="margin-top:0.5rem;">
@@ -53,7 +60,10 @@ const DrillDown = {
                 <div id="dd-options-area"></div>
             `;
 
-            // Price chart
+            // Embed TradingView Advanced Chart
+            this.embedTradingView(data.symbol);
+
+            // Regime chart (Plotly)
             if (data.chart_data) {
                 Charts.priceWithRegimes('dd-price-chart', data.chart_data, `${data.symbol} Regime Analysis`);
             }
@@ -61,6 +71,78 @@ const DrillDown = {
         } catch (err) {
             container.innerHTML = `<div style="color:var(--red); padding:1rem;">Error: ${err.message}</div>`;
         }
+    },
+
+    embedTradingView(symbol) {
+        const container = document.getElementById('tv-chart-container');
+        if (!container) return;
+
+        // Clean up any previous widget
+        container.innerHTML = '';
+
+        // TradingView Advanced Chart Widget with EMAs + Order Blocks
+        const script = document.createElement('script');
+        script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+        script.type = 'text/javascript';
+        script.async = true;
+        script.innerHTML = JSON.stringify({
+            "autosize": true,
+            "symbol": symbol,
+            "interval": "D",
+            "timezone": "America/Chicago",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "backgroundColor": "rgba(0, 0, 0, 1)",
+            "gridColor": "rgba(30, 30, 30, 1)",
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "allow_symbol_change": true,
+            "save_image": false,
+            "calendar": false,
+            "hide_volume": false,
+            "support_host": "https://www.tradingview.com",
+            "studies": [
+                {
+                    "id": "MAExp@tv-basicstudies",
+                    "inputs": { "length": 10 },
+                    "styles": {
+                        "plot": { "color": "#22c55e", "linewidth": 2 }
+                    }
+                },
+                {
+                    "id": "MAExp@tv-basicstudies",
+                    "inputs": { "length": 20 },
+                    "styles": {
+                        "plot": { "color": "#eab308", "linewidth": 2 }
+                    }
+                },
+                {
+                    "id": "MAExp@tv-basicstudies",
+                    "inputs": { "length": 50 },
+                    "styles": {
+                        "plot": { "color": "#ef4444", "linewidth": 2 }
+                    }
+                },
+                {
+                    "id": "STD;Order_Block_Breaker_Block"
+                }
+            ]
+        });
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'tradingview-widget-container';
+        wrapper.style.height = '100%';
+        wrapper.style.width = '100%';
+
+        const inner = document.createElement('div');
+        inner.className = 'tradingview-widget-container__widget';
+        inner.style.height = 'calc(100% - 32px)';
+        inner.style.width = '100%';
+
+        wrapper.appendChild(inner);
+        wrapper.appendChild(script);
+        container.appendChild(wrapper);
     },
 
     signalCssClass(signal) {
