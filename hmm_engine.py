@@ -33,9 +33,10 @@ class RegimeDetector:
     from most bullish to most bearish by mean return.
     """
 
-    def __init__(self, n_regimes: int = 7, n_iter: int = 200, random_state: int = 42):
+    def __init__(self, n_regimes: int = 7, n_iter: int = 100, random_state: int = 42, tol: float = 1e-4):
         self.n_regimes = n_regimes
         self.n_iter = n_iter
+        self.tol = tol
         self.random_state = random_state
         self.model = None
         self.scaler = StandardScaler()
@@ -77,6 +78,7 @@ class RegimeDetector:
             n_components=self.n_regimes,
             covariance_type="full",
             n_iter=self.n_iter,
+            tol=self.tol,
             random_state=self.random_state,
             verbose=False,
         )

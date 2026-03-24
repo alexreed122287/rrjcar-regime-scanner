@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    <title>RRJCAR</title>
+    <link rel="stylesheet" href="/static/css/terminal.css?v=10">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+
+<!-- ═══ HOMEPAGE: Logo + $ ═══ -->
+<div class="home" id="home">
+    <div class="home-logo">
+        <img src="/static/img/logo.png" alt="RRJCAR" class="logo-img">
+    </div>
+    <div class="home-dollar" id="home-dollar">$</div>
+</div>
+
+<!-- ═══ SIDEBAR (settings + results + everything) ═══ -->
+<div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-inner">
+    <div class="sidebar-header">
+        <span class="sidebar-close" id="sidebar-close">&times;</span>
+        <span class="sidebar-title">Scanner</span>
+    </div>
+
+    <!-- Settings -->
+    <div class="sidebar-section">
+        <div class="settings-grid">
+            <div class="setting-group">
+                <label>Watchlist</label>
+                <select id="setting-watchlist"></select>
+            </div>
+            <div class="setting-group">
+                <label>Custom Tickers</label>
+                <input type="text" id="setting-custom-tickers" placeholder="AAPL,TSLA,NVDA">
+            </div>
+            <div class="setting-group">
+                <label>Strategy</label>
+                <select id="setting-strategy">
+                    <option value="v2">V2 (12-conf)</option>
+                    <option value="v1">V1 (8-conf)</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label>Min Confs</label>
+                <input type="number" id="setting-min-confs" min="1" max="12" value="6">
+            </div>
+            <div class="setting-group">
+                <label>Regime Bars</label>
+                <input type="number" id="setting-regime-confirm" min="1" max="10" value="2">
+            </div>
+            <div class="setting-group">
+                <label>Cooldown</label>
+                <input type="number" id="setting-cooldown" min="0" max="20" value="3">
+            </div>
+            <div class="setting-group">
+                <label>Capital</label>
+                <input type="number" id="setting-capital" min="1000" step="1000" value="100000">
+            </div>
+            <div class="setting-group">
+                <label>Workers</label>
+                <input type="number" id="setting-max-workers" min="1" max="20" value="6">
+            </div>
+        </div>
+        <button class="btn-scan-go" id="btn-scan">Scan</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="sidebar-progress hidden" id="sidebar-progress">
+        <div class="progress-row">
+            <div class="batch-bar" style="flex:1;"><div class="batch-fill" id="batch-fill"></div></div>
+            <button class="btn-stop hidden" id="btn-stop">STOP</button>
+        </div>
+        <div class="batch-text" id="batch-text">Scanning...</div>
+    </div>
+
+    <!-- Live Hit Feed -->
+    <div class="hit-tape hidden" id="hit-tape">
+        <div class="hit-tape-label">LIVE FEED</div>
+        <div class="hit-tape-list" id="hit-tape-list"></div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="sidebar-metrics hidden" id="sidebar-metrics">
+        <div class="sm-row">
+            <span class="sm-label">Scanned</span><span class="sm-val" id="metric-scanned">0</span>
+        </div>
+        <div class="sm-row">
+            <span class="sm-label">Bullish Entries</span><span class="sm-val bull" id="metric-entries">0</span>
+        </div>
+        <div class="sm-row">
+            <span class="sm-label">Time</span><span class="sm-val" id="scan-time">--</span>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="sidebar-tabs" id="sidebar-tabs">
+        <button class="tab-btn active" data-tab="screener">Hits</button>
+        <button class="tab-btn" data-tab="drilldown">Chart</button>
+        <button class="tab-btn" data-tab="orders">Orders</button>
+        <button class="tab-btn" data-tab="positions">Positions</button>
+        <button class="tab-btn" data-tab="heatmap">Heatmap</button>
+        <button class="tab-btn" data-tab="config">Config</button>
+    </div>
+
+    <!-- Tab: Hits -->
+    <div class="tab-content active" id="tab-screener">
+        <div class="filter-bar" id="filter-bar">
+            <select id="filter-signal" onchange="Screener.currentFilter=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                <option value="All">All Signals</option>
+                <option value="LONG -- ENTER">ENTER</option>
+                <option value="LONG -- CONFIRMING">CONFIRMING</option>
+                <option value="LONG -- HOLD">HOLD</option>
+                <option value="EXIT -- REGIME FLIP">EXIT</option>
+            </select>
+            <select id="filter-confidence" onchange="Screener.minConfidence=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                <option value="0">All Confidence</option>
+                <option value="0.90">&ge; 90%</option>
+                <option value="0.80">&ge; 80%</option>
+                <option value="0.70">&ge; 70%</option>
+                <option value="0.60">&ge; 60%</option>
+                <option value="0.50">&ge; 50%</option>
+            </select>
+            <select id="filter-sort" onchange="Screener.currentSort=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                <option value="signal">Signal Priority</option>
+                <option value="confidence">Confidence</option>
+                <option value="confirmations">Confirmations</option>
+                <option value="change">1D Change</option>
+            </select>
+        </div>
+        <div id="screener-content"></div>
+    </div>
+
+    <!-- Tab: Drill-Down -->
+    <div class="tab-content" id="tab-drilldown">
+        <div id="drilldown-content"></div>
+    </div>
+
+    <!-- Tab: Orders -->
+    <div class="tab-content" id="tab-orders">
+        <div id="orders-content">
+            <div style="color:var(--text-dim); padding:1rem; text-align:center; font-size:0.75rem;">
+                Select a ticker from Hits to see order recommendations.
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab: Positions -->
+    <div class="tab-content" id="tab-positions">
+        <div id="positions-content">
+            <div style="color:var(--text-dim); padding:1rem; text-align:center; font-size:0.75rem;">
+                No open positions.
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab: Heatmap -->
+    <div class="tab-content" id="tab-heatmap">
+        <div class="chart-container" id="heatmap-chart"></div>
+    </div>
+
+    <!-- Tab: Distribution -->
+    <div class="tab-content" id="tab-distribution">
+        <div class="chart-container" id="signal-dist-chart"></div>
+    </div>
+
+    <!-- Tab: Config (Tradier, email, schedule, API keys) -->
+    <div class="tab-content" id="tab-config">
+
+        <div class="config-section">
+            <div class="section-toggle open">Tradier Brokerage (Primary)</div>
+            <div class="section-body">
+                <div id="tradier-status" style="font-size:0.65rem; font-family:var(--mono); margin-bottom:0.4rem; color:var(--text-dim);">Checking...</div>
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label>Access Token</label>
+                        <input type="password" id="cfg-tradier-token" placeholder="Your Tradier API token">
+                    </div>
+                    <div class="setting-group">
+                        <label>Account ID</label>
+                        <input type="text" id="cfg-tradier-account" placeholder="e.g. VA12345678">
+                    </div>
+                </div>
+                <div class="setting-group" style="margin-top:0.3rem">
+                    <label>Mode</label>
+                    <select id="cfg-tradier-mode">
+                        <option value="sandbox">Sandbox (paper trading)</option>
+                        <option value="production">Production (real money)</option>
+                    </select>
+                </div>
+                <button class="btn-scan-go" id="btn-connect-tradier" style="margin-top:0.5rem; font-size:0.7rem; padding:0.4rem 0;">Connect Tradier</button>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="section-toggle open">Notifications</div>
+            <div class="section-body">
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Alert Email</label>
+                    <input type="email" id="cfg-email" placeholder="your@email.com">
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="section-toggle open">Daily Auto-Scan</div>
+            <div class="section-body">
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label>Scan Time (CST)</label>
+                        <input type="time" id="cfg-scan-time" value="12:30">
+                    </div>
+                    <div class="setting-group">
+                        <label>Watchlist</label>
+                        <select id="cfg-scan-watchlist">
+                            <option value="S&P 100">S&P 100</option>
+                            <option value="Mag 7">Mag 7</option>
+                            <option value="Semiconductors">Semiconductors</option>
+                            <option value="ALL TICKERS">ALL TICKERS</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="section-toggle">Fallback API Keys (Free Tiers)</div>
+            <div class="section-body collapsed">
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Alpha Vantage (25/day)</label>
+                    <input type="text" id="cfg-av-key" placeholder="Get free key: alphavantage.co">
+                </div>
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Financial Modeling Prep (250/day)</label>
+                    <input type="text" id="cfg-fmp-key" placeholder="Get free key: financialmodelingprep.com">
+                </div>
+                <div class="setting-group" style="margin-bottom:0.4rem">
+                    <label>Twelve Data (800/day)</label>
+                    <input type="text" id="cfg-td-key" placeholder="Get free key: twelvedata.com">
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-scan-go" id="btn-save-config" style="margin-top:0.6rem">Save</button>
+    </div>
+  </div><!-- /sidebar-inner -->
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay hidden" id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">Scanning...</div>
+</div>
+
+<!-- Scripts -->
+<script src="/static/js/api.js?v=10"></script>
+<script src="/static/js/charts.js?v=10"></script>
+<script src="/static/js/screener.js?v=10"></script>
+<script src="/static/js/drilldown.js?v=10"></script>
+<script src="/static/js/orders.js?v=10"></script>
+<script src="/static/js/settings.js?v=10"></script>
+<script src="/static/js/app.js?v=10"></script>
+
+</body>
+</html>

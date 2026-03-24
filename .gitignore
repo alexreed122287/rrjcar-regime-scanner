@@ -1,9 +1,10 @@
+.DS_Store
 __pycache__/
-*.pyc
 .venv/
+*.pyc
 .ticker_cache.json
-.trade_history.db
 .tradier_settings.json
 .dashboard_settings.json
-*.db
-*.zip
+.trade_history.db
+.regime_cache.json
+.env
