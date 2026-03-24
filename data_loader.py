@@ -6,6 +6,7 @@ and Yahoo Finance as fallback (crypto, or if Tradier unavailable).
 
 import os
 import json
+import threading
 import requests
 import yfinance as yf
 import pandas as pd
@@ -91,21 +92,22 @@ def resolve_ticker(symbol: str) -> str:
 
 # ─── Tradier data fetcher ────────────────────────────────────
 
-# Reusable session for connection pooling (much faster for batch requests)
-_tradier_session = None
+# Thread-local sessions so each worker gets its own connection pool
+_tradier_local = threading.local()
 
 
 def _get_tradier_session():
-    """Get or create a reusable requests.Session with Tradier auth."""
-    global _tradier_session
-    if _tradier_session is None:
+    """Get or create a thread-local requests.Session with Tradier auth."""
+    session = getattr(_tradier_local, "session", None)
+    if session is None:
         config = _load_tradier_config()
-        _tradier_session = requests.Session()
-        _tradier_session.headers.update({
+        session = requests.Session()
+        session.headers.update({
             "Authorization": f"Bearer {config['access_token']}",
             "Accept": "application/json",
         })
-    return _tradier_session
+        _tradier_local.session = session
+    return session
 
 
 def _fetch_tradier(

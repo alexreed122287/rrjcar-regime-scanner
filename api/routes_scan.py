@@ -153,9 +153,24 @@ async def get_cached():
     }
 
 
+def _scan_ticker_light(args):
+    """Wrapper for ProcessPoolExecutor — scan one ticker, return serializable result."""
+    sym, strategy, n_regimes, min_confs, regime_confirm, period_days = args
+    result = scan_single_ticker(
+        sym, strategy=strategy, n_regimes=n_regimes,
+        min_confirmations=min_confs,
+        regime_confirm_bars=regime_confirm,
+        period_days=period_days,
+    )
+    if result is None:
+        return None
+    # Strip heavy non-picklable objects before crossing process boundary
+    return {k: v for k, v in result.items() if not k.startswith("_")}
+
+
 @router.post("/scan/stream")
 async def run_scan_stream(req: ScanRequest):
-    """Stream scan results with concurrent workers via SSE."""
+    """Stream scan results with concurrent process workers via SSE."""
     if req.custom_tickers.strip():
         symbols = [t.strip().upper() for t in req.custom_tickers.split(",") if t.strip()]
     else:
@@ -174,41 +189,42 @@ async def run_scan_stream(req: ScanRequest):
         total = len(symbols)
         start = time.time()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            future_to_sym = {
-                executor.submit(
-                    scan_single_ticker, sym,
-                    strategy=req.strategy, n_regimes=req.n_regimes,
-                    min_confirmations=req.min_confs,
-                    regime_confirm_bars=req.regime_confirm,
-                    period_days=req.period_days,
-                ): sym
-                for sym in symbols
-            }
+        # Build args for each ticker
+        args_list = [
+            (sym, req.strategy, req.n_regimes, req.min_confs,
+             req.regime_confirm, req.period_days)
+            for sym in symbols
+        ]
 
-            for future in concurrent.futures.as_completed(future_to_sym):
-                done_count += 1
-                try:
-                    result = future.result()
-                except Exception:
-                    result = None
+        # Process in chunks to avoid overwhelming memory / OS process table
+        chunk_size = workers * 6
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+            for chunk_start in range(0, total, chunk_size):
+                chunk = args_list[chunk_start:chunk_start + chunk_size]
+                futures = {executor.submit(_scan_ticker_light, a): a[0] for a in chunk}
 
-                if result:
-                    all_results.append(result)
-                    serialized = _serialize_result(result)
-                    msg = json.dumps({
-                        "type": "result",
-                        "data": serialized,
-                        "progress": {"done": done_count, "total": total},
-                    })
-                    yield f"data: {msg}\n\n"
-                else:
-                    # Still send progress for failed tickers
-                    msg = json.dumps({
-                        "type": "progress",
-                        "progress": {"done": done_count, "total": total},
-                    })
-                    yield f"data: {msg}\n\n"
+                for future in concurrent.futures.as_completed(futures):
+                    done_count += 1
+                    try:
+                        result = future.result()
+                    except Exception:
+                        result = None
+
+                    if result:
+                        all_results.append(result)
+                        serialized = _serialize_result(result)
+                        msg = json.dumps({
+                            "type": "result",
+                            "data": serialized,
+                            "progress": {"done": done_count, "total": total},
+                        })
+                        yield f"data: {msg}\n\n"
+                    else:
+                        msg = json.dumps({
+                            "type": "progress",
+                            "progress": {"done": done_count, "total": total},
+                        })
+                        yield f"data: {msg}\n\n"
 
         # Final summary
         _scan_cache["results_full"] = all_results
