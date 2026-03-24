@@ -9,22 +9,61 @@ const ScannerResults = {
     vix: null,
     totalScanned: 0,
     elapsed: 0,
+    _renderTimer: null,
+
+    reset() {
+        this.signalCounts = {};
+        this.confirmationCounts = {};
+        this.totalScanned = 0;
+        this.elapsed = 0;
+    },
 
     async fetchVix() {
         try {
             const res = await fetch('/api/vix');
             const data = await res.json();
             this.vix = data;
+            this.render();
         } catch (_) {
             this.vix = { vix: null };
         }
     },
 
+    /** Called for each individual scan result as it streams in. */
+    addResult(r) {
+        // Count signal
+        const sig = r.signal || 'UNKNOWN';
+        this.signalCounts[sig] = (this.signalCounts[sig] || 0) + 1;
+
+        // Count individual confirmations
+        const detail = r.confirmation_detail || {};
+        for (const [name, passed] of Object.entries(detail)) {
+            if (!this.confirmationCounts[name]) {
+                this.confirmationCounts[name] = { pass: 0, fail: 0 };
+            }
+            if (passed) this.confirmationCounts[name].pass++;
+            else this.confirmationCounts[name].fail++;
+        }
+
+        this.totalScanned++;
+
+        // Throttle renders to every 500ms to avoid thrashing
+        if (!this._renderTimer) {
+            this._renderTimer = setTimeout(() => {
+                this._renderTimer = null;
+                this.render();
+            }, 500);
+        }
+    },
+
+    /** Called when scan completes with final summary. */
     update(summary) {
-        this.signalCounts = summary.signal_counts || {};
-        this.confirmationCounts = summary.confirmation_counts || {};
-        this.totalScanned = summary.total || 0;
+        // Use server totals as authoritative (handles errors/skips)
+        this.signalCounts = summary.signal_counts || this.signalCounts;
+        this.confirmationCounts = summary.confirmation_counts || this.confirmationCounts;
+        this.totalScanned = summary.total || this.totalScanned;
         this.elapsed = summary.elapsed || 0;
+        if (this._renderTimer) { clearTimeout(this._renderTimer); this._renderTimer = null; }
         this.render();
     },
 

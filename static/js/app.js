@@ -208,7 +208,8 @@ const App = {
 
         this.showTab('screener');
 
-        // Fetch VIX in background while scan runs
+        // Reset and fetch VIX in background while scan runs
+        ScannerResults.reset();
         ScannerResults.fetchVix();
 
         try {
@@ -252,6 +253,7 @@ const App = {
                         if (msg.type === 'result') {
                             this.allScanned = msg.progress.done;
                             const r = msg.data;
+                            ScannerResults.addResult(r);
 
                             const isHit = BULLISH_SIGNALS.includes(r.signal || '');
                             if (isHit) {
