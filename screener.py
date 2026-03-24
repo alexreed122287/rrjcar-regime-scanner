@@ -10,10 +10,14 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
+import os
+
 from data_loader import fetch_data, engineer_features, resolve_ticker
 from hmm_engine import RegimeDetector, REGIME_LABELS
 from backtester import compute_confirmations, get_current_signal
 from strategy_v2 import get_current_signal_v2
+
+_IS_CLOUD = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
 
 
 # ── Curated Watchlists (focused subsets for quick scans) ──
@@ -168,8 +172,10 @@ def scan_single_ticker(
         if len(feat_df) < 100:
             return None
 
-        # Train HMM
-        detector = RegimeDetector(n_regimes=n_regimes)
+        # Train HMM (fewer iterations + looser tolerance on cloud for speed)
+        hmm_iter = 50 if _IS_CLOUD else 100
+        hmm_tol = 1e-2 if _IS_CLOUD else 1e-4
+        detector = RegimeDetector(n_regimes=n_regimes, n_iter=hmm_iter, tol=hmm_tol)
         regime_df = detector.train(feat_df)
 
         # Current regime

@@ -196,9 +196,11 @@ async def run_scan_stream(req: ScanRequest):
             for sym in symbols
         ]
 
-        # Process in chunks to avoid overwhelming memory / OS process table
+        # Use threads on cloud (process spawn too expensive on 0.1 CPU)
+        # Use processes on desktop for true parallelism
         chunk_size = workers * 6
-        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+        PoolClass = concurrent.futures.ThreadPoolExecutor if _IS_CLOUD else concurrent.futures.ProcessPoolExecutor
+        with PoolClass(max_workers=workers) as executor:
             for chunk_start in range(0, total, chunk_size):
                 chunk = args_list[chunk_start:chunk_start + chunk_size]
                 futures = {executor.submit(_scan_ticker_light, a): a[0] for a in chunk}

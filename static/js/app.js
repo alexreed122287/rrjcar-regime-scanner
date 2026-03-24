@@ -175,10 +175,14 @@ const App = {
         const progressText = document.getElementById('batch-text');
         const metrics = document.getElementById('sidebar-metrics');
         const tabs = document.getElementById('sidebar-tabs');
+        const hitTape = document.getElementById('hit-tape');
+        const hitTapeList = document.getElementById('hit-tape-list');
 
         progress.classList.remove('hidden');
         metrics.classList.remove('hidden');
         tabs.classList.remove('hidden');
+        hitTape.classList.remove('hidden');
+        hitTapeList.innerHTML = '';
         progressFill.style.width = '0%';
 
         document.getElementById('btn-scan').disabled = true;
@@ -233,6 +237,7 @@ const App = {
                             // Keep ENTER + CONFIRMING (bullish signals)
                             if (BULLISH_SIGNALS.includes(r.signal || '')) {
                                 this.scanResults.push(r);
+                                this.addHitChip(r, hitTapeList);
                             }
 
                             const pct = (msg.progress.done / msg.progress.total * 100).toFixed(0);
@@ -276,6 +281,18 @@ const App = {
             this.abortController = null;
             this.scanning = false;
         }
+    },
+
+    addHitChip(r, container) {
+        const chip = document.createElement('span');
+        const isEnter = (r.signal || '').includes('ENTER');
+        chip.className = `hit-chip ${isEnter ? 'enter' : 'confirming'}`;
+        const sigLabel = isEnter ? 'ENTER' : 'CONF';
+        const chg = r.change_1d != null ? ` ${r.change_1d >= 0 ? '+' : ''}${r.change_1d.toFixed(1)}%` : '';
+        chip.innerHTML = `${r.symbol}<span class="chip-sig">${sigLabel}${chg}</span>`;
+        chip.onclick = () => this.drillDown(r.symbol);
+        container.appendChild(chip);
+        container.scrollTop = container.scrollHeight;
     },
 
     stopScan() {
