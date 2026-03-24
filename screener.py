@@ -195,14 +195,16 @@ def scan_single_ticker(
         price_20d_ago = None
 
         # Estimate bar counts for lookbacks based on interval
+        # For daily data, 1 day back = iloc[-2] (previous bar)
         bars_per_day = 7 if interval in ("1h", "60m") else 1
+        offset_1d = bars_per_day + 1 if bars_per_day == 1 else bars_per_day
 
-        if len(regime_df) > bars_per_day:
-            price_1d_ago = float(regime_df["Close"].iloc[-bars_per_day])
-        if len(regime_df) > 5 * bars_per_day:
-            price_5d_ago = float(regime_df["Close"].iloc[-5 * bars_per_day])
-        if len(regime_df) > 20 * bars_per_day:
-            price_20d_ago = float(regime_df["Close"].iloc[-20 * bars_per_day])
+        if len(regime_df) > offset_1d:
+            price_1d_ago = float(regime_df["Close"].iloc[-offset_1d])
+        if len(regime_df) > 5 * bars_per_day + 1:
+            price_5d_ago = float(regime_df["Close"].iloc[-(5 * bars_per_day + 1)])
+        if len(regime_df) > 20 * bars_per_day + 1:
+            price_20d_ago = float(regime_df["Close"].iloc[-(20 * bars_per_day + 1)])
 
         def pct_change(old, new):
             return round((new - old) / old * 100, 2) if old and old != 0 else None

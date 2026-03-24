@@ -14,6 +14,7 @@ const App = {
 
     async init() {
         await Settings.init();
+        Orders.init();
         this.bindEvents();
         this.loadConfig();
     },

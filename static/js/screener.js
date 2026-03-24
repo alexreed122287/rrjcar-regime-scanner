@@ -1,5 +1,6 @@
 /**
  * screener.js — Screener table rendering
+ * Clean column layout with headers, no RSI/ADX
  */
 
 const Screener = {
@@ -24,6 +25,22 @@ const Screener = {
             return;
         }
 
+        const table = document.createElement('div');
+        table.className = 'screener-table';
+
+        // Column headers
+        const header = document.createElement('div');
+        header.className = 'screener-header';
+        header.innerHTML = `
+            <span class="sh-symbol">Symbol</span>
+            <span class="sh-price">Price</span>
+            <span class="sh-change">Chg</span>
+            <span class="sh-regime">Regime</span>
+            <span class="sh-signal">Signal</span>
+            <span class="sh-conf">Confs</span>
+        `;
+        table.appendChild(header);
+
         const list = document.createElement('div');
         list.className = 'screener-list';
 
@@ -34,10 +51,10 @@ const Screener = {
 
             const priceStr = r.price ? `$${r.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '--';
             const chg = r.change_1d;
-            const chgHex = chg != null ? (chg >= 0 ? '#34d399' : '#f87171') : '#6b7280';
-            const chgStr = chg != null ? `<span style="color:${chgHex}">${chg >= 0 ? '+' : ''}${chg.toFixed(1)}%</span>` : '';
+            const chgHex = chg != null && chg !== 0 ? (chg >= 0 ? '#34d399' : '#f87171') : '#6b7280';
+            const chgStr = chg != null && chg !== 0 ? `${chg >= 0 ? '+' : ''}${chg.toFixed(1)}%` : '--';
 
-            const regimeHtml = r.regime_id != null ? this.regimeBadge(r.regime_id, r.regime_label, r.regime_confidence) : '';
+            const regimeHtml = r.regime_id != null ? this.regimeBadge(r.regime_id, r.regime_label, r.regime_confidence) : '<span class="sr-regime">--</span>';
 
             const { shortSig, sigHex } = this.signalInfo(r);
             const flash = (r.signal || '').includes('ENTER') || (r.signal || '').includes('EXIT') ? 'alert-flash' : '';
@@ -47,32 +64,19 @@ const Screener = {
             const ctRatio = cmet / Math.max(cTotal, 1);
             const ctHex = ctRatio >= 0.6 ? '#34d399' : (ctRatio >= 0.4 ? '#5eead4' : '#f87171');
 
-            let rsiHtml = '';
-            if (r.rsi != null) {
-                const rsiHex = r.rsi > 70 ? '#f87171' : (r.rsi < 30 ? '#34d399' : '#9ca3af');
-                rsiHtml = `<span style="color:${rsiHex}; font-size:0.8rem">RSI ${Math.round(r.rsi)}</span>`;
-            }
-
-            let adxHtml = '';
-            if (r.adx != null) {
-                const adxHex = r.adx > 25 ? '#34d399' : '#6b7280';
-                adxHtml = `<span style="color:${adxHex}; font-size:0.8rem">ADX ${Math.round(r.adx)}</span>`;
-            }
-
             row.innerHTML = `
                 <span class="sr-symbol">${r.symbol}</span>
                 <span class="sr-price">${priceStr}</span>
-                ${chgStr}
+                <span class="sr-change" style="color:${chgHex}">${chgStr}</span>
                 ${regimeHtml}
                 <span class="sr-sig ${flash}" style="color:${sigHex}">${shortSig}</span>
                 <span class="sr-conf" style="color:${ctHex}">${cmet}/${cTotal}</span>
-                ${rsiHtml}
-                ${adxHtml}
             `;
             list.appendChild(row);
         });
 
-        container.appendChild(list);
+        table.appendChild(list);
+        container.appendChild(table);
 
         // Errors
         if (errored.length) {
@@ -129,8 +133,6 @@ const Screener = {
                 return [...results].sort((a, b) => (b.regime_confidence || 0) - (a.regime_confidence || 0));
             case 'confirmations':
                 return [...results].sort((a, b) => (b.confirmations_met || 0) - (a.confirmations_met || 0));
-            case 'rsi':
-                return [...results].sort((a, b) => (a.rsi || 100) - (b.rsi || 100));
             case 'change':
                 return [...results].sort((a, b) => (b.change_1d || 0) - (a.change_1d || 0));
             default:

@@ -67,10 +67,9 @@ const DrillDown = {
                 </div>
 
                 <!-- TradingView Chart -->
-                <div id="tv-chart-container" style="margin:0.6rem 0; border-radius:6px; overflow:hidden; height:500px;"></div>
-
-                <!-- Regime Chart (Plotly) -->
-                <div class="chart-container" id="dd-price-chart"></div>
+                <div style="padding:2rem 0; margin:0.5rem 0;">
+                    <div id="tv-chart-container" style="border-radius:6px; overflow:hidden; height:500px;"></div>
+                </div>
 
                 <!-- Backtest trade history -->
                 <div id="dd-backtest-area"></div>
@@ -85,11 +84,6 @@ const DrillDown = {
 
             // Embed TradingView
             this.embedTradingView(data.symbol);
-
-            // Regime chart
-            if (data.chart_data) {
-                Charts.priceWithRegimes('dd-price-chart', data.chart_data, `${data.symbol} Regime Analysis`);
-            }
 
             // Auto-load backtest + options
             this.loadBacktest(data.symbol);
@@ -260,18 +254,9 @@ const DrillDown = {
                 </div>
             `;
 
-            // Trade history
+            // Trade history (no equity curve chart)
             if (area) {
-                let tradeHtml = '';
-                if (bt.equity_curve) {
-                    tradeHtml += '<div class="chart-container" id="dd-equity-chart"></div>';
-                }
-                tradeHtml += this.renderTradeTable(bt.trades);
-                area.innerHTML = tradeHtml;
-
-                if (bt.equity_curve) {
-                    Charts.equityCurve('dd-equity-chart', bt.equity_curve);
-                }
+                area.innerHTML = this.renderTradeTable(bt.trades);
             }
 
         } catch (err) {
@@ -353,6 +338,9 @@ const DrillDown = {
             });
 
             area.innerHTML = html;
+
+            // Populate Orders tab with top 3 contracts
+            Orders.setContracts(symbol, opts.recommendations);
 
             // Also populate the options area below
             document.getElementById('dd-options-area').innerHTML = '';

@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=8">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=9">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -103,6 +103,8 @@
     <div class="sidebar-tabs" id="sidebar-tabs">
         <button class="tab-btn active" data-tab="screener">Hits</button>
         <button class="tab-btn" data-tab="drilldown">Chart</button>
+        <button class="tab-btn" data-tab="orders">Orders</button>
+        <button class="tab-btn" data-tab="positions">Positions</button>
         <button class="tab-btn" data-tab="heatmap">Heatmap</button>
         <button class="tab-btn" data-tab="config">Config</button>
     </div>
@@ -129,7 +131,6 @@
                 <option value="signal">Signal Priority</option>
                 <option value="confidence">Confidence</option>
                 <option value="confirmations">Confirmations</option>
-                <option value="rsi">RSI (Low First)</option>
                 <option value="change">1D Change</option>
             </select>
         </div>
@@ -139,6 +140,24 @@
     <!-- Tab: Drill-Down -->
     <div class="tab-content" id="tab-drilldown">
         <div id="drilldown-content"></div>
+    </div>
+
+    <!-- Tab: Orders -->
+    <div class="tab-content" id="tab-orders">
+        <div id="orders-content">
+            <div style="color:var(--text-dim); padding:1rem; text-align:center; font-size:0.75rem;">
+                Select a ticker from Hits to see order recommendations.
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab: Positions -->
+    <div class="tab-content" id="tab-positions">
+        <div id="positions-content">
+            <div style="color:var(--text-dim); padding:1rem; text-align:center; font-size:0.75rem;">
+                No open positions.
+            </div>
+        </div>
     </div>
 
     <!-- Tab: Heatmap -->
@@ -240,12 +259,13 @@
 </div>
 
 <!-- Scripts -->
-<script src="/static/js/api.js?v=8"></script>
-<script src="/static/js/charts.js?v=8"></script>
-<script src="/static/js/screener.js?v=8"></script>
-<script src="/static/js/drilldown.js?v=8"></script>
-<script src="/static/js/settings.js?v=8"></script>
-<script src="/static/js/app.js?v=8"></script>
+<script src="/static/js/api.js?v=9"></script>
+<script src="/static/js/charts.js?v=9"></script>
+<script src="/static/js/screener.js?v=9"></script>
+<script src="/static/js/drilldown.js?v=9"></script>
+<script src="/static/js/orders.js?v=9"></script>
+<script src="/static/js/settings.js?v=9"></script>
+<script src="/static/js/app.js?v=9"></script>
 
 </body>
 </html>
