@@ -242,6 +242,14 @@ const App = {
                             document.getElementById('metric-entries').textContent = this.scanResults.length;
                             Screener.render(this.scanResults, document.getElementById('screener-content'));
 
+                        } else if (msg.type === 'progress') {
+                            // Progress-only update (failed/skipped ticker)
+                            this.allScanned = msg.progress.done;
+                            const pct = (msg.progress.done / msg.progress.total * 100).toFixed(0);
+                            progressFill.style.width = `${pct}%`;
+                            progressText.textContent = `${msg.progress.done}/${msg.progress.total} | ${this.scanResults.length} hits`;
+                            document.getElementById('metric-scanned').textContent = msg.progress.done;
+
                         } else if (msg.type === 'done') {
                             document.getElementById('scan-time').textContent = `${msg.summary.elapsed}s`;
                             progressText.textContent = `Done | ${this.allScanned} scanned | ${this.scanResults.length} hits | ${msg.summary.elapsed}s`;

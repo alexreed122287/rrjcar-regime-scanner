@@ -2,6 +2,7 @@
 
 import os
 import json
+import concurrent.futures
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -154,7 +155,7 @@ async def get_cached():
 
 @router.post("/scan/stream")
 async def run_scan_stream(req: ScanRequest):
-    """Stream scan results one ticker at a time via SSE."""
+    """Stream scan results with concurrent workers via SSE."""
     if req.custom_tickers.strip():
         symbols = [t.strip().upper() for t in req.custom_tickers.split(",") if t.strip()]
     else:
@@ -163,28 +164,51 @@ async def run_scan_stream(req: ScanRequest):
     if not symbols:
         return {"error": "No tickers to scan", "results": []}
 
+    workers = min(req.max_workers, _DEFAULT_WORKERS) if _IS_CLOUD else req.max_workers
+
     def generate():
         global _scan_cache
         _scan_cache["status"] = "scanning"
         all_results = []
+        done_count = 0
+        total = len(symbols)
         start = time.time()
 
-        for i, sym in enumerate(symbols):
-            result = scan_single_ticker(
-                sym, strategy=req.strategy, n_regimes=req.n_regimes,
-                min_confirmations=req.min_confs,
-                regime_confirm_bars=req.regime_confirm,
-                period_days=req.period_days,
-            )
-            if result:
-                all_results.append(result)
-                serialized = _serialize_result(result)
-                msg = json.dumps({
-                    "type": "result",
-                    "data": serialized,
-                    "progress": {"done": i + 1, "total": len(symbols)},
-                })
-                yield f"data: {msg}\n\n"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            future_to_sym = {
+                executor.submit(
+                    scan_single_ticker, sym,
+                    strategy=req.strategy, n_regimes=req.n_regimes,
+                    min_confirmations=req.min_confs,
+                    regime_confirm_bars=req.regime_confirm,
+                    period_days=req.period_days,
+                ): sym
+                for sym in symbols
+            }
+
+            for future in concurrent.futures.as_completed(future_to_sym):
+                done_count += 1
+                try:
+                    result = future.result()
+                except Exception:
+                    result = None
+
+                if result:
+                    all_results.append(result)
+                    serialized = _serialize_result(result)
+                    msg = json.dumps({
+                        "type": "result",
+                        "data": serialized,
+                        "progress": {"done": done_count, "total": total},
+                    })
+                    yield f"data: {msg}\n\n"
+                else:
+                    # Still send progress for failed tickers
+                    msg = json.dumps({
+                        "type": "progress",
+                        "progress": {"done": done_count, "total": total},
+                    })
+                    yield f"data: {msg}\n\n"
 
         # Final summary
         _scan_cache["results_full"] = all_results
