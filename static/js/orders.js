@@ -1,5 +1,5 @@
 /**
- * orders.js — Orders & Positions management
+ * orders.js &mdash; Orders & Positions management
  * Orders tab: top 3 contracts with BUY buttons
  * Positions tab: filled orders with live P&L
  */
@@ -16,7 +16,7 @@ const Orders = {
         this.renderPositions();
     },
 
-    /** Called from DrillDown when position sizing loads — populates Orders tab */
+    /** Called from DrillDown when position sizing loads - populates Orders tab */
     setContracts(symbol, recommendations) {
         this.pending = recommendations.slice(0, 3).map((r, i) => ({
             symbol,
@@ -44,7 +44,7 @@ const Orders = {
         }
 
         const sym = this.pending[0].symbol;
-        let html = `<div class="orders-header">${sym} — Top Contracts</div>`;
+        let html = `<div class="orders-header">${sym} &mdash; Top Contracts</div>`;
         html += '<div class="orders-list">';
 
         this.pending.forEach((o, i) => {
