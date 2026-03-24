@@ -190,6 +190,13 @@ const App = {
         document.getElementById('metric-scanned').textContent = '0';
         document.getElementById('metric-entries').textContent = '0';
         document.getElementById('scan-time').textContent = '--';
+
+        // Reset filters so all hits are visible immediately
+        Screener.currentFilter = 'All';
+        Screener.minConfidence = 0;
+        document.getElementById('filter-signal').value = 'All';
+        document.getElementById('filter-confidence').value = '0';
+
         this.showTab('screener');
 
         try {
@@ -234,18 +241,18 @@ const App = {
                             this.allScanned = msg.progress.done;
                             const r = msg.data;
 
-                            // Keep ENTER + CONFIRMING (bullish signals)
-                            if (BULLISH_SIGNALS.includes(r.signal || '')) {
+                            const isHit = BULLISH_SIGNALS.includes(r.signal || '');
+                            if (isHit) {
                                 this.scanResults.push(r);
-                                this.addHitChip(r, hitTapeList);
+                                Screener.render(this.scanResults, document.getElementById('screener-content'));
                             }
+                            this.addFeedLine(r, isHit, hitTapeList);
 
                             const pct = (msg.progress.done / msg.progress.total * 100).toFixed(0);
                             progressFill.style.width = `${pct}%`;
                             progressText.textContent = `${msg.progress.done}/${msg.progress.total} | ${this.scanResults.length} hits`;
                             document.getElementById('metric-scanned').textContent = msg.progress.done;
                             document.getElementById('metric-entries').textContent = this.scanResults.length;
-                            Screener.render(this.scanResults, document.getElementById('screener-content'));
 
                         } else if (msg.type === 'progress') {
                             // Progress-only update (failed/skipped ticker)
@@ -283,15 +290,28 @@ const App = {
         }
     },
 
-    addHitChip(r, container) {
-        const chip = document.createElement('span');
-        const isEnter = (r.signal || '').includes('ENTER');
-        chip.className = `hit-chip ${isEnter ? 'enter' : 'confirming'}`;
-        const sigLabel = isEnter ? 'ENTER' : 'CONF';
-        const chg = r.change_1d != null ? ` ${r.change_1d >= 0 ? '+' : ''}${r.change_1d.toFixed(1)}%` : '';
-        chip.innerHTML = `${r.symbol}<span class="chip-sig">${sigLabel}${chg}</span>`;
-        chip.onclick = () => this.drillDown(r.symbol);
-        container.appendChild(chip);
+    addFeedLine(r, isHit, container) {
+        const line = document.createElement('div');
+        if (isHit) {
+            const isEnter = (r.signal || '').includes('ENTER');
+            const sigLabel = isEnter ? 'ENTER' : 'CONFIRMING';
+            const conf = r.regime_confidence ? ` ${Math.round(r.regime_confidence * 100)}%` : '';
+            const chg = r.change_1d != null ? ` ${r.change_1d >= 0 ? '+' : ''}${r.change_1d.toFixed(1)}%` : '';
+            const cmet = r.confirmations_met || 0;
+            const ctot = r.confirmations_total || 12;
+            line.className = `feed-line hit ${isEnter ? 'hit-enter' : 'hit-conf'}`;
+            line.textContent = `>>> ${r.symbol} — ${sigLabel} | ${cmet}/${ctot} confs | ${r.regime_label || ''}${conf}${chg}`;
+            line.onclick = () => this.drillDown(r.symbol);
+        } else {
+            line.className = 'feed-line scan';
+            line.textContent = `    ${r.symbol} — ${r.regime_label || r.signal || 'skip'}`;
+        }
+        container.appendChild(line);
+        // Keep feed scrolled to bottom, trim old scan lines to save memory
+        if (container.children.length > 200) {
+            const old = container.querySelector('.feed-line.scan');
+            if (old) old.remove();
+        }
         container.scrollTop = container.scrollHeight;
     },
 

@@ -222,7 +222,7 @@ html, body {
 }
 .filter-bar select:focus { outline: none; border-bottom-color: var(--chrome); }
 
-/* Live Hit Tape */
+/* Live Hit Feed */
 .hit-tape { padding: 0.4rem 0; }
 .hit-tape.hidden { display: none; }
 .hit-tape-label {
@@ -231,23 +231,23 @@ html, body {
     opacity: 0.7;
 }
 .hit-tape-list {
-    display: flex; flex-wrap: wrap; gap: 0.3rem; max-height: 120px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 0; max-height: 160px;
+    overflow-y: auto; font-family: var(--mono); font-size: 0.65rem;
+    background: #050505; border-radius: 3px; padding: 0.2rem 0;
 }
-.hit-chip {
-    display: inline-flex; align-items: center; gap: 0.2rem;
-    padding: 0.15rem 0.4rem; border-radius: 3px;
-    font-family: var(--mono); font-size: 0.65rem; font-weight: 500;
-    cursor: pointer; transition: all 0.15s;
-    animation: chipIn 0.3s ease-out;
+.feed-line {
+    padding: 0.1rem 0.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    animation: fadeIn 0.2s ease-out;
 }
-.hit-chip:hover { filter: brightness(1.3); transform: scale(1.05); }
-.hit-chip.enter { background: #065f46; color: #34d399; border: 1px solid #34d39944; }
-.hit-chip.confirming { background: #1a2e2a; color: #5eead4; border: 1px solid #5eead444; }
-.hit-chip .chip-sig { font-size: 0.5rem; opacity: 0.7; }
-@keyframes chipIn {
-    from { opacity: 0; transform: scale(0.8) translateY(-4px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+.feed-line.scan { color: #444; }
+.feed-line.hit {
+    color: #34d399; font-weight: 600; cursor: pointer;
+    background: #065f4620; border-left: 2px solid #34d399;
 }
+.feed-line.hit:hover { background: #065f4640; }
+.feed-line.hit-enter { color: #34d399; border-left-color: #34d399; }
+.feed-line.hit-conf { color: #5eead4; border-left-color: #5eead4; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Metrics */
 .sidebar-metrics { padding: 0.5rem 0; }
