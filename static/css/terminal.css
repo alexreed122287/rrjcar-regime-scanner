@@ -518,6 +518,59 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .position-gain { font-weight: 600; font-size: 0.8rem; }
 .position-gain-pct { font-weight: 500; }
 
+/* ==========================================
+   SCANNER RESULTS TAB
+   ========================================== */
+.results-card {
+    margin-bottom: 0.8rem;
+}
+.results-card-title {
+    font-family: var(--mono); font-size: 0.6rem; color: var(--chrome);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem;
+    display: flex; align-items: baseline; gap: 0.3rem;
+}
+.results-card-sub {
+    font-size: 0.5rem; color: var(--text-dim); letter-spacing: 0.5px; text-transform: none;
+}
+.results-vix-row {
+    display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.2rem;
+}
+.results-vix-value {
+    font-size: 1.6rem; font-weight: 700; font-family: var(--mono);
+}
+.results-vix-change {
+    font-size: 0.75rem; font-family: var(--mono);
+}
+.results-vix-warn {
+    font-size: 0.6rem; font-family: var(--mono); color: #f87171;
+    background: #451a1a; padding: 0.2rem 0.4rem; border-radius: 3px; margin-top: 0.2rem;
+}
+.results-vix-caution {
+    font-size: 0.6rem; font-family: var(--mono); color: #fbbf24;
+    background: #422006; padding: 0.2rem 0.4rem; border-radius: 3px; margin-top: 0.2rem;
+}
+.results-row {
+    display: grid; grid-template-columns: 7rem 1fr 3rem 3rem;
+    gap: 0.4rem; align-items: center; padding: 0.2rem 0;
+    font-family: var(--mono); font-size: 0.7rem;
+}
+.results-row-label {
+    color: var(--chrome); font-size: 0.65rem; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+}
+.results-row-bar-bg {
+    height: 4px; background: #111; border-radius: 2px; overflow: hidden;
+}
+.results-row-bar {
+    height: 100%; border-radius: 2px; transition: width 0.4s ease;
+}
+.results-row-count {
+    text-align: right; font-weight: 600; font-size: 0.65rem;
+}
+.results-row-pct {
+    text-align: right; color: var(--text-dim); font-size: 0.6rem;
+}
+
 .hidden { display: none !important; }
 
 /* Mobile */

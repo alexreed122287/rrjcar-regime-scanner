@@ -11,6 +11,10 @@ import time
 
 from screener import scan_watchlist, WATCHLISTS, scan_single_ticker
 from hmm_engine import REGIME_LABELS
+import yfinance as yf
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -241,17 +245,62 @@ async def run_scan_stream(req: ScanRequest):
         entries = sum(1 for r in all_results if "ENTER" in (r.get("signal") or ""))
         exits = sum(1 for r in all_results if "EXIT" in (r.get("signal") or ""))
 
+        # Count hits per signal type
+        signal_counts = {}
+        for r in all_results:
+            sig = r.get("signal") or "UNKNOWN"
+            signal_counts[sig] = signal_counts.get(sig, 0) + 1
+
+        # Count hits per individual confirmation (across all scanned tickers)
+        confirmation_counts = {}
+        for r in all_results:
+            detail = r.get("confirmation_detail") or {}
+            for name, passed in detail.items():
+                if name not in confirmation_counts:
+                    confirmation_counts[name] = {"pass": 0, "fail": 0}
+                if passed:
+                    confirmation_counts[name]["pass"] += 1
+                else:
+                    confirmation_counts[name]["fail"] += 1
+
+        # Log scanner results
+        logger.info(f"Scan complete: {len(all_results)} tickers in {elapsed}s")
+        logger.info(f"Signal counts: {signal_counts}")
+        logger.info(f"Confirmation hit rates: { {k: v['pass'] for k, v in confirmation_counts.items()} }")
+
         summary = json.dumps({
             "type": "done",
             "summary": {
                 "total": len(all_results), "bullish": bulls, "bearish": bears,
                 "neutral": neutrals, "entries": entries, "exits": exits,
                 "elapsed": elapsed,
+                "signal_counts": signal_counts,
+                "confirmation_counts": confirmation_counts,
             },
         })
         yield f"data: {summary}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.get("/vix")
+async def get_vix():
+    """Fetch current VIX level."""
+    try:
+        import pandas as pd
+        vix = yf.Ticker("^VIX")
+        hist = vix.history(period="5d", interval="1d")
+        if hist is not None and not hist.empty:
+            if isinstance(hist.columns, pd.MultiIndex):
+                hist.columns = hist.columns.get_level_values(0)
+            current = float(hist["Close"].iloc[-1])
+            prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else current
+            change = round(current - prev, 2)
+            change_pct = round((current - prev) / prev * 100, 2) if prev else 0
+            return {"vix": round(current, 2), "change": change, "change_pct": change_pct}
+    except Exception as e:
+        logger.warning(f"VIX fetch failed: {e}")
+    return {"vix": None, "change": None, "change_pct": None}
 
 
 @router.get("/scan/{symbol}")

@@ -208,6 +208,9 @@ const App = {
 
         this.showTab('screener');
 
+        // Fetch VIX in background while scan runs
+        ScannerResults.fetchVix();
+
         try {
             await Settings.save();
             const params = Settings.gather();
@@ -274,6 +277,7 @@ const App = {
                         } else if (msg.type === 'done') {
                             document.getElementById('scan-time').textContent = `${msg.summary.elapsed}s`;
                             progressText.textContent = `Done | ${this.allScanned} scanned | ${this.scanResults.length} hits | ${msg.summary.elapsed}s`;
+                            ScannerResults.update(msg.summary);
                         }
                     } catch (_) {}
                 }

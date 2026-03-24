@@ -102,11 +102,21 @@
     <!-- Tabs -->
     <div class="sidebar-tabs" id="sidebar-tabs">
         <button class="tab-btn active" data-tab="screener">Hits</button>
+        <button class="tab-btn" data-tab="results">Results</button>
         <button class="tab-btn" data-tab="drilldown">Chart</button>
         <button class="tab-btn" data-tab="orders">Orders</button>
         <button class="tab-btn" data-tab="positions">Positions</button>
         <button class="tab-btn" data-tab="heatmap">Heatmap</button>
         <button class="tab-btn" data-tab="config">Config</button>
+    </div>
+
+    <!-- Tab: Scanner Results -->
+    <div class="tab-content" id="tab-results">
+        <div id="results-content">
+            <div style="color:var(--text-dim); padding:1rem; text-align:center; font-size:0.75rem;">
+                Run a scan to see results summary.
+            </div>
+        </div>
     </div>
 
     <!-- Tab: Hits -->
@@ -262,6 +272,7 @@
 <script src="/static/js/api.js?v=10"></script>
 <script src="/static/js/charts.js?v=10"></script>
 <script src="/static/js/screener.js?v=10"></script>
+<script src="/static/js/scanner-results.js?v=10"></script>
 <script src="/static/js/drilldown.js?v=10"></script>
 <script src="/static/js/orders.js?v=10"></script>
 <script src="/static/js/settings.js?v=10"></script>
