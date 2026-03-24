@@ -11,104 +11,226 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
 import os
+import logging
 
 from data_loader import fetch_data, engineer_features, resolve_ticker
 from hmm_engine import RegimeDetector, REGIME_LABELS
 from backtester import compute_confirmations, get_current_signal
 from strategy_v2 import get_current_signal_v2
 
+logger = logging.getLogger(__name__)
+
 _IS_CLOUD = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
 
+# ── Ticker Info Cache (sector, industry, options availability) ──
+_ticker_info_cache: Dict[str, Dict] = {}
 
-# ── Curated Watchlists (focused subsets for quick scans) ──
+# Sectors and industries to exclude from screening
+EXCLUDED_SECTORS = {"Healthcare"}
+EXCLUDED_INDUSTRIES_KEYWORDS = {"Biotechnology", "Pharmaceutical", "Pharma", "Drug"}
+
+# Minimum screening thresholds
+MIN_PRICE = 1.0
+MIN_AVG_VOLUME_30D = 500_000
+
+
+def _fetch_ticker_info(symbol: str) -> Dict:
+    """
+    Fetch sector, industry, and options availability for a ticker via yfinance.
+    Results are cached in-memory to avoid repeated API calls.
+    """
+    if symbol in _ticker_info_cache:
+        return _ticker_info_cache[symbol]
+
+    info = {"sector": None, "industry": None, "has_options": False}
+
+    # Skip crypto symbols — they don't have sectors/options in the traditional sense
+    if symbol.endswith("-USD"):
+        info["sector"] = "Crypto"
+        info["industry"] = "Cryptocurrency"
+        info["has_options"] = False
+        _ticker_info_cache[symbol] = info
+        return info
+
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(symbol)
+
+        # Get sector and industry from info
+        tk_info = tk.info or {}
+        info["sector"] = tk_info.get("sector")
+        info["industry"] = tk_info.get("industry")
+
+        # Check if options are available
+        try:
+            expiry_dates = tk.options
+            info["has_options"] = bool(expiry_dates and len(expiry_dates) > 0)
+        except Exception:
+            info["has_options"] = False
+
+        # ETFs often don't have sector — classify by fund type
+        if not info["sector"] and tk_info.get("quoteType") == "ETF":
+            info["sector"] = "ETF"
+            info["industry"] = tk_info.get("category", "ETF")
+            # Most liquid ETFs have options
+            try:
+                expiry_dates = tk.options
+                info["has_options"] = bool(expiry_dates and len(expiry_dates) > 0)
+            except Exception:
+                pass
+
+    except Exception as e:
+        logger.debug(f"[Screener] Info fetch failed for {symbol}: {e}")
+
+    _ticker_info_cache[symbol] = info
+    return info
+
+
+def _is_excluded_sector_or_industry(info: Dict) -> bool:
+    """Check if a ticker should be excluded based on sector/industry."""
+    sector = (info.get("sector") or "").strip()
+    industry = (info.get("industry") or "").strip()
+
+    if sector in EXCLUDED_SECTORS:
+        return True
+
+    for keyword in EXCLUDED_INDUSTRIES_KEYWORDS:
+        if keyword.lower() in industry.lower():
+            return True
+
+    return False
+
+
+def _passes_prescreen(symbol: str, raw_df: pd.DataFrame) -> bool:
+    """
+    Check if ticker passes pre-screening filters:
+    - Price > $1
+    - 30-day average volume > 500,000
+    """
+    if raw_df is None or raw_df.empty:
+        return False
+
+    # Current price check
+    current_price = float(raw_df["Close"].iloc[-1])
+    if current_price < MIN_PRICE:
+        return False
+
+    # 30-day average volume check
+    recent_volume = raw_df["Volume"].tail(30)
+    avg_volume_30d = float(recent_volume.mean())
+    if avg_volume_30d < MIN_AVG_VOLUME_30D:
+        return False
+
+    return True
+
+
+# ── Curated Watchlists (sector-specific, optionable stocks only) ──
+# Excludes Healthcare sector and Biotech/Pharmaceutical industries
 WATCHLISTS = {
-    "Mag 7": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"],
-    "Semiconductors": [
+    # ── Sector: Technology ──
+    "Technology — Mag 7": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"],
+    "Technology — Semiconductors": [
         "NVDA", "AMD", "AVGO", "QCOM", "TSM", "MU", "MRVL", "INTC", "TXN", "LRCX",
         "KLAC", "AMAT", "ASML", "SMCI", "ADI", "NXPI", "ON", "MCHP", "SWKS", "MPWR", "ARM",
     ],
-    "Software / Cloud": [
+    "Technology — Software / Cloud": [
         "CRM", "NOW", "ADBE", "INTU", "SNOW", "DDOG", "CRWD", "ZS", "NET", "PANW",
         "PLTR", "MDB", "TEAM", "WDAY", "HUBS", "VEEV", "OKTA", "SHOP", "SQ", "PYPL",
     ],
-    "AI / Quantum": [
+    "Technology — AI / Quantum": [
         "NVDA", "PLTR", "AI", "SOUN", "BBAI", "IONQ", "RGTI", "QUBT", "ARM", "SMCI",
     ],
-    "Small-Cap Defense / Space": [
-        "RKLB", "RCAT", "LUNR", "ASTS", "KTOS", "AVAV", "JOBY", "ACHR", "PL", "AXON",
+    # ── Sector: Industrials ──
+    "Industrials — Defense / Aerospace": [
+        "BA", "LMT", "RTX", "NOC", "GD", "KTOS", "AVAV", "AXON",
     ],
-    "3x Leveraged Bull": [
-        "TQQQ", "SPXL", "UPRO", "SOXL", "TNA", "LABU", "FNGU", "TECL", "FAS",
-        "DFEN", "DRN", "NAIL", "KORU", "YINN", "NVDL", "TSLL", "BULZ",
-        "HIBL", "PILL", "WANT", "WEBL", "RETL", "MIDU", "CURE", "TPOR",
+    "Industrials — Manufacturing / Logistics": [
+        "GE", "HON", "CAT", "DE", "UPS", "FDX", "UNP", "CSX", "NSC", "WM", "RSG",
+    ],
+    "Industrials — Space": [
+        "RKLB", "RCAT", "LUNR", "ASTS", "JOBY", "ACHR", "PL",
+    ],
+    # ── Sector: Energy ──
+    "Energy — Oil & Gas": [
+        "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "VLO", "PSX", "DVN", "OXY",
+        "HES", "HAL", "FANG", "BKR", "MRO", "APA",
+    ],
+    # ── Sector: Financials ──
+    "Financials — Banks": [
+        "JPM", "BAC", "WFC", "GS", "MS", "C", "SCHW", "USB", "PNC", "TFC", "COF",
+    ],
+    "Financials — Capital Markets / Insurance": [
+        "BLK", "AXP", "ICE", "CME", "MCO", "SPGI", "AIG", "MET",
+    ],
+    "Financials — Fintech": [
+        "PYPL", "SQ", "SOFI", "AFRM", "UPST", "LC", "NU", "HOOD",
+    ],
+    # ── Sector: Consumer Discretionary ──
+    "Consumer Discretionary — Retail": [
+        "AMZN", "WMT", "COST", "TGT", "HD", "LOW", "NKE", "ETSY",
+    ],
+    "Consumer Discretionary — Restaurants / Leisure": [
+        "SBUX", "MCD", "DIS", "NFLX", "ABNB", "BKNG", "DKNG", "PENN",
+    ],
+    "Consumer Discretionary — Mobility": [
+        "TSLA", "UBER", "LYFT", "DASH",
+    ],
+    # ── Sector: Consumer Staples ──
+    "Consumer Staples": [
+        "PG", "KO", "PEP", "CL", "MDLZ", "KHC", "PM", "MO", "WBA",
+    ],
+    # ── Sector: Communication Services ──
+    "Communication Services": [
+        "META", "GOOGL", "GOOG", "NFLX", "DIS", "CMCSA", "CHTR", "T", "VZ", "TMUS",
+    ],
+    # ── Sector: Real Estate ──
+    "Real Estate": [
+        "AMT", "SPG", "DLR", "PSA", "O", "WELL", "AVB", "EQR",
+    ],
+    # ── Sector: Utilities ──
+    "Utilities": [
+        "NEE", "DUK", "SO", "EXC", "AEP", "SRE", "D", "ED",
+    ],
+    # ── Sector: Materials ──
+    "Materials": [
+        "LIN", "APD", "ECL", "SHW", "NEM", "FCX", "NUE", "DOW",
+    ],
+    # ── Crypto ──
+    "Crypto — Digital Assets": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD"],
+    "Crypto — Stocks": ["COIN", "MSTR", "HOOD", "RIOT", "MARA", "CLSK"],
+    # ── Leveraged / Inverse ETFs ──
+    "Leveraged — 3x Bull": [
+        "TQQQ", "SPXL", "UPRO", "SOXL", "TNA", "FNGU", "TECL", "FAS",
+        "DFEN", "DRN", "NAIL", "YINN", "NVDL", "TSLL", "BULZ",
+        "HIBL", "WANT", "WEBL", "RETL", "MIDU", "TPOR",
         "EURL", "EDC", "BNKU", "INDL", "MEXX", "UBOT", "CONL", "DUSL",
     ],
-    "3x Leveraged Bear": [
-        "SQQQ", "SPXS", "SOXS", "TZA", "LABD", "FNGD", "TECS", "FAZ", "DRV", "YANG",
+    "Leveraged — 3x Bear": [
+        "SQQQ", "SPXS", "SOXS", "TZA", "FNGD", "TECS", "FAZ", "DRV", "YANG",
         "HIBS", "WEBS", "ERY", "EDZ", "BERZ", "SH", "SPDN",
     ],
-    "3x Inverse Single-Stock": [
+    "Leveraged — 3x Inverse Single-Stock": [
         "NVDD", "TSLS", "AMZD", "MSFD", "AAPLD",
     ],
-    "2x Leveraged Bull": [
+    "Leveraged — 2x Bull": [
         "QLD", "SSO", "UWM", "ROM", "UYG", "DIG", "UCO", "AGQ", "NUGT", "BOIL",
-        "BIB", "UGE", "UCC", "UPW", "SAA", "URE", "UXI", "MVV", "CWEB", "JNUG",
+        "UGE", "UCC", "UPW", "SAA", "URE", "UXI", "MVV", "CWEB", "JNUG",
     ],
-    "2x Leveraged Bear": [
+    "Leveraged — 2x Bear": [
         "QID", "SDS", "TWM", "SKF", "DUG", "SCO", "ZSL", "DUST", "KOLD",
-        "REK", "SZK", "SCC", "SRS", "SIJ", "SDD", "MZZ", "BIS", "JDST",
+        "REK", "SZK", "SCC", "SRS", "SIJ", "SDD", "MZZ", "JDST",
     ],
+    # ── Volatility ──
     "Volatility": [
         "UVXY", "SVXY", "VXX", "VIXY", "SVOL",
     ],
-    "Crypto": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD"],
-    "Crypto Stocks": ["COIN", "MSTR", "HOOD", "RIOT", "MARA", "CLSK"],
+    # ── Broad Market ETFs ──
     "Index ETFs": [
         "SPY", "QQQ", "IWM", "DIA", "RSP", "VTI", "VOO", "MDY", "IJR",
     ],
     "Sector ETFs": [
-        "XLK", "XLF", "XLE", "XLV", "XLI", "XLC", "XLY", "XLP", "XLU", "XLB",
-        "SMH", "SOXX", "IGV", "ARKK", "XBI", "GDX", "GLD", "TLT",
-    ],
-    "Biotech / Healthcare": [
-        "MRNA", "BNTX", "REGN", "VRTX", "AMGN", "GILD", "BIIB", "ISRG", "DXCM",
-        "ILMN", "TMO", "ABT", "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "BMY",
-    ],
-    "Energy / Oil": [
-        "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "VLO", "PSX", "DVN", "OXY",
-        "HES", "HAL", "FANG", "BKR", "MRO", "APA",
-    ],
-    "Financials / Banks": [
-        "JPM", "BAC", "WFC", "GS", "MS", "C", "SCHW", "BLK", "AXP", "USB",
-        "PNC", "TFC", "COF", "ICE", "CME", "MCO", "SPGI",
-    ],
-    "Consumer / Retail": [
-        "AMZN", "WMT", "COST", "TGT", "HD", "LOW", "NKE", "SBUX", "MCD",
-        "DIS", "NFLX", "ABNB", "BKNG", "UBER", "LYFT", "DASH", "ETSY",
-    ],
-    "Industrial / Defense": [
-        "BA", "LMT", "RTX", "NOC", "GD", "GE", "HON", "CAT", "DE", "UPS",
-        "FDX", "UNP", "CSX", "NSC", "WM", "RSG",
-    ],
-    "S&P 100": [
-        "AAPL", "ABBV", "ABT", "ACN", "ADBE", "AIG", "AMGN", "AMT", "AMZN", "AVGO",
-        "AXP", "BA", "BAC", "BK", "BKNG", "BLK", "BMY", "BRK-B", "C", "CAT",
-        "CHTR", "CL", "CMCSA", "COF", "COP", "COST", "CRM", "CSCO", "CVS", "CVX",
-        "DE", "DHR", "DIS", "DOW", "DUK", "EMR", "EXC", "F", "FDX", "GD",
-        "GE", "GILD", "GM", "GOOG", "GOOGL", "GS", "HD", "HON", "IBM", "INTC",
-        "INTU", "JNJ", "JPM", "KHC", "KO", "LIN", "LLY", "LMT", "LOW", "MA",
-        "MCD", "MDLZ", "MDT", "MET", "META", "MMM", "MO", "MRK", "MS", "MSFT",
-        "NEE", "NFLX", "NKE", "NVDA", "ORCL", "PEP", "PFE", "PG", "PM", "PYPL",
-        "QCOM", "RTX", "SBUX", "SCHW", "SO", "SPG", "T", "TGT", "TMO", "TMUS",
-        "TSLA", "TXN", "UNH", "UNP", "UPS", "USB", "V", "VZ", "WBA", "WFC",
-        "WMT", "XOM",
-    ],
-    "Russell 2000 Highlights": [
-        "SMCI", "AEHR", "CRNX", "IREN", "CLSK", "BTBT", "CIFR", "HIVE", "BITF",
-        "GENI", "ASAN", "DKNG", "PENN", "MGNI", "TTD", "PUBM", "CRSP", "BEAM",
-        "NTLA", "EDIT", "RXRX", "DOCS", "GDRX", "TDOC", "HIMS", "ACHR", "JOBY",
-        "LILM", "EVTL", "RKLB", "ASTR", "MNTS", "RDW", "ASTS", "BKSY", "PL",
-        "LUNR", "SPCE", "AFRM", "UPST", "SOFI", "LC", "NU",
+        "XLK", "XLF", "XLE", "XLI", "XLC", "XLY", "XLP", "XLU", "XLB",
+        "SMH", "SOXX", "IGV", "ARKK", "GDX", "GLD", "TLT",
     ],
 }
 
@@ -165,8 +287,20 @@ def scan_single_ticker(
     try:
         ticker = resolve_ticker(symbol)
 
+        # Fetch sector/industry info and check exclusions
+        tk_info = _fetch_ticker_info(symbol)
+        if _is_excluded_sector_or_industry(tk_info):
+            return None
+        if not tk_info.get("has_options", False):
+            return None
+
         # Fetch and prepare data
         raw_df = fetch_data(symbol=symbol, period_days=period_days, interval=interval)
+
+        # Pre-screen: price > $1, 30-day avg volume > 500K
+        if not _passes_prescreen(symbol, raw_df):
+            return None
+
         feat_df = engineer_features(raw_df)
 
         if len(feat_df) < 100:
@@ -231,6 +365,8 @@ def scan_single_ticker(
         return {
             "symbol": symbol.upper(),
             "ticker": ticker,
+            "sector": tk_info.get("sector"),
+            "industry": tk_info.get("industry"),
             "price": price_now,
             "change_bar": pct_change(price_prev, price_now),
             "change_1d": pct_change(price_1d_ago, price_now),
@@ -372,7 +508,7 @@ def scan_watchlist(
 def results_to_dataframe(results: List[Dict]) -> pd.DataFrame:
     """Convert scan results to a clean DataFrame for display (drops internal objects)."""
     display_fields = [
-        "symbol", "price", "change_1d", "change_5d",
+        "symbol", "sector", "industry", "price", "change_1d", "change_5d",
         "regime_label", "regime_confidence", "regime_streak",
         "signal", "confirmations_met", "rsi", "adx",
         "regime_changed", "prev_regime", "error",

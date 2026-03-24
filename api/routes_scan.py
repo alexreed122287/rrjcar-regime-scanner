@@ -27,7 +27,7 @@ _DEFAULT_WORKERS = 2 if _IS_CLOUD else 6
 
 
 class ScanRequest(BaseModel):
-    watchlist: str = "Mag 7"
+    watchlist: str = "Technology — Mag 7"
     custom_tickers: str = ""
     strategy: str = "v2"
     n_regimes: int = 5 if _IS_CLOUD else 7
