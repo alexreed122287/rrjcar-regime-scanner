@@ -32,6 +32,14 @@ const App = {
             btn.onclick = () => this.showTab(btn.dataset.tab);
         });
 
+        // Live feed toggle
+        document.getElementById('hit-tape-toggle').onclick = () => {
+            const list = document.getElementById('hit-tape-list');
+            const arrow = document.getElementById('feed-arrow');
+            list.classList.toggle('hidden');
+            arrow.innerHTML = list.classList.contains('hidden') ? '&#9654;' : '&#9660;';
+        };
+
         // Section toggles
         document.querySelectorAll('.section-toggle').forEach(t => {
             t.onclick = () => {

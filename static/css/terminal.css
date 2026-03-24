@@ -225,6 +225,7 @@ html, body {
 /* Live Hit Feed */
 .hit-tape { padding: 0.4rem 0; }
 .hit-tape.hidden { display: none; }
+.hit-tape-list.hidden { display: none; }
 .hit-tape-label {
     font-family: var(--mono); font-size: 0.5rem; color: var(--accent);
     text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.25rem;
