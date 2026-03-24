@@ -199,6 +199,28 @@ html, body {
     font-size: 0.6rem; color: var(--text-dim); font-family: var(--mono);
     margin-top: 0.2rem; text-align: center;
 }
+.progress-row { display: flex; align-items: center; gap: 0.5rem; }
+.btn-stop {
+    padding: 0.25rem 0.8rem; border: none; border-radius: 3px;
+    background: linear-gradient(180deg, #f87171, #dc2626);
+    color: #000; font-weight: 700; font-size: 0.7rem; cursor: pointer;
+    font-family: var(--font); letter-spacing: 0.5px; white-space: nowrap;
+    text-transform: uppercase; transition: all 0.15s;
+}
+.btn-stop:hover { filter: brightness(1.15); }
+.btn-stop.hidden { display: none; }
+
+/* Filter bar */
+.filter-bar {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; padding: 0.3rem 0;
+}
+.filter-bar select {
+    flex: 1 1 auto; min-width: 0;
+    background: var(--bg); color: var(--chrome); border: none;
+    border-bottom: 1px solid #222; border-radius: 0;
+    padding: 0.4rem 0.3rem; font-size: 0.7rem; font-family: var(--mono);
+}
+.filter-bar select:focus { outline: none; border-bottom-color: var(--chrome); }
 
 /* Metrics */
 .sidebar-metrics { padding: 0.5rem 0; }
@@ -408,4 +430,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
     .settings-grid { grid-template-columns: 1fr; }
     .metrics-grid { grid-template-columns: repeat(2, 1fr); }
     .conf-grid { grid-template-columns: 1fr; }
+    .filter-bar { flex-direction: column; }
+    .filter-bar select { width: 100%; padding: 0.5rem 0.3rem; font-size: 0.75rem; min-height: 36px; }
 }

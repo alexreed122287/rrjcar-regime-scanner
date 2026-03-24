@@ -10,6 +10,7 @@ const App = {
     scanResults: [],
     allScanned: 0,
     scanning: false,
+    abortController: null,
 
     async init() {
         await Settings.init();
@@ -22,6 +23,7 @@ const App = {
         document.getElementById('sidebar-close').onclick = () => this.closeSidebar();
         document.getElementById('sidebar-overlay').onclick = () => this.closeSidebar();
         document.getElementById('btn-scan').onclick = () => this.runScan();
+        document.getElementById('btn-stop').onclick = () => this.stopScan();
         document.getElementById('btn-save-config').onclick = () => this.saveConfig();
         document.getElementById('btn-connect-tradier').onclick = () => this.connectTradier();
 
@@ -180,6 +182,7 @@ const App = {
         progressFill.style.width = '0%';
 
         document.getElementById('btn-scan').disabled = true;
+        document.getElementById('btn-stop').classList.remove('hidden');
         document.getElementById('metric-scanned').textContent = '0';
         document.getElementById('metric-entries').textContent = '0';
         document.getElementById('scan-time').textContent = '--';
@@ -199,10 +202,12 @@ const App = {
                 bullish_only: false,
             };
 
+            this.abortController = new AbortController();
             const res = await fetch('/api/scan/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
+                signal: this.abortController.signal,
             });
 
             const reader = res.body.getReader();
@@ -251,11 +256,23 @@ const App = {
             }
 
         } catch (err) {
-            document.getElementById('screener-content').innerHTML =
-                `<div style="color:var(--red); padding:0.5rem;">${err.message}</div>`;
+            if (err.name !== 'AbortError') {
+                document.getElementById('screener-content').innerHTML =
+                    `<div style="color:var(--red); padding:0.5rem;">${err.message}</div>`;
+            } else {
+                progressText.textContent = `Stopped | ${this.allScanned} scanned | ${this.scanResults.length} hits`;
+            }
         } finally {
             document.getElementById('btn-scan').disabled = false;
+            document.getElementById('btn-stop').classList.add('hidden');
+            this.abortController = null;
             this.scanning = false;
+        }
+    },
+
+    stopScan() {
+        if (this.abortController) {
+            this.abortController.abort();
         }
     },
 

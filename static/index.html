@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=5">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=6">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -73,7 +73,10 @@
 
     <!-- Progress -->
     <div class="sidebar-progress hidden" id="sidebar-progress">
-        <div class="batch-bar"><div class="batch-fill" id="batch-fill"></div></div>
+        <div class="progress-row">
+            <div class="batch-bar" style="flex:1;"><div class="batch-fill" id="batch-fill"></div></div>
+            <button class="btn-stop hidden" id="btn-stop">STOP</button>
+        </div>
         <div class="batch-text" id="batch-text">Scanning...</div>
     </div>
 
@@ -100,6 +103,30 @@
 
     <!-- Tab: Hits -->
     <div class="tab-content active" id="tab-screener">
+        <div class="filter-bar" id="filter-bar">
+            <select id="filter-signal" onchange="Screener.currentFilter=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                <option value="All">All Signals</option>
+                <option value="LONG -- ENTER">ENTER</option>
+                <option value="LONG -- CONFIRMING">CONFIRMING</option>
+                <option value="LONG -- HOLD">HOLD</option>
+                <option value="EXIT -- REGIME FLIP">EXIT</option>
+            </select>
+            <select id="filter-confidence" onchange="Screener.minConfidence=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                <option value="0">All Confidence</option>
+                <option value="0.90">&ge; 90%</option>
+                <option value="0.80">&ge; 80%</option>
+                <option value="0.70">&ge; 70%</option>
+                <option value="0.60">&ge; 60%</option>
+                <option value="0.50">&ge; 50%</option>
+            </select>
+            <select id="filter-sort" onchange="Screener.currentSort=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                <option value="signal">Signal Priority</option>
+                <option value="confidence">Confidence</option>
+                <option value="confirmations">Confirmations</option>
+                <option value="rsi">RSI (Low First)</option>
+                <option value="change">1D Change</option>
+            </select>
+        </div>
         <div id="screener-content"></div>
     </div>
 
@@ -207,12 +234,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="/static/js/api.js?v=5"></script>
-<script src="/static/js/charts.js?v=5"></script>
-<script src="/static/js/screener.js?v=5"></script>
-<script src="/static/js/drilldown.js?v=5"></script>
-<script src="/static/js/settings.js?v=5"></script>
-<script src="/static/js/app.js?v=5"></script>
+<script src="/static/js/api.js?v=6"></script>
+<script src="/static/js/charts.js?v=6"></script>
+<script src="/static/js/screener.js?v=6"></script>
+<script src="/static/js/drilldown.js?v=6"></script>
+<script src="/static/js/settings.js?v=6"></script>
+<script src="/static/js/app.js?v=6"></script>
 
 </body>
 </html>

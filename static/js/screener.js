@@ -5,6 +5,7 @@
 const Screener = {
     currentFilter: 'All',
     currentSort: 'signal',
+    minConfidence: 0,
     results: [],
 
     render(results, container) {
@@ -12,6 +13,7 @@ const Screener = {
         container.innerHTML = '';
 
         let filtered = this.applyFilter(results);
+        filtered = this.applyConfidenceFilter(filtered);
         filtered = this.applySort(filtered);
 
         const errored = filtered.filter(r => r.error && !r.price);
@@ -102,7 +104,12 @@ const Screener = {
 
     applyFilter(results) {
         if (this.currentFilter === 'All') return results;
-        return results.filter(r => (r.signal || '').toUpperCase().includes(this.currentFilter.toUpperCase()));
+        return results.filter(r => (r.signal || '') === this.currentFilter);
+    },
+
+    applyConfidenceFilter(results) {
+        if (this.minConfidence <= 0) return results;
+        return results.filter(r => (r.regime_confidence || 0) >= this.minConfidence);
     },
 
     applySort(results) {
@@ -118,6 +125,8 @@ const Screener = {
                     const pb = PRIORITY[b.signal] ?? 50;
                     return pa - pb || (b.confirmations_met || 0) - (a.confirmations_met || 0);
                 });
+            case 'confidence':
+                return [...results].sort((a, b) => (b.regime_confidence || 0) - (a.regime_confidence || 0));
             case 'confirmations':
                 return [...results].sort((a, b) => (b.confirmations_met || 0) - (a.confirmations_met || 0));
             case 'rsi':
