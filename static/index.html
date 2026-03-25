@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=110">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=111">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -153,8 +153,10 @@
                 <input type="number" id="filter-min-price" value="1" step="0.01" min="0"
                     onchange="Screener.minPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
             </div>
-            <div class="setting-group" style="display:flex; flex-direction:column; justify-content:flex-end;">
-                <button class="btn-scan-go btn-copy-grid" id="btn-copy-tickers" onclick="Screener.copyTickers()">Copy Tickers</button>
+            <div class="setting-group">
+                <label>Max Price</label>
+                <input type="number" id="filter-max-price" placeholder="" step="0.01" min="0"
+                    onchange="Screener.maxPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
             </div>
             <div class="setting-group">
                 <label>10 EMA &gt; 20 EMA</label>
@@ -176,6 +178,9 @@
                 <label>Min Avg Volume</label>
                 <input type="number" id="filter-min-volume" value="500000" step="1000" min="0"
                     onchange="Screener.minVolume=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+            </div>
+            <div class="setting-group" style="display:flex; flex-direction:column; justify-content:flex-end;">
+                <button class="btn-scan-go btn-copy-grid" id="btn-copy-tickers" onclick="Screener.copyTickers()">Copy Tickers</button>
             </div>
         </div>
         <button class="btn-scan-go" id="btn-scan">Scan</button>
