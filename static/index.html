@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=13">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=14">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -154,6 +154,24 @@
                 <option value="change">1D Change</option>
             </select>
         </div>
+        <div class="filter-bar" id="filter-bar-2" style="margin-top:0.3rem;">
+            <input type="number" id="filter-min-price" placeholder="Min $" step="0.01" min="0" style="width:70px;"
+                onchange="Screener.minPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+            <input type="number" id="filter-max-price" placeholder="Max $" step="0.01" min="0" style="width:70px;"
+                onchange="Screener.maxPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+            <input type="number" id="filter-min-volume" placeholder="Min Avg Vol" step="1000" min="0" style="width:110px;"
+                onchange="Screener.minVolume=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+            <label class="toggle-label" style="font-size:0.65rem; color:var(--text-dim); cursor:pointer;">
+                <input type="checkbox" id="filter-ema10-above-20"
+                    onchange="Screener.ema10Above20=this.checked; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                10 EMA &gt; 20 EMA
+            </label>
+            <label class="toggle-label" style="font-size:0.65rem; color:var(--text-dim); cursor:pointer;">
+                <input type="checkbox" id="filter-price-above-ema50"
+                    onchange="Screener.priceAboveEma50=this.checked; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                Price &gt; 50 EMA
+            </label>
+        </div>
         <div id="screener-content"></div>
     </div>
 
@@ -281,14 +299,14 @@
 </div>
 
 <!-- Scripts -->
-<script src="/static/js/api.js?v=13"></script>
-<script src="/static/js/charts.js?v=13"></script>
-<script src="/static/js/screener.js?v=13"></script>
-<script src="/static/js/scanner-results.js?v=13"></script>
-<script src="/static/js/drilldown.js?v=13"></script>
-<script src="/static/js/orders.js?v=13"></script>
-<script src="/static/js/settings.js?v=13"></script>
-<script src="/static/js/app.js?v=13"></script>
+<script src="/static/js/api.js?v=14"></script>
+<script src="/static/js/charts.js?v=14"></script>
+<script src="/static/js/screener.js?v=14"></script>
+<script src="/static/js/scanner-results.js?v=14"></script>
+<script src="/static/js/drilldown.js?v=14"></script>
+<script src="/static/js/orders.js?v=14"></script>
+<script src="/static/js/settings.js?v=14"></script>
+<script src="/static/js/app.js?v=14"></script>
 
 </body>
 </html>

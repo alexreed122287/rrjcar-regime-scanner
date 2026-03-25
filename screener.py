@@ -361,6 +361,15 @@ def scan_single_ticker(
         else:
             trans_from_current = {}
 
+        # Compute EMA 10/20/50 for filtering
+        close = regime_df["Close"]
+        ema_10 = float(close.ewm(span=10, adjust=False).mean().iloc[-1])
+        ema_20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+        ema_50 = float(close.ewm(span=50, adjust=False).mean().iloc[-1])
+
+        # 30-day average volume
+        avg_volume_30d = float(regime_df["Volume"].tail(30).mean())
+
         # RSI / ADX / MACD from signal data
         return {
             "symbol": symbol.upper(),
@@ -388,6 +397,12 @@ def scan_single_ticker(
             "adx": round(signal_data["adx"], 1) if signal_data["adx"] is not None else None,
             "macd_hist": round(signal_data["macd_hist"], 4) if signal_data["macd_hist"] is not None else None,
             "hv_rank": signal_data.get("hv_rank"),
+            "ema_10": round(ema_10, 2),
+            "ema_20": round(ema_20, 2),
+            "ema_50": round(ema_50, 2),
+            "ema_10_above_20": ema_10 > ema_20,
+            "price_above_ema50": price_now > ema_50,
+            "avg_volume_30d": round(avg_volume_30d),
             "transition_probs": trans_from_current,
             "mean_return": current["mean_return"],
             "volatility": current["volatility"],

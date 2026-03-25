@@ -8,6 +8,11 @@ const Screener = {
     currentRegime: 'All',
     currentSort: 'signal',
     minConfidence: 0,
+    minPrice: 0,
+    maxPrice: 0,
+    minVolume: 0,
+    ema10Above20: false,
+    priceAboveEma50: false,
     results: [],
 
     render(results, container) {
@@ -17,6 +22,7 @@ const Screener = {
         let filtered = this.applyFilter(results);
         filtered = this.applyRegimeFilter(filtered);
         filtered = this.applyConfidenceFilter(filtered);
+        filtered = this.applyPriceVolumeEmaFilters(filtered);
         filtered = this.applySort(filtered);
 
         const errored = filtered.filter(r => r.error && !r.price);
@@ -121,6 +127,18 @@ const Screener = {
     applyConfidenceFilter(results) {
         if (this.minConfidence <= 0) return results;
         return results.filter(r => (r.regime_confidence || 0) >= this.minConfidence);
+    },
+
+    applyPriceVolumeEmaFilters(results) {
+        return results.filter(r => {
+            const price = r.price || 0;
+            if (this.minPrice > 0 && price < this.minPrice) return false;
+            if (this.maxPrice > 0 && price > this.maxPrice) return false;
+            if (this.minVolume > 0 && (r.avg_volume_30d || 0) < this.minVolume) return false;
+            if (this.ema10Above20 && !r.ema_10_above_20) return false;
+            if (this.priceAboveEma50 && !r.price_above_ema50) return false;
+            return true;
+        });
     },
 
     applySort(results) {
