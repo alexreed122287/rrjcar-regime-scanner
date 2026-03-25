@@ -174,9 +174,9 @@ const DrillDown = {
             "hide_volume": true,
             "support_host": "https://www.tradingview.com",
             "studies": [
-                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 10 }, "styles": { "plot": { "color": "#22c55e", "linewidth": 2 } } },
-                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 20 }, "styles": { "plot": { "color": "#eab308", "linewidth": 2 } } },
-                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 50 }, "styles": { "plot": { "color": "#ef4444", "linewidth": 2 } } },
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 10 }, "overrides": { "Plot.color": "#22c55e", "Plot.linewidth": 2 } },
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 20 }, "overrides": { "Plot.color": "#eab308", "Plot.linewidth": 2 } },
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 50 }, "overrides": { "Plot.color": "#ef4444", "Plot.linewidth": 2 } },
                 { "id": "STD;Order_Block_Breaker_Block" }
             ]
         });
