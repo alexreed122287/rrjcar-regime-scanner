@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=111">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=112">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -31,6 +31,8 @@
 
     <!-- Settings -->
     <div class="sidebar-section">
+        <details id="settings-panel" open>
+        <summary class="settings-toggle">Settings</summary>
         <div class="settings-grid">
             <div class="setting-group">
                 <label>Watchlist</label>
@@ -184,6 +186,7 @@
             </div>
         </div>
         <button class="btn-scan-go" id="btn-scan">Scan</button>
+        </details>
     </div>
 
     <!-- Progress -->
@@ -370,7 +373,7 @@
 <script src="/static/js/drilldown.js?v=104"></script>
 <script src="/static/js/orders.js?v=104"></script>
 <script src="/static/js/settings.js?v=104"></script>
-<script src="/static/js/app.js?v=104"></script>
+<script src="/static/js/app.js?v=112"></script>
 
 </body>
 </html>

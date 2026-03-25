@@ -139,6 +139,29 @@ html, body {
     padding: 1rem 0;
 }
 
+/* Collapsible settings panel */
+.settings-toggle {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--chrome);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    padding: 0.4rem 0;
+    list-style: none;
+    user-select: none;
+}
+.settings-toggle::-webkit-details-marker { display: none; }
+.settings-toggle::before {
+    content: '\25BC ';
+    font-size: 0.5rem;
+    margin-right: 0.3rem;
+}
+details:not([open]) > .settings-toggle::before {
+    content: '\25B6 ';
+}
+
 /* Settings grid inside sidebar */
 .settings-grid {
     display: grid;

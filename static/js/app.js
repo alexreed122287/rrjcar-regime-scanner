@@ -302,6 +302,9 @@ const App = {
             document.getElementById('btn-stop').classList.add('hidden');
             this.abortController = null;
             this.scanning = false;
+            // Collapse settings to give more room for results
+            const sp = document.getElementById('settings-panel');
+            if (sp) sp.removeAttribute('open');
         }
     },
 
