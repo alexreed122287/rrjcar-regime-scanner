@@ -1,7 +1,11 @@
 """
 scheduled_scan.py — Headless scheduled scanner
-Runs the full scan on "All Stocks (no ETFs)" and sends email/Telegram
-with bullish tickers. Designed to run via GitHub Actions cron.
+Runs two scans:
+  1) "All Stocks (no ETFs)" with min avg volume 500K
+  2) "All ETFs" without volume filter
+Filters: Bull Run / Bull Trend regimes only, ≥70% confidence, ≥10 confirmations.
+Sends results sorted by top buy (most confirmations) to least via email.
+Designed to run via GitHub Actions cron weekdays at 1:25 PM CST.
 """
 
 import os
@@ -17,14 +21,24 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from screener import scan_watchlist, WATCHLISTS, BULLISH_SIGNALS
 
+# ── Scan Settings ──
+MIN_CONFIDENCE = 0.70
+ALLOWED_REGIMES = {"Bull Run", "Bull Trend"}
+MIN_CONFIRMATIONS = 10
+RECIPIENTS = [
+    "alexander.s.reed@gmail.com",
+    "jasoncolvin7.0@gmail.com",
+    "ruizrk@yahoo.com",
+]
 
-def send_email(subject: str, body_html: str):
-    """Send email via SMTP."""
+
+def send_email(subject: str, body_html: str, recipients: list[str] = None):
+    """Send email via SMTP to multiple recipients."""
     smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ.get("SMTP_USER", "")
     smtp_password = os.environ.get("SMTP_PASSWORD", "")
-    to_email = os.environ.get("ALERT_EMAIL", smtp_user)
+    to_emails = recipients or RECIPIENTS
 
     if not smtp_user or not smtp_password:
         print("[Alert] SMTP not configured, skipping email")
@@ -33,15 +47,15 @@ def send_email(subject: str, body_html: str):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = smtp_user
-    msg["To"] = to_email
+    msg["To"] = ", ".join(to_emails)
     msg.attach(MIMEText(body_html, "html"))
 
     try:
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()
             server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_user, to_email, msg.as_string())
-        print(f"[Alert] Email sent to {to_email}")
+            server.sendmail(smtp_user, to_emails, msg.as_string())
+        print(f"[Alert] Email sent to {', '.join(to_emails)}")
         return True
     except Exception as e:
         print(f"[Alert] Email failed: {e}")
@@ -72,15 +86,38 @@ def send_telegram(message: str):
         return False
 
 
-def run_scan():
-    """Run the full scan and return bullish results."""
-    tickers = WATCHLISTS.get("All Stocks (no ETFs)", [])
+def filter_results(results: list) -> list:
+    """
+    Filter scan results to only include:
+    - Bull Run or Bull Trend regime
+    - ≥70% regime confidence
+    - ≥10 confirmations met
+    Then sort by confirmations descending (top buy first).
+    """
+    filtered = []
+    for r in results:
+        if r.get("regime_label") not in ALLOWED_REGIMES:
+            continue
+        if (r.get("regime_confidence") or 0) < MIN_CONFIDENCE:
+            continue
+        if (r.get("confirmations_met") or 0) < MIN_CONFIRMATIONS:
+            continue
+        filtered.append(r)
+
+    # Sort by confirmations descending (top buy first)
+    filtered.sort(key=lambda r: -(r.get("confirmations_met") or 0))
+    return filtered
+
+
+def run_scan(watchlist_name: str, min_avg_volume: int = None) -> list:
+    """Run a scan on the given watchlist and return filtered results."""
+    tickers = WATCHLISTS.get(watchlist_name, [])
     if not tickers:
-        print("[Scan] No tickers in 'All Stocks (no ETFs)' watchlist")
+        print(f"[Scan] No tickers in '{watchlist_name}' watchlist")
         return []
 
     total = len(tickers)
-    print(f"[Scan] Starting scan of {total:,} tickers at {datetime.now()}")
+    print(f"[Scan] Starting scan of {total:,} tickers ({watchlist_name}) at {datetime.now()}")
 
     def progress(batch_num, total_batches, running):
         bullish = [r for r in running if r.get("signal") in BULLISH_SIGNALS]
@@ -91,70 +128,78 @@ def run_scan():
         symbols=tickers,
         interval="1d",
         n_regimes=7,
-        min_confirmations=6,
+        min_confirmations=MIN_CONFIRMATIONS,
         regime_confirm_bars=2,
         max_workers=10,
         strategy="v2",
         batch_size=200,
         progress_callback=progress,
         bullish_only=True,
+        min_avg_volume=min_avg_volume,
     )
 
-    print(f"[Scan] Complete: {len(results)} bullish signals found")
-    return results
+    print(f"[Scan] Raw bullish: {len(results)} — applying regime/confidence/confirmation filters...")
+    filtered = filter_results(results)
+    print(f"[Scan] After filters: {len(filtered)} hits (Bull Run/Trend, ≥{MIN_CONFIDENCE*100:.0f}% conf, ≥{MIN_CONFIRMATIONS} confs)")
+    return filtered
 
 
-def format_email(bullish: list) -> str:
-    """Format bullish results as HTML email."""
+def format_email(hits: list, scan_label: str) -> str:
+    """Format scan hits as HTML email, sorted top buy to least."""
     now = datetime.now().strftime("%B %d, %Y %I:%M %p CT")
 
-    if not bullish:
+    if not hits:
         return f"""
-        <h2>RRJCAR Regime Scanner</h2>
-        <p><b>Scan Time:</b> {now}</p>
-        <p>No bullish signals found today.</p>
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#101114;color:#e5e7eb;padding:20px;border-radius:8px;">
+            <h2 style="color:#2dd4bf;margin-top:0;">RRJCAR Regime Scanner</h2>
+            <p><b>Scan Time:</b> {now}</p>
+            <p>No hits found for {scan_label} today.</p>
+        </div>
         """
 
-    # Group by signal type
-    enters = [b for b in bullish if b.get("signal") == "LONG -- ENTER"]
-    confirming = [b for b in bullish if b.get("signal") == "LONG -- CONFIRMING"]
-    holds = [b for b in bullish if b.get("signal") == "LONG -- HOLD"]
-
-    def ticker_row(r):
+    def ticker_row(r, rank):
         sym = r.get("symbol", "?")
         price = r.get("price", 0)
         regime = r.get("regime_label", "?")
+        conf = r.get("regime_confidence", 0)
         confs = r.get("confirmations_met", 0)
-        change = r.get("price_1d_pct", 0) or 0
+        signal = r.get("signal", "?")
+        change = r.get("change_1d") or 0
         color = "#2dd4bf" if change >= 0 else "#f87171"
-        return f'<tr><td><b>{sym}</b></td><td>${price:.2f}</td><td style="color:{color}">{change:+.1f}%</td><td>{regime}</td><td>{confs}/12</td></tr>'
+        signal_short = signal.replace("LONG -- ", "")
+        return (
+            f'<tr style="border-bottom:1px solid #1e2028;">'
+            f'<td style="padding:6px;">{rank}</td>'
+            f'<td style="padding:6px;"><b>{sym}</b></td>'
+            f'<td style="padding:6px;">${price:.2f}</td>'
+            f'<td style="padding:6px;color:{color}">{change:+.1f}%</td>'
+            f'<td style="padding:6px;">{regime}</td>'
+            f'<td style="padding:6px;">{conf*100:.0f}%</td>'
+            f'<td style="padding:6px;">{confs}/12</td>'
+            f'<td style="padding:6px;">{signal_short}</td>'
+            f'</tr>'
+        )
 
-    rows_html = ""
-
-    if enters:
-        rows_html += '<tr><td colspan="5" style="background:#1a3a2a;color:#2dd4bf;padding:8px;font-weight:bold;">BUY NOW — ENTER</td></tr>'
-        rows_html += "".join(ticker_row(r) for r in enters)
-
-    if confirming:
-        rows_html += '<tr><td colspan="5" style="background:#1a2a3a;color:#60a5fa;padding:8px;font-weight:bold;">CONFIRMING</td></tr>'
-        rows_html += "".join(ticker_row(r) for r in confirming)
-
-    if holds:
-        rows_html += '<tr><td colspan="5" style="background:#2a2a1a;color:#fbbf24;padding:8px;font-weight:bold;">HOLD</td></tr>'
-        rows_html += "".join(ticker_row(r) for r in holds)
+    rows_html = "".join(ticker_row(r, i + 1) for i, r in enumerate(hits))
 
     return f"""
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#101114;color:#e5e7eb;padding:20px;border-radius:8px;">
+    <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;background:#101114;color:#e5e7eb;padding:20px;border-radius:8px;">
         <h2 style="color:#2dd4bf;margin-top:0;">RRJCAR Regime Scanner</h2>
-        <p style="color:#9ca3af;">{now} | All Stocks (no ETFs)</p>
-        <p><b style="color:#2dd4bf;">{len(bullish)}</b> bullish signals found</p>
-        <table style="width:100%;border-collapse:collapse;font-size:14px;">
-            <tr style="color:#6b7280;font-size:12px;text-transform:uppercase;">
+        <p style="color:#9ca3af;">{now} | {scan_label}</p>
+        <p style="color:#9ca3af;font-size:12px;">
+            Filters: Bull Run / Bull Trend only | ≥{MIN_CONFIDENCE*100:.0f}% confidence | ≥{MIN_CONFIRMATIONS} confirmations | Min volume: {'500K' if 'Stock' in scan_label else 'None'}
+        </p>
+        <p><b style="color:#2dd4bf;">{len(hits)}</b> hits — sorted top buy to least</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr style="color:#6b7280;font-size:11px;text-transform:uppercase;">
+                <th style="text-align:left;padding:6px;">#</th>
                 <th style="text-align:left;padding:6px;">Ticker</th>
                 <th style="text-align:left;">Price</th>
                 <th style="text-align:left;">1D</th>
                 <th style="text-align:left;">Regime</th>
+                <th style="text-align:left;">Conf%</th>
                 <th style="text-align:left;">Confs</th>
+                <th style="text-align:left;">Signal</th>
             </tr>
             {rows_html}
         </table>
@@ -165,60 +210,75 @@ def format_email(bullish: list) -> str:
     """
 
 
-def format_telegram(bullish: list) -> str:
-    """Format bullish results as Telegram message."""
+def format_telegram(hits: list, scan_label: str) -> str:
+    """Format hits as Telegram message."""
     now = datetime.now().strftime("%I:%M %p CT")
 
-    if not bullish:
-        return f"<b>RRJCAR Scanner</b> ({now})\nNo bullish signals today."
+    if not hits:
+        return f"<b>RRJCAR Scanner</b> ({now})\nNo hits for {scan_label} today."
 
-    enters = [b for b in bullish if b.get("signal") == "LONG -- ENTER"]
-    confirming = [b for b in bullish if b.get("signal") == "LONG -- CONFIRMING"]
+    lines = [
+        f"<b>RRJCAR Scanner — {scan_label}</b> ({now})",
+        f"<b>{len(hits)}</b> hits (Bull Run/Trend, ≥{MIN_CONFIDENCE*100:.0f}% conf, ≥{MIN_CONFIRMATIONS} confs)\n",
+    ]
 
-    lines = [f"<b>RRJCAR Scanner</b> ({now})", f"<b>{len(bullish)}</b> bullish signals\n"]
+    for r in hits[:25]:  # Telegram message size limits
+        sym = r["symbol"]
+        confs = r.get("confirmations_met", 0)
+        regime = r.get("regime_label", "?")
+        signal = r.get("signal", "?").replace("LONG -- ", "")
+        lines.append(f"  <b>{sym}</b> — {regime} — {confs}/12 — {signal}")
 
-    if enters:
-        lines.append("<b>BUY NOW:</b>")
-        for r in enters[:20]:  # Telegram has message size limits
-            lines.append(f"  <b>{r['symbol']}</b> ${r.get('price',0):.2f} — {r.get('regime_label','?')}")
-        lines.append("")
-
-    if confirming:
-        lines.append("<b>CONFIRMING:</b>")
-        for r in confirming[:20]:
-            lines.append(f"  <b>{r['symbol']}</b> ${r.get('price',0):.2f} — {r.get('regime_label','?')}")
-
-    if len(bullish) > 40:
-        lines.append(f"\n... and {len(bullish) - 40} more")
+    if len(hits) > 25:
+        lines.append(f"\n... and {len(hits) - 25} more")
 
     return "\n".join(lines)
 
 
 if __name__ == "__main__":
+    today_str = datetime.now().strftime("%m/%d/%Y")
+
+    # ── Scan 1: All Stocks with min avg volume 500K ──
     print("=" * 60)
-    print("RRJCAR Scheduled Scan — All Stocks (no ETFs)")
+    print(f"SCAN 1: Stocks Hits — {today_str}")
     print("=" * 60)
 
-    bullish = run_scan()
+    stock_hits = run_scan("All Stocks (no ETFs)", min_avg_volume=500_000)
 
-    # Send email
-    subject = f"RRJCAR: {len(bullish)} Bullish Signals — {datetime.now().strftime('%m/%d')}"
-    email_html = format_email(bullish)
-    send_email(subject, email_html)
+    subject_stocks = f"Stocks Hits {today_str}"
+    email_html = format_email(stock_hits, "All Stocks (no ETFs)")
+    send_email(subject_stocks, email_html)
 
-    # Send Telegram
-    telegram_msg = format_telegram(bullish)
+    telegram_msg = format_telegram(stock_hits, "Stocks Hits")
     send_telegram(telegram_msg)
 
-    # Also save results to JSON for reference
-    if bullish:
-        output = [{
-            "symbol": r.get("symbol"),
-            "price": r.get("price"),
-            "signal": r.get("signal"),
-            "regime": r.get("regime_label"),
-            "confirmations": r.get("confirmations_met"),
-        } for r in bullish]
-        print(f"\nBullish tickers: {', '.join(r['symbol'] for r in output)}")
+    if stock_hits:
+        print(f"\nStocks hits ({len(stock_hits)}): {', '.join(r['symbol'] for r in stock_hits)}")
     else:
-        print("\nNo bullish signals found.")
+        print("\nNo stock hits found.")
+
+    # ── Scan 2: All ETFs without volume filter ──
+    print()
+    print("=" * 60)
+    print(f"SCAN 2: ETF Hits — {today_str}")
+    print("=" * 60)
+
+    etf_hits = run_scan("All ETFs", min_avg_volume=0)
+
+    subject_etfs = f"ETF Hits {today_str}"
+    email_html = format_email(etf_hits, "All ETFs (no Stocks)")
+    send_email(subject_etfs, email_html)
+
+    telegram_msg = format_telegram(etf_hits, "ETF Hits")
+    send_telegram(telegram_msg)
+
+    if etf_hits:
+        print(f"\nETF hits ({len(etf_hits)}): {', '.join(r['symbol'] for r in etf_hits)}")
+    else:
+        print("\nNo ETF hits found.")
+
+    # ── Summary ──
+    print()
+    print("=" * 60)
+    print(f"DONE — {len(stock_hits)} stock hits, {len(etf_hits)} ETF hits")
+    print("=" * 60)

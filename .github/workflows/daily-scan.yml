@@ -2,13 +2,14 @@ name: Daily Regime Scan
 
 on:
   schedule:
-    - cron: '0 18 * * 1-5'
+    # 1:25 PM CST = 19:25 UTC (weekdays only)
+    - cron: '25 19 * * 1-5'
   workflow_dispatch:
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
@@ -25,13 +26,12 @@ jobs:
 
       - name: Run scheduled scan
         env:
-          TRADIER_ACCESS_TOKEN: ${{wCuxyUT4wiTLN8f6tG9T65cB0qS8}}
-          TRADIER_ACCOUNT_ID: ${{ VA21850433 }}
+          TRADIER_ACCESS_TOKEN: ${{ secrets.TRADIER_ACCESS_TOKEN }}
+          TRADIER_ACCOUNT_ID: ${{ secrets.TRADIER_ACCOUNT_ID }}
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          ALERT_EMAIL: ${{alexander.s.reed@gmail.com}}
-          TELEGRAM_BOT_TOKEN: ${{ 8680884328:AAG0LK9Ae3XeMGCXIFSJ8s_H8xh7bUs1SlM }}
-          TELEGRAM_CHAT_ID: ${{ 7396516349 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scheduled_scan.py

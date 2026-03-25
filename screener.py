@@ -98,11 +98,12 @@ def _is_excluded_sector_or_industry(info: Dict) -> bool:
     return False
 
 
-def _passes_prescreen(symbol: str, raw_df: pd.DataFrame) -> bool:
+def _passes_prescreen(symbol: str, raw_df: pd.DataFrame, min_avg_volume: Optional[int] = None) -> bool:
     """
     Check if ticker passes pre-screening filters:
     - Price > $1
-    - 30-day average volume > 500,000
+    - 30-day average volume > min_avg_volume (defaults to MIN_AVG_VOLUME_30D)
+    Pass min_avg_volume=0 to skip the volume filter entirely.
     """
     if raw_df is None or raw_df.empty:
         return False
@@ -113,10 +114,12 @@ def _passes_prescreen(symbol: str, raw_df: pd.DataFrame) -> bool:
         return False
 
     # 30-day average volume check
-    recent_volume = raw_df["Volume"].tail(30)
-    avg_volume_30d = float(recent_volume.mean())
-    if avg_volume_30d < MIN_AVG_VOLUME_30D:
-        return False
+    vol_threshold = min_avg_volume if min_avg_volume is not None else MIN_AVG_VOLUME_30D
+    if vol_threshold > 0:
+        recent_volume = raw_df["Volume"].tail(30)
+        avg_volume_30d = float(recent_volume.mean())
+        if avg_volume_30d < vol_threshold:
+            return False
 
     return True
 
@@ -274,6 +277,7 @@ def scan_single_ticker(
     min_confirmations: int = 6,
     regime_confirm_bars: int = 2,
     strategy: str = "v2",
+    min_avg_volume: Optional[int] = None,
 ) -> Optional[Dict]:
     """
     Scan a single ticker: fetch data, train HMM, get current regime + signal.
@@ -287,8 +291,8 @@ def scan_single_ticker(
         # Fetch and prepare data (skip slow yfinance info lookups during mass scans)
         raw_df = fetch_data(symbol=symbol, period_days=period_days, interval=interval)
 
-        # Pre-screen: price > $1, 30-day avg volume > 500K
-        if not _passes_prescreen(symbol, raw_df):
+        # Pre-screen: price > $1, 30-day avg volume check
+        if not _passes_prescreen(symbol, raw_df, min_avg_volume=min_avg_volume):
             logger.debug(f"[Scan] {symbol} excluded: prescreen (price/volume)")
             return None
 
@@ -430,6 +434,7 @@ def _scan_batch(
     regime_confirm_bars: int,
     max_workers: int,
     strategy: str,
+    min_avg_volume: Optional[int] = None,
 ) -> List[Dict]:
     """Scan a single batch of tickers in parallel."""
     results = []
@@ -438,6 +443,7 @@ def _scan_batch(
             executor.submit(
                 scan_single_ticker, sym, interval, period_days,
                 n_regimes, min_confirmations, regime_confirm_bars, strategy,
+                min_avg_volume,
             ): sym
             for sym in symbols
         }
@@ -473,6 +479,7 @@ def scan_watchlist(
     batch_size: int = 200,
     progress_callback=None,
     bullish_only: bool = False,
+    min_avg_volume: Optional[int] = None,
 ) -> List[Dict]:
     """
     Scan multiple tickers in batches of `batch_size` (default 200).
@@ -494,6 +501,7 @@ def scan_watchlist(
         batch_results = _scan_batch(
             batch, interval, period_days, n_regimes,
             min_confirmations, regime_confirm_bars, max_workers, strategy,
+            min_avg_volume,
         )
 
         if bullish_only:
