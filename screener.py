@@ -42,7 +42,8 @@ def _fetch_ticker_info(symbol: str) -> Dict:
     if symbol in _ticker_info_cache:
         return _ticker_info_cache[symbol]
 
-    info = {"sector": None, "industry": None, "has_options": False}
+    # Default has_options to True so tickers aren't filtered out when yfinance is unreachable
+    info = {"sector": None, "industry": None, "has_options": True}
 
     # Skip crypto symbols — they don't have sectors/options in the traditional sense
     if symbol.endswith("-USD"):
