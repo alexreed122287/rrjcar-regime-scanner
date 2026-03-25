@@ -284,16 +284,7 @@ def scan_single_ticker(
     try:
         ticker = resolve_ticker(symbol)
 
-        # Fetch sector/industry info and check exclusions
-        tk_info = _fetch_ticker_info(symbol)
-        if _is_excluded_sector_or_industry(tk_info):
-            logger.debug(f"[Scan] {symbol} excluded: sector/industry filter")
-            return None
-        if not tk_info.get("has_options", True):
-            logger.debug(f"[Scan] {symbol} excluded: no options")
-            return None
-
-        # Fetch and prepare data
+        # Fetch and prepare data (skip slow yfinance info lookups during mass scans)
         raw_df = fetch_data(symbol=symbol, period_days=period_days, interval=interval)
 
         # Pre-screen: price > $1, 30-day avg volume > 500K
@@ -375,8 +366,8 @@ def scan_single_ticker(
         return {
             "symbol": symbol.upper(),
             "ticker": ticker,
-            "sector": tk_info.get("sector"),
-            "industry": tk_info.get("industry"),
+            "sector": None,
+            "industry": None,
             "price": price_now,
             "change_bar": pct_change(price_prev, price_now),
             "change_1d": pct_change(price_1d_ago, price_now),

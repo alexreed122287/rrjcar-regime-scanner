@@ -170,11 +170,6 @@ html, body {
     outline: none;
     border-bottom-color: var(--chrome);
 }
-.setting-group button {
-    width: 100%;
-    box-sizing: border-box;
-    display: block;
-}
 
 /* Toggle switch */
 .toggle-switch {
@@ -362,11 +357,11 @@ html, body {
 @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
 
 .btn-copy-tickers {
-    width: 100%;
-    font-family: var(--mono); font-size: 0.65rem; font-weight: 500;
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
     color: var(--chrome); background: transparent; border: 1px solid var(--chrome);
-    padding: 0.35rem 0.4rem; cursor: pointer; text-transform: uppercase;
-    letter-spacing: 0.5px; transition: border-color 0.15s, color 0.15s;
+    padding: 0.55rem 1rem; cursor: pointer; text-transform: uppercase;
+    letter-spacing: 1px; white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
 }
 .btn-copy-tickers:hover { border-color: var(--accent); color: var(--accent); }
 
