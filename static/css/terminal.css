@@ -203,8 +203,9 @@ html, body {
 }
 
 .setting-toggles {
-    grid-column: 1 / -1;
+    grid-column: span 2;
     display: flex;
+    flex-direction: row;
     gap: 1.5rem;
     align-items: center;
     padding: 0.3rem 0;
