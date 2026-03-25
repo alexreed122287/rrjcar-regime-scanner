@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=109">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=110">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -49,23 +49,61 @@
             </div>
             <div class="setting-group">
                 <label>Min Confs</label>
-                <input type="number" id="setting-min-confs" min="1" max="12" value="6">
+                <select id="setting-min-confs">
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6" selected>6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                </select>
             </div>
             <div class="setting-group">
                 <label>Regime Bars</label>
-                <input type="number" id="setting-regime-confirm" min="1" max="10" value="2">
+                <select id="setting-regime-confirm">
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
             </div>
             <div class="setting-group">
                 <label>Cooldown</label>
-                <input type="number" id="setting-cooldown" min="0" max="20" value="3">
+                <select id="setting-cooldown">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3" selected>3</option>
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                </select>
             </div>
             <div class="setting-group">
                 <label>Capital</label>
-                <input type="number" id="setting-capital" min="1000" step="1000" value="100000">
+                <select id="setting-capital">
+                    <option value="10000">$10K</option>
+                    <option value="25000">$25K</option>
+                    <option value="50000">$50K</option>
+                    <option value="100000" selected>$100K</option>
+                    <option value="250000">$250K</option>
+                    <option value="500000">$500K</option>
+                    <option value="1000000">$1M</option>
+                </select>
             </div>
             <div class="setting-group">
                 <label>Workers</label>
-                <input type="number" id="setting-max-workers" min="1" max="20" value="6">
+                <select id="setting-max-workers">
+                    <option value="2">2</option>
+                    <option value="4">4</option>
+                    <option value="6" selected>6</option>
+                    <option value="8">8</option>
+                    <option value="10">10</option>
+                    <option value="12">12</option>
+                </select>
             </div>
             <div class="setting-group">
                 <label>Signal Filter</label>
