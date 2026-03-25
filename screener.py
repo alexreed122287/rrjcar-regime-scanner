@@ -291,8 +291,10 @@ def scan_single_ticker(
         # Fetch sector/industry info and check exclusions
         tk_info = _fetch_ticker_info(symbol)
         if _is_excluded_sector_or_industry(tk_info):
+            logger.debug(f"[Scan] {symbol} excluded: sector/industry filter")
             return None
-        if not tk_info.get("has_options", False):
+        if not tk_info.get("has_options", True):
+            logger.debug(f"[Scan] {symbol} excluded: no options")
             return None
 
         # Fetch and prepare data
@@ -300,11 +302,13 @@ def scan_single_ticker(
 
         # Pre-screen: price > $1, 30-day avg volume > 500K
         if not _passes_prescreen(symbol, raw_df):
+            logger.debug(f"[Scan] {symbol} excluded: prescreen (price/volume)")
             return None
 
         feat_df = engineer_features(raw_df)
 
         if len(feat_df) < 100:
+            logger.debug(f"[Scan] {symbol} excluded: insufficient data ({len(feat_df)} pts)")
             return None
 
         # Train HMM (fewer iterations + looser tolerance on cloud for speed)

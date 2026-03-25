@@ -170,6 +170,11 @@ html, body {
     outline: none;
     border-bottom-color: var(--chrome);
 }
+.setting-group button {
+    width: 100%;
+    box-sizing: border-box;
+    display: block;
+}
 
 /* Toggle switch */
 .toggle-switch {
