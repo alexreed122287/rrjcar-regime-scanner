@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=12">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=13">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -128,6 +128,16 @@
                 <option value="LONG -- CONFIRMING">CONFIRMING</option>
                 <option value="LONG -- HOLD">HOLD</option>
                 <option value="EXIT -- REGIME FLIP">EXIT</option>
+            </select>
+            <select id="filter-regime" onchange="Screener.currentRegime=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                <option value="All">All Regimes</option>
+                <option value="Bull Run">Bull Run</option>
+                <option value="Bull Trend">Bull Trend</option>
+                <option value="Mild Bull">Mild Bull</option>
+                <option value="Neutral / Chop">Neutral / Chop</option>
+                <option value="Mild Bear">Mild Bear</option>
+                <option value="Bear Trend">Bear Trend</option>
+                <option value="Crash / Capitulation">Crash / Capitulation</option>
             </select>
             <select id="filter-confidence" onchange="Screener.minConfidence=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
                 <option value="0">All Confidence</option>
@@ -271,14 +281,14 @@
 </div>
 
 <!-- Scripts -->
-<script src="/static/js/api.js?v=12"></script>
-<script src="/static/js/charts.js?v=12"></script>
-<script src="/static/js/screener.js?v=12"></script>
-<script src="/static/js/scanner-results.js?v=12"></script>
-<script src="/static/js/drilldown.js?v=12"></script>
-<script src="/static/js/orders.js?v=12"></script>
-<script src="/static/js/settings.js?v=12"></script>
-<script src="/static/js/app.js?v=12"></script>
+<script src="/static/js/api.js?v=13"></script>
+<script src="/static/js/charts.js?v=13"></script>
+<script src="/static/js/screener.js?v=13"></script>
+<script src="/static/js/scanner-results.js?v=13"></script>
+<script src="/static/js/drilldown.js?v=13"></script>
+<script src="/static/js/orders.js?v=13"></script>
+<script src="/static/js/settings.js?v=13"></script>
+<script src="/static/js/app.js?v=13"></script>
 
 </body>
 </html>

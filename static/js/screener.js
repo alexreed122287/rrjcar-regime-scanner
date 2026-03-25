@@ -5,6 +5,7 @@
 
 const Screener = {
     currentFilter: 'All',
+    currentRegime: 'All',
     currentSort: 'signal',
     minConfidence: 0,
     results: [],
@@ -14,6 +15,7 @@ const Screener = {
         container.innerHTML = '';
 
         let filtered = this.applyFilter(results);
+        filtered = this.applyRegimeFilter(filtered);
         filtered = this.applyConfidenceFilter(filtered);
         filtered = this.applySort(filtered);
 
@@ -109,6 +111,11 @@ const Screener = {
     applyFilter(results) {
         if (this.currentFilter === 'All') return results;
         return results.filter(r => (r.signal || '') === this.currentFilter);
+    },
+
+    applyRegimeFilter(results) {
+        if (this.currentRegime === 'All') return results;
+        return results.filter(r => (r.regime_label || '') === this.currentRegime);
     },
 
     applyConfidenceFilter(results) {
