@@ -203,12 +203,11 @@ html, body {
 }
 
 .setting-toggles {
-    grid-column: span 2;
     display: flex;
     flex-direction: row;
     gap: 1.5rem;
     align-items: center;
-    padding: 0.3rem 0;
+    padding: 0.5rem 0;
 }
 .toggle-row {
     display: flex;
