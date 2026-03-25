@@ -171,7 +171,7 @@ const DrillDown = {
             "allow_symbol_change": true,
             "save_image": false,
             "calendar": false,
-            "hide_volume": false,
+            "hide_volume": true,
             "support_host": "https://www.tradingview.com",
             "studies": [
                 { "id": "MAExp@tv-basicstudies", "inputs": { "length": 10 }, "styles": { "plot": { "color": "#22c55e", "linewidth": 2 } } },
