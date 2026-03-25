@@ -356,14 +356,10 @@ html, body {
 .alert-flash { animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
 
-.btn-copy-tickers {
-    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
-    color: var(--chrome); background: transparent; border: 1px solid var(--chrome);
-    padding: 0.55rem 1rem; cursor: pointer; text-transform: uppercase;
-    letter-spacing: 1px; white-space: nowrap;
-    transition: border-color 0.15s, color 0.15s;
+.btn-copy-grid {
+    margin-top: 0;
+    width: 100%;
 }
-.btn-copy-tickers:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Copy modal */
 .copy-modal-overlay {
