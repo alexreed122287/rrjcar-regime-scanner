@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=14">
+    <link rel="stylesheet" href="/static/css/terminal.css?v=15">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -38,7 +38,7 @@
             </div>
             <div class="setting-group">
                 <label>Custom Tickers</label>
-                <input type="text" id="setting-custom-tickers" placeholder="AAPL,TSLA,NVDA">
+                <input type="text" id="setting-custom-tickers" placeholder="">
             </div>
             <div class="setting-group">
                 <label>Strategy</label>
@@ -66,6 +66,80 @@
             <div class="setting-group">
                 <label>Workers</label>
                 <input type="number" id="setting-max-workers" min="1" max="20" value="6">
+            </div>
+            <div class="setting-group">
+                <label>Signal Filter</label>
+                <select id="filter-signal" onchange="Screener.currentFilter=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                    <option value="All">All Signals</option>
+                    <option value="LONG -- ENTER">ENTER</option>
+                    <option value="LONG -- CONFIRMING">CONFIRMING</option>
+                    <option value="LONG -- HOLD">HOLD</option>
+                    <option value="EXIT -- REGIME FLIP">EXIT</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label>Regime Filter</label>
+                <select id="filter-regime" onchange="Screener.currentRegime=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                    <option value="All">All Regimes</option>
+                    <option value="Bull Run">Bull Run</option>
+                    <option value="Bull Trend">Bull Trend</option>
+                    <option value="Mild Bull">Mild Bull</option>
+                    <option value="Neutral / Chop">Neutral / Chop</option>
+                    <option value="Mild Bear">Mild Bear</option>
+                    <option value="Bear Trend">Bear Trend</option>
+                    <option value="Crash / Capitulation">Crash / Capitulation</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label>Confidence</label>
+                <select id="filter-confidence" onchange="Screener.minConfidence=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                    <option value="0">All Confidence</option>
+                    <option value="0.90">&ge; 90%</option>
+                    <option value="0.80">&ge; 80%</option>
+                    <option value="0.70">&ge; 70%</option>
+                    <option value="0.60">&ge; 60%</option>
+                    <option value="0.50">&ge; 50%</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label>Sort By</label>
+                <select id="filter-sort" onchange="Screener.currentSort=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                    <option value="signal">Signal Priority</option>
+                    <option value="confidence">Confidence</option>
+                    <option value="confirmations">Confirmations</option>
+                    <option value="change">1D Change</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label>Min Price</label>
+                <input type="number" id="filter-min-price" value="1" step="0.01" min="0"
+                    onchange="Screener.minPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+            </div>
+            <div class="setting-group">
+                <label>Max Price</label>
+                <input type="number" id="filter-max-price" placeholder="" step="0.01" min="0"
+                    onchange="Screener.maxPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+            </div>
+            <div class="setting-group">
+                <label>Min Avg Volume</label>
+                <input type="number" id="filter-min-volume" value="500000" step="1000" min="0"
+                    onchange="Screener.minVolume=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
+            </div>
+            <div class="setting-group">
+                <label>10 EMA &gt; 20 EMA</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="filter-ema10-above-20"
+                        onchange="Screener.ema10Above20=this.checked; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+            <div class="setting-group">
+                <label>Price &gt; 50 EMA</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="filter-price-above-ema50"
+                        onchange="Screener.priceAboveEma50=this.checked; Screener.render(Screener.results, document.getElementById('screener-content'));">
+                    <span class="toggle-track"></span>
+                </label>
             </div>
         </div>
         <button class="btn-scan-go" id="btn-scan">Scan</button>
@@ -121,57 +195,6 @@
 
     <!-- Tab: Hits -->
     <div class="tab-content active" id="tab-screener">
-        <div class="filter-bar" id="filter-bar">
-            <select id="filter-signal" onchange="Screener.currentFilter=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
-                <option value="All">All Signals</option>
-                <option value="LONG -- ENTER">ENTER</option>
-                <option value="LONG -- CONFIRMING">CONFIRMING</option>
-                <option value="LONG -- HOLD">HOLD</option>
-                <option value="EXIT -- REGIME FLIP">EXIT</option>
-            </select>
-            <select id="filter-regime" onchange="Screener.currentRegime=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
-                <option value="All">All Regimes</option>
-                <option value="Bull Run">Bull Run</option>
-                <option value="Bull Trend">Bull Trend</option>
-                <option value="Mild Bull">Mild Bull</option>
-                <option value="Neutral / Chop">Neutral / Chop</option>
-                <option value="Mild Bear">Mild Bear</option>
-                <option value="Bear Trend">Bear Trend</option>
-                <option value="Crash / Capitulation">Crash / Capitulation</option>
-            </select>
-            <select id="filter-confidence" onchange="Screener.minConfidence=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
-                <option value="0">All Confidence</option>
-                <option value="0.90">&ge; 90%</option>
-                <option value="0.80">&ge; 80%</option>
-                <option value="0.70">&ge; 70%</option>
-                <option value="0.60">&ge; 60%</option>
-                <option value="0.50">&ge; 50%</option>
-            </select>
-            <select id="filter-sort" onchange="Screener.currentSort=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
-                <option value="signal">Signal Priority</option>
-                <option value="confidence">Confidence</option>
-                <option value="confirmations">Confirmations</option>
-                <option value="change">1D Change</option>
-            </select>
-        </div>
-        <div class="filter-bar" id="filter-bar-2" style="margin-top:0.3rem;">
-            <input type="number" id="filter-min-price" placeholder="Min $" step="0.01" min="0" style="width:70px;"
-                onchange="Screener.minPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
-            <input type="number" id="filter-max-price" placeholder="Max $" step="0.01" min="0" style="width:70px;"
-                onchange="Screener.maxPrice=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
-            <input type="number" id="filter-min-volume" placeholder="Min Avg Vol" step="1000" min="0" style="width:110px;"
-                onchange="Screener.minVolume=parseFloat(this.value)||0; Screener.render(Screener.results, document.getElementById('screener-content'));">
-            <label class="toggle-label" style="font-size:0.65rem; color:var(--text-dim); cursor:pointer;">
-                <input type="checkbox" id="filter-ema10-above-20"
-                    onchange="Screener.ema10Above20=this.checked; Screener.render(Screener.results, document.getElementById('screener-content'));">
-                10 EMA &gt; 20 EMA
-            </label>
-            <label class="toggle-label" style="font-size:0.65rem; color:var(--text-dim); cursor:pointer;">
-                <input type="checkbox" id="filter-price-above-ema50"
-                    onchange="Screener.priceAboveEma50=this.checked; Screener.render(Screener.results, document.getElementById('screener-content'));">
-                Price &gt; 50 EMA
-            </label>
-        </div>
         <div id="screener-content"></div>
     </div>
 
@@ -299,14 +322,14 @@
 </div>
 
 <!-- Scripts -->
-<script src="/static/js/api.js?v=14"></script>
-<script src="/static/js/charts.js?v=14"></script>
-<script src="/static/js/screener.js?v=14"></script>
-<script src="/static/js/scanner-results.js?v=14"></script>
-<script src="/static/js/drilldown.js?v=14"></script>
-<script src="/static/js/orders.js?v=14"></script>
-<script src="/static/js/settings.js?v=14"></script>
-<script src="/static/js/app.js?v=14"></script>
+<script src="/static/js/api.js?v=15"></script>
+<script src="/static/js/charts.js?v=15"></script>
+<script src="/static/js/screener.js?v=15"></script>
+<script src="/static/js/scanner-results.js?v=15"></script>
+<script src="/static/js/drilldown.js?v=15"></script>
+<script src="/static/js/orders.js?v=15"></script>
+<script src="/static/js/settings.js?v=15"></script>
+<script src="/static/js/app.js?v=15"></script>
 
 </body>
 </html>
