@@ -356,14 +356,11 @@ html, body {
 .alert-flash { animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
 
-/* Screener toolbar */
-.screener-toolbar {
-    display: flex; justify-content: flex-end; padding: 0.3rem 0; gap: 0.5rem;
-}
 .btn-copy-tickers {
-    font-family: var(--mono); font-size: 0.6rem; font-weight: 500;
+    width: 100%;
+    font-family: var(--mono); font-size: 0.65rem; font-weight: 500;
     color: var(--chrome); background: transparent; border: 1px solid #333;
-    padding: 0.25rem 0.6rem; cursor: pointer; text-transform: uppercase;
+    padding: 0.35rem 0.4rem; cursor: pointer; text-transform: uppercase;
     letter-spacing: 0.5px; transition: border-color 0.15s, color 0.15s;
 }
 .btn-copy-tickers:hover { border-color: var(--chrome); color: #e0e0e0; }

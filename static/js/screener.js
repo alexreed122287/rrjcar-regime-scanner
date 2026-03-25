@@ -84,20 +84,11 @@ const Screener = {
         });
 
         table.appendChild(list);
-
-        // Toolbar with Copy button
-        const toolbar = document.createElement('div');
-        toolbar.className = 'screener-toolbar';
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'btn-copy-tickers';
-        copyBtn.textContent = `Copy Tickers (${valid.length})`;
-        copyBtn.onclick = () => {
-            const tickers = valid.map(r => r.symbol).join(',');
-            this.showCopyModal(tickers);
-        };
-        toolbar.appendChild(copyBtn);
-        container.appendChild(toolbar);
         container.appendChild(table);
+
+        // Update copy button count
+        const copyBtn = document.getElementById('btn-copy-tickers');
+        if (copyBtn) copyBtn.textContent = `Copy Tickers (${valid.length})`;
 
         // Errors
         if (errored.length) {
@@ -176,6 +167,20 @@ const Screener = {
             default:
                 return results;
         }
+    },
+
+    copyTickers() {
+        let filtered = this.applyFilter(this.results);
+        filtered = this.applyRegimeFilter(filtered);
+        filtered = this.applyConfidenceFilter(filtered);
+        filtered = this.applyPriceVolumeEmaFilters(filtered);
+        const valid = filtered.filter(r => !(r.error && !r.price));
+        const tickers = valid.map(r => r.symbol).join(',');
+        if (!tickers) {
+            alert('No tickers to copy. Run a scan first.');
+            return;
+        }
+        this.showCopyModal(tickers);
     },
 
     showCopyModal(tickers) {
