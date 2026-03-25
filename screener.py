@@ -62,23 +62,19 @@ def _fetch_ticker_info(symbol: str) -> Dict:
         info["sector"] = tk_info.get("sector")
         info["industry"] = tk_info.get("industry")
 
-        # Check if options are available
+        # Check if options are available — only set False on definitive empty, keep True on errors
         try:
             expiry_dates = tk.options
-            info["has_options"] = bool(expiry_dates and len(expiry_dates) > 0)
+            if expiry_dates is not None:
+                info["has_options"] = len(expiry_dates) > 0
+            # If None, keep default True (can't determine availability)
         except Exception:
-            info["has_options"] = False
+            pass  # Keep default True — don't filter on failure
 
         # ETFs often don't have sector — classify by fund type
         if not info["sector"] and tk_info.get("quoteType") == "ETF":
             info["sector"] = "ETF"
             info["industry"] = tk_info.get("category", "ETF")
-            # Most liquid ETFs have options
-            try:
-                expiry_dates = tk.options
-                info["has_options"] = bool(expiry_dates and len(expiry_dates) > 0)
-            except Exception:
-                pass
 
     except Exception as e:
         logger.debug(f"[Screener] Info fetch failed for {symbol}: {e}")
