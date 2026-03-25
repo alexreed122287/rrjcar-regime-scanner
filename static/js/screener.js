@@ -84,6 +84,19 @@ const Screener = {
         });
 
         table.appendChild(list);
+
+        // Toolbar with Copy button
+        const toolbar = document.createElement('div');
+        toolbar.className = 'screener-toolbar';
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn-copy-tickers';
+        copyBtn.textContent = `Copy Tickers (${valid.length})`;
+        copyBtn.onclick = () => {
+            const tickers = valid.map(r => r.symbol).join(',');
+            this.showCopyModal(tickers);
+        };
+        toolbar.appendChild(copyBtn);
+        container.appendChild(toolbar);
         container.appendChild(table);
 
         // Errors
@@ -163,5 +176,41 @@ const Screener = {
             default:
                 return results;
         }
+    },
+
+    showCopyModal(tickers) {
+        // Remove existing modal if any
+        const existing = document.querySelector('.copy-modal-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'copy-modal-overlay';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+        overlay.innerHTML = `
+            <div class="copy-modal">
+                <div class="copy-modal-header">
+                    <span class="copy-modal-title">Tickers</span>
+                    <button class="copy-modal-close">&times;</button>
+                </div>
+                <textarea class="copy-modal-text" readonly>${tickers}</textarea>
+                <div class="copy-modal-actions">
+                    <button class="btn-modal-copy">Copy</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('.copy-modal-close').onclick = () => overlay.remove();
+        overlay.querySelector('.btn-modal-copy').onclick = () => {
+            const ta = overlay.querySelector('.copy-modal-text');
+            ta.select();
+            navigator.clipboard.writeText(ta.value).then(() => {
+                const btn = overlay.querySelector('.btn-modal-copy');
+                btn.textContent = 'Copied!';
+                setTimeout(() => overlay.remove(), 800);
+            });
+        };
     },
 };
