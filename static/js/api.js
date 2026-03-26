@@ -36,8 +36,13 @@ const API = {
     },
 
     // Options
-    getOptions(symbol, minDte = 21, maxDte = 45, topN = 3) {
-        return this.get(`/api/options/${symbol}?min_dte=${minDte}&max_dte=${maxDte}&top_n=${topN}`);
+    getOptions(symbol, minDte = 0, maxDte = 365, topN = 5) {
+        return this.get(`/api/options/${symbol}?min_dte=${minDte}&max_dte=${maxDte}&top_n=${topN}&include_gex=true`);
+    },
+
+    // GEX
+    getGex(symbol, minDte = 0, maxDte = 365) {
+        return this.get(`/api/gex/${symbol}?min_dte=${minDte}&max_dte=${maxDte}`);
     },
 
     // Settings

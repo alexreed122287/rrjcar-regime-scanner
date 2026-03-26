@@ -3,6 +3,15 @@
  * Uses /api/watchlists/all to include the 10K+ universe lists
  */
 
+const DTE_PRESETS = {
+    '0dte':    { min: 0, max: 0 },
+    'weekly':  { min: 0, max: 7 },
+    'swing':   { min: 14, max: 45 },
+    'monthly': { min: 30, max: 60 },
+    'leaps':   { min: 180, max: 730 },
+    'all':     { min: 0, max: 365 },
+};
+
 const Settings = {
     watchlists: {},
 
@@ -69,6 +78,8 @@ const Settings = {
         this.setVal('setting-cooldown', settings.cooldown || 3);
         this.setVal('setting-capital', settings.initial_capital || 100000);
         this.setVal('setting-max-workers', settings.max_workers || 6);
+        this.setVal('setting-min-dte', settings.min_dte ?? 0);
+        this.setVal('setting-max-dte', settings.max_dte ?? 365);
     },
 
     setVal(id, val) {
@@ -90,7 +101,16 @@ const Settings = {
             regime_confirm: parseInt(this.getVal('setting-regime-confirm')) || 2,
             cooldown: parseInt(this.getVal('setting-cooldown')) || 3,
             max_workers: parseInt(this.getVal('setting-max-workers')) || 6,
+            min_dte: parseInt(this.getVal('setting-min-dte')) || 0,
+            max_dte: parseInt(this.getVal('setting-max-dte')) || 365,
         };
+    },
+
+    applyDtePreset(preset) {
+        if (!preset || !DTE_PRESETS[preset]) return;
+        const p = DTE_PRESETS[preset];
+        this.setVal('setting-min-dte', p.min);
+        this.setVal('setting-max-dte', p.max);
     },
 
     async save() {
@@ -101,5 +121,20 @@ const Settings = {
         } catch (err) {
             console.error('Save settings error:', err);
         }
+    },
+
+    async saveAndConfirm(btn) {
+        await this.save();
+        const orig = btn.textContent;
+        btn.textContent = 'Saved';
+        btn.style.background = '#22c55e';
+        btn.style.borderColor = '#22c55e';
+        btn.style.color = '#000';
+        setTimeout(() => {
+            btn.textContent = orig;
+            btn.style.background = '#1e2028';
+            btn.style.borderColor = '#2dd4bf';
+            btn.style.color = '#2dd4bf';
+        }, 1500);
     },
 };

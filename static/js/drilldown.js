@@ -74,6 +74,12 @@ const DrillDown = {
                 <!-- Backtest trade history -->
                 <div id="dd-backtest-area"></div>
 
+                <!-- GEX Analysis -->
+                <div id="dd-gex-area" style="margin:0.5rem 0;">
+                    <div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">Loading GEX analysis...</div>
+                </div>
+                <div id="dd-gex-chart" style="margin:0.3rem 0;"></div>
+
                 <!-- Position Sizing + Optimal Contract (auto-loaded) -->
                 <div id="dd-position-area" style="margin:0.5rem 0;">
                     <div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">Loading optimal contracts...</div>
@@ -85,8 +91,9 @@ const DrillDown = {
             // Embed TradingView
             this.embedTradingView(data.symbol);
 
-            // Auto-load backtest + options
+            // Auto-load backtest + options + GEX
             this.loadBacktest(data.symbol);
+            this.loadGex(data.symbol);
             this.loadPositionSizing(data.symbol);
 
         } catch (err) {
@@ -290,7 +297,8 @@ const DrillDown = {
     async loadPositionSizing(symbol) {
         const area = document.getElementById('dd-position-area');
         try {
-            const opts = await API.getOptions(symbol, 14, 60, 3);
+            const settings = Settings.gather();
+            const opts = await API.getOptions(symbol, settings.min_dte || 0, settings.max_dte || 365, 5);
 
             if (opts.error || !opts.recommendations || !opts.recommendations.length) {
                 area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">No options data available</div>`;
@@ -298,7 +306,8 @@ const DrillDown = {
             }
 
             const ps = opts.position_sizing || {};
-            const top = opts.recommendations[0];
+            const gexStrat = opts.gex_strategy || {};
+            const gexData = opts.gex || {};
 
             // Position sizing summary
             let html = `
@@ -308,8 +317,30 @@ const DrillDown = {
                     <div class="bt-stat"><div class="bt-label">Share Cost</div><div class="bt-val">$${(ps.shares_cost || 0).toLocaleString()}</div></div>
                     <div class="bt-stat"><div class="bt-label">Risk Budget</div><div class="bt-val">$${(ps.risk_amount || 0).toLocaleString()}</div></div>
                 </div>
+            `;
 
-                <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin:0.4rem 0 0.3rem;">Optimal Long Call</div>
+            // GEX strategy recommendation
+            if (gexStrat && gexStrat.strategy) {
+                const biasColor = gexData.gex_bias === 'positive' ? '#22c55e' : '#f59e0b';
+                html += `
+                <div style="margin:0.4rem 0; padding:0.5rem; background:rgba(45,212,191,0.05); border:1px solid rgba(45,212,191,0.2); border-radius:4px;">
+                    <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.3rem;">GEX Strategy</div>
+                    <div style="font-size:0.85rem; font-weight:600; color:#2dd4bf;">${gexStrat.strategy}</div>
+                    <div style="font-size:0.65rem; color:var(--text-dim); margin-top:2px;">${gexStrat.description || ''}</div>
+                    <div class="bt-summary" style="grid-template-columns: repeat(4,1fr); margin-top:0.3rem;">
+                        <div class="bt-stat"><div class="bt-label">GEX Bias</div><div class="bt-val" style="color:${biasColor};">${(gexData.gex_bias || '?').toUpperCase()}</div></div>
+                        <div class="bt-stat"><div class="bt-label">Call Wall</div><div class="bt-val">$${gexData.call_wall || '?'}</div></div>
+                        <div class="bt-stat"><div class="bt-label">Put Wall</div><div class="bt-val">$${gexData.put_wall || '?'}</div></div>
+                        <div class="bt-stat"><div class="bt-label">GEX Flip</div><div class="bt-val">$${gexData.gex_flip || 'N/A'}</div></div>
+                    </div>
+                    <div style="font-size:0.6rem; color:var(--text-dim); margin-top:0.3rem; font-family:var(--mono);">
+                        Strike: ${gexStrat.strike_guidance || '?'} | DTE: ${gexStrat.recommended_dte_min || '?'}-${gexStrat.recommended_dte_max || '?'}d
+                        | Stop ref: $${gexStrat.stop_reference || '?'} | Target: $${gexStrat.target_reference || '?'}
+                    </div>
+                </div>`;
+            }
+
+            html += `<div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin:0.4rem 0 0.3rem;">Top Contracts (GEX-Scored)</div>
             `;
 
             // Top contract card
@@ -347,6 +378,88 @@ const DrillDown = {
 
         } catch (err) {
             area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem;">Options: ${err.message}</div>`;
+        }
+    },
+
+    async loadGex(symbol) {
+        const area = document.getElementById('dd-gex-area');
+        const chartEl = document.getElementById('dd-gex-chart');
+
+        try {
+            const settings = Settings.gather();
+            const gex = await API.getGex(symbol, settings.min_dte || 0, settings.max_dte || 365);
+
+            if (gex.error) {
+                area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">GEX: ${gex.error}</div>`;
+                return;
+            }
+
+            const biasColor = gex.gex_bias === 'positive' ? '#22c55e' : '#f59e0b';
+            const strat = gex.strategy || {};
+
+            area.innerHTML = `
+                <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.3rem;">Gamma Exposure (GEX)</div>
+                <div class="bt-summary" style="grid-template-columns: repeat(5,1fr);">
+                    <div class="bt-stat"><div class="bt-label">Bias</div><div class="bt-val" style="color:${biasColor};">${(gex.gex_bias || '?').toUpperCase()}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Call Wall</div><div class="bt-val">$${gex.call_wall || '?'}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Put Wall</div><div class="bt-val">$${gex.put_wall || '?'}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Flip</div><div class="bt-val">${gex.gex_flip ? '$' + gex.gex_flip : 'N/A'}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Max Gamma</div><div class="bt-val">$${gex.max_gamma_strike || '?'}</div></div>
+                </div>
+            `;
+
+            // Render GEX chart using Plotly
+            if (chartEl && gex.gex_by_strike && gex.gex_by_strike.length && typeof Plotly !== 'undefined') {
+                // Filter to strikes within 15% of spot
+                const spot = gex.spot_price;
+                const relevant = gex.gex_by_strike.filter(g =>
+                    Math.abs(g.strike - spot) / spot < 0.15
+                );
+
+                if (relevant.length > 0) {
+                    const strikes = relevant.map(g => g.strike);
+                    const callGex = relevant.map(g => g.call_gex);
+                    const putGex = relevant.map(g => g.put_gex);
+                    const netGex = relevant.map(g => g.net_gex);
+
+                    const traces = [
+                        { x: strikes, y: callGex, type: 'bar', name: 'Call GEX', marker: { color: '#22c55e' } },
+                        { x: strikes, y: putGex, type: 'bar', name: 'Put GEX', marker: { color: '#ef4444' } },
+                        { x: strikes, y: netGex, type: 'scatter', mode: 'lines', name: 'Net GEX', line: { color: '#2dd4bf', width: 2 } },
+                    ];
+
+                    // Add vertical lines for key levels
+                    const shapes = [
+                        { type: 'line', x0: spot, x1: spot, y0: 0, y1: 1, yref: 'paper', line: { color: '#fff', dash: 'dot', width: 1 } },
+                    ];
+                    if (gex.call_wall) shapes.push({ type: 'line', x0: gex.call_wall, x1: gex.call_wall, y0: 0, y1: 1, yref: 'paper', line: { color: '#22c55e', dash: 'dash', width: 1 } });
+                    if (gex.put_wall) shapes.push({ type: 'line', x0: gex.put_wall, x1: gex.put_wall, y0: 0, y1: 1, yref: 'paper', line: { color: '#ef4444', dash: 'dash', width: 1 } });
+
+                    const annotations = [
+                        { x: spot, y: 1.02, yref: 'paper', text: 'SPOT', showarrow: false, font: { color: '#fff', size: 9 } },
+                    ];
+                    if (gex.call_wall) annotations.push({ x: gex.call_wall, y: 1.02, yref: 'paper', text: 'CALL WALL', showarrow: false, font: { color: '#22c55e', size: 9 } });
+                    if (gex.put_wall) annotations.push({ x: gex.put_wall, y: 1.02, yref: 'paper', text: 'PUT WALL', showarrow: false, font: { color: '#ef4444', size: 9 } });
+
+                    Plotly.newPlot(chartEl, traces, {
+                        barmode: 'group',
+                        paper_bgcolor: '#0a0a0f',
+                        plot_bgcolor: '#0a0a0f',
+                        font: { color: '#9ca3af', size: 10 },
+                        margin: { t: 30, b: 40, l: 50, r: 20 },
+                        height: 250,
+                        shapes: shapes,
+                        annotations: annotations,
+                        xaxis: { title: 'Strike', gridcolor: '#1e2028' },
+                        yaxis: { title: 'GEX ($)', gridcolor: '#1e2028' },
+                        legend: { orientation: 'h', y: -0.2, font: { size: 9 } },
+                        showlegend: true,
+                    }, { responsive: true, displayModeBar: false });
+                }
+            }
+
+        } catch (err) {
+            area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem;">GEX unavailable: ${err.message}</div>`;
         }
     },
 

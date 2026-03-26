@@ -3,9 +3,9 @@ options_picker.py — Options Strike & Expiration Selector
 Finds optimal call options for regime-based entries.
 
 Given a bullish regime signal, recommends:
-  - Best expiration (targeting 14-60 DTE sweet spot)
-  - Best strike (targeting ~0.30-0.40 delta OTM calls for long calls)
-  - Scores options by liquidity, delta, IV, and risk/reward
+  - Best expiration (supports full range: 0 DTE to LEAPS)
+  - Best strike (regime + GEX informed)
+  - Scores options by liquidity, delta, IV, GEX alignment, and risk/reward
 
 Uses Black-Scholes to estimate delta since yfinance doesn't provide Greeks.
 """
@@ -66,16 +66,17 @@ def black_scholes_theta(S, K, T, r, sigma, option_type="call"):
     return float((term1 + term2) / 365)  # daily theta
 
 
-def score_option(row, price, dte, regime_id, confirmations):
+def score_option(row, price, dte, regime_id, confirmations, gex_strategy=None):
     """
     Score an option contract for suitability.
 
     Higher score = better pick. Factors:
-    - Delta sweet spot (0.25-0.45 for OTM plays, 0.50-0.70 for ITM momentum)
+    - Delta sweet spot (regime-dependent)
     - Liquidity (volume + open interest)
     - Bid-ask spread tightness
-    - DTE sweet spot (21-45 days optimal)
-    - IV relative value (lower IV = cheaper premium)
+    - DTE fit (dynamic based on GEX strategy or default sweet spot)
+    - IV relative value
+    - GEX alignment (strike proximity to key GEX levels)
     """
     score = 0.0
     delta = abs(row.get("delta", 0))
@@ -85,16 +86,14 @@ def score_option(row, price, dte, regime_id, confirmations):
     bid = row.get("bid", 0) or 0
     ask = row.get("ask", 0) or 0
     mid = (bid + ask) / 2 if (bid + ask) > 0 else row.get("lastPrice", 0)
+    strike = row.get("strike", 0)
 
     # Skip garbage
     if mid <= 0.01 or ask <= 0:
         return -999
 
     # ── Delta scoring ──
-    # Strong bullish regime (0-1): prefer slightly higher delta (0.35-0.55)
-    # Mild bullish (2): prefer lower delta (0.25-0.40) for cheaper exposure
     if regime_id <= 1:
-        # Momentum play — want more delta
         if 0.35 <= delta <= 0.55:
             score += 30
         elif 0.25 <= delta <= 0.65:
@@ -102,7 +101,6 @@ def score_option(row, price, dte, regime_id, confirmations):
         elif 0.15 <= delta <= 0.75:
             score += 10
     else:
-        # Cheaper speculative play
         if 0.25 <= delta <= 0.40:
             score += 30
         elif 0.15 <= delta <= 0.50:
@@ -110,15 +108,30 @@ def score_option(row, price, dte, regime_id, confirmations):
         elif 0.10 <= delta <= 0.60:
             score += 10
 
-    # ── DTE scoring ──
-    if 21 <= dte <= 45:
-        score += 25  # sweet spot
-    elif 14 <= dte <= 60:
-        score += 15
-    elif 7 <= dte <= 90:
-        score += 5
+    # ── DTE scoring (dynamic if GEX strategy provided) ──
+    if gex_strategy and gex_strategy.get("strategy"):
+        ideal_min = gex_strategy.get("recommended_dte_min", 14)
+        ideal_max = gex_strategy.get("recommended_dte_max", 45)
+        if ideal_min <= dte <= ideal_max:
+            score += 25  # in GEX-recommended DTE range
+        elif abs(dte - ideal_min) <= 7 or abs(dte - ideal_max) <= 7:
+            score += 15  # close to range
+        elif dte >= 0:
+            score += 3  # still valid
     else:
-        score -= 10  # too short or too long
+        # Default DTE scoring
+        if 21 <= dte <= 45:
+            score += 25
+        elif 14 <= dte <= 60:
+            score += 15
+        elif 7 <= dte <= 90:
+            score += 5
+        elif 0 <= dte <= 7:
+            score += 3  # 0 DTE still valid
+        elif dte <= 365:
+            score += 2  # LEAPS acceptable
+        else:
+            score -= 5
 
     # ── Liquidity scoring ──
     if volume >= 100 and oi >= 500:
@@ -130,7 +143,7 @@ def score_option(row, price, dte, regime_id, confirmations):
     elif volume >= 1 or oi >= 10:
         score += 2
     else:
-        score -= 15  # illiquid
+        score -= 15
 
     # ── Spread scoring ──
     if bid > 0 and ask > 0:
@@ -144,25 +157,61 @@ def score_option(row, price, dte, regime_id, confirmations):
         else:
             score -= 5
 
-    # ── IV scoring (prefer moderate IV, not extreme) ──
+    # ── IV scoring ──
     if 0.15 <= iv <= 0.40:
         score += 10
     elif 0.10 <= iv <= 0.60:
         score += 5
     elif iv > 0.80:
-        score -= 10  # expensive
+        score -= 10
 
     # ── Confirmations bonus ──
-    if confirmations >= 7:
+    if confirmations >= 10:
+        score += 15
+    elif confirmations >= 7:
         score += 10
     elif confirmations >= 6:
         score += 5
 
-    # ── Price reasonableness (avoid options > 10% of stock price) ──
+    # ── Price reasonableness ──
     if mid < price * 0.10:
         score += 5
     if mid < price * 0.03:
-        score += 5  # cheap relative to stock
+        score += 5
+
+    # ── GEX alignment scoring ──
+    if gex_strategy and gex_strategy.get("strategy") and strike > 0 and price > 0:
+        strat_key = gex_strategy.get("strategy_key", "")
+        call_wall = gex_strategy.get("call_wall", 0)
+        put_wall = gex_strategy.get("put_wall", 0)
+        strike_min = gex_strategy.get("recommended_strike_min", 0)
+        strike_max = gex_strategy.get("recommended_strike_max", 0)
+
+        # Bonus for strike in GEX-recommended range
+        if strike_min <= strike <= strike_max:
+            score += 20
+
+        # Strategy-specific bonuses
+        if strat_key == "pin_play" and call_wall > 0:
+            # Prefer strikes that profit from move toward call wall
+            dist_to_wall = abs(strike - call_wall) / price * 100
+            if dist_to_wall < 2:
+                score += 10
+            elif dist_to_wall < 5:
+                score += 5
+        elif strat_key == "breakout_ride":
+            # Prefer OTM strikes for leverage on breakout
+            if strike > price:
+                score += 5
+        elif strat_key == "gamma_scalp":
+            # Prefer ATM for max gamma
+            if abs(strike - price) / price < 0.02:
+                score += 10
+
+        # Penalty for strikes beyond call wall in positive GEX (price pins below)
+        if gex_strategy.get("gex_bias") == "positive" and call_wall > 0:
+            if strike > call_wall * 1.02:
+                score -= 10
 
     return round(score, 1)
 
@@ -174,16 +223,17 @@ def get_options_recommendations(
     regime_label: str,
     confirmations: int,
     signal: str,
-    min_dte: int = 7,
-    max_dte: int = 90,
+    min_dte: int = 0,
+    max_dte: int = 365,
     risk_free_rate: float = 0.045,
     top_n: int = 5,
+    gex_strategy: Dict = None,
 ) -> Dict:
     """
     Get top call option recommendations for a ticker.
 
-    Only recommends calls when signal is bullish.
-    Returns empty if no options available or signal is not bullish.
+    Supports full DTE range from 0 (same-day) to 730+ (LEAPS).
+    Optionally uses GEX strategy to inform scoring.
     """
     result = {
         "symbol": symbol,
@@ -192,10 +242,9 @@ def get_options_recommendations(
         "signal": signal,
         "recommendations": [],
         "all_scored": [],
+        "gex_strategy": gex_strategy,
         "error": None,
     }
-
-    # Show options for all regimes — user decides whether to trade
 
     try:
         ticker = yf.Ticker(symbol)
@@ -230,7 +279,7 @@ def get_options_recommendations(
                 strike = row["strike"]
                 iv = row.get("impliedVolatility", 0.3)
                 if iv <= 0:
-                    iv = 0.3  # fallback
+                    iv = 0.3
 
                 # Compute Greeks
                 delta = black_scholes_delta(current_price, strike, T, risk_free_rate, iv, "call")
@@ -267,10 +316,10 @@ def get_options_recommendations(
                     "score": 0,
                 }
 
-                # Add delta to row for scoring
                 row_dict = row.to_dict()
                 row_dict["delta"] = delta
-                opt["score"] = score_option(row_dict, current_price, dte, regime_id, confirmations)
+                row_dict["strike"] = strike
+                opt["score"] = score_option(row_dict, current_price, dte, regime_id, confirmations, gex_strategy)
 
                 scored_options.append(opt)
 
@@ -289,8 +338,8 @@ def get_options_recommendations(
 
 def scan_options_for_watchlist(
     scan_results: List[Dict],
-    min_dte: int = 7,
-    max_dte: int = 90,
+    min_dte: int = 0,
+    max_dte: int = 365,
     top_n: int = 3,
 ) -> List[Dict]:
     """

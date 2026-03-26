@@ -108,6 +108,47 @@
                 </select>
             </div>
             <div class="setting-group">
+                <label>Min DTE</label>
+                <select id="setting-min-dte">
+                    <option value="0">0 (same day)</option>
+                    <option value="1">1</option>
+                    <option value="7">7</option>
+                    <option value="14">14</option>
+                    <option value="21">21</option>
+                    <option value="30">30</option>
+                    <option value="45">45</option>
+                    <option value="60">60</option>
+                    <option value="90">90</option>
+                    <option value="180">180</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label>Max DTE</label>
+                <select id="setting-max-dte">
+                    <option value="7">7</option>
+                    <option value="14">14</option>
+                    <option value="30">30</option>
+                    <option value="45">45</option>
+                    <option value="60">60</option>
+                    <option value="90">90</option>
+                    <option value="180">180</option>
+                    <option value="365" selected>365</option>
+                    <option value="730">730 (LEAPS)</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label>DTE Preset</label>
+                <select id="setting-dte-preset" onchange="Settings.applyDtePreset(this.value)">
+                    <option value="">Custom</option>
+                    <option value="0dte">0 DTE</option>
+                    <option value="weekly">Weeklies (0-7)</option>
+                    <option value="swing">Swing (14-45)</option>
+                    <option value="monthly">Monthly (30-60)</option>
+                    <option value="leaps">LEAPS (180-730)</option>
+                    <option value="all">All (0-365)</option>
+                </select>
+            </div>
+            <div class="setting-group">
                 <label>Signal Filter</label>
                 <select id="filter-signal" onchange="Screener.currentFilter=this.value; Screener.render(Screener.results, document.getElementById('screener-content'));">
                     <option value="All">All Signals</option>
@@ -185,7 +226,10 @@
                 <button class="btn-scan-go btn-copy-grid" id="btn-copy-tickers" onclick="Screener.copyTickers()">Copy Tickers</button>
             </div>
         </div>
-        <button class="btn-scan-go" id="btn-scan">Scan</button>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-scan-go" id="btn-scan" style="flex:1;">Scan</button>
+            <button class="btn-scan-go" id="btn-save-settings" style="flex:0 0 auto; background:#1e2028; border:1px solid #2dd4bf; color:#2dd4bf;" onclick="Settings.saveAndConfirm(this)">Save Settings</button>
+        </div>
         </details>
     </div>
 

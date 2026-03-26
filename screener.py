@@ -26,8 +26,8 @@ _IS_CLOUD = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
 _ticker_info_cache: Dict[str, Dict] = {}
 
 # Sectors and industries to exclude from screening
-EXCLUDED_SECTORS = {"Healthcare"}
-EXCLUDED_INDUSTRIES_KEYWORDS = {"Biotechnology", "Pharmaceutical", "Pharma", "Drug"}
+EXCLUDED_SECTORS = {"Healthcare", "Health Technology"}
+EXCLUDED_INDUSTRIES_KEYWORDS = {"Biotechnology", "Pharmaceutical", "Pharma", "Drug", "Biotech"}
 
 # Minimum screening thresholds
 MIN_PRICE = 1.0
@@ -288,7 +288,13 @@ def scan_single_ticker(
     try:
         ticker = resolve_ticker(symbol)
 
-        # Fetch and prepare data (skip slow yfinance info lookups during mass scans)
+        # Exclude Healthcare / Biotechnology sectors
+        ticker_info = _fetch_ticker_info(symbol)
+        if _is_excluded_sector_or_industry(ticker_info):
+            logger.debug(f"[Scan] {symbol} excluded: healthcare/biotech sector")
+            return None
+
+        # Fetch and prepare data
         raw_df = fetch_data(symbol=symbol, period_days=period_days, interval=interval)
 
         # Pre-screen: price > $1, 30-day avg volume check
