@@ -8,3 +8,4 @@ __pycache__/
 .trade_history.db
 .regime_cache.json
 .env
+.am_scan_results.json
