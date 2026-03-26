@@ -2,9 +2,16 @@ name: Daily Regime Scan
 
 on:
   schedule:
-    # 1:25 PM CST = 19:25 UTC (weekdays only)
-    - cron: '25 19 * * 1-5'
+    # 10:00 AM CST = 16:00 UTC (weekdays)
+    - cron: '0 16 * * 1-5'
+    # 1:00 PM CST = 19:00 UTC (weekdays)
+    - cron: '0 19 * * 1-5'
   workflow_dispatch:
+    inputs:
+      session:
+        description: 'Scan session (am or pm)'
+        required: false
+        default: 'am'
 
 jobs:
   scan:
@@ -24,6 +31,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Restore AM results cache for PM confirmation
+      - name: Restore AM scan cache
+        if: github.event.schedule == '0 19 * * 1-5'
+        uses: actions/cache/restore@v4
+        with:
+          path: .am_scan_results.json
+          key: am-scan-${{ github.run_id }}
+          restore-keys: am-scan-
+
+      - name: Determine session
+        id: session
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 16 * * 1-5" ]; then
+            echo "session=am" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "0 19 * * 1-5" ]; then
+            echo "session=pm" >> $GITHUB_OUTPUT
+          else
+            echo "session=${{ github.event.inputs.session || 'am' }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run scheduled scan
         env:
           TRADIER_ACCESS_TOKEN: ${{ secrets.TRADIER_ACCESS_TOKEN }}
@@ -34,4 +61,12 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scheduled_scan.py
+        run: python scheduled_scan.py ${{ steps.session.outputs.session }}
+
+      # Save AM results for PM confirmation
+      - name: Save AM scan cache
+        if: steps.session.outputs.session == 'am'
+        uses: actions/cache/save@v4
+        with:
+          path: .am_scan_results.json
+          key: am-scan-${{ github.run_id }}

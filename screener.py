@@ -43,7 +43,7 @@ def _fetch_ticker_info(symbol: str) -> Dict:
         return _ticker_info_cache[symbol]
 
     # Default has_options to True so tickers aren't filtered out when yfinance is unreachable
-    info = {"sector": None, "industry": None, "has_options": True}
+    info = {"sector": None, "industry": None, "has_options": True, "name": None}
 
     # Skip crypto symbols — they don't have sectors/options in the traditional sense
     if symbol.endswith("-USD"):
@@ -61,6 +61,7 @@ def _fetch_ticker_info(symbol: str) -> Dict:
         tk_info = tk.info or {}
         info["sector"] = tk_info.get("sector")
         info["industry"] = tk_info.get("industry")
+        info["name"] = tk_info.get("shortName") or tk_info.get("longName")
 
         # Check if options are available — only set False on definitive empty, keep True on errors
         try:
@@ -376,8 +377,10 @@ def scan_single_ticker(
         return {
             "symbol": symbol.upper(),
             "ticker": ticker,
-            "sector": None,
-            "industry": None,
+            "name": ticker_info.get("name"),
+            "sector": ticker_info.get("sector"),
+            "industry": ticker_info.get("industry"),
+            "has_options": ticker_info.get("has_options", True),
             "price": price_now,
             "change_bar": pct_change(price_prev, price_now),
             "change_1d": pct_change(price_1d_ago, price_now),
