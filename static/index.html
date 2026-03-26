@@ -185,7 +185,10 @@
                 <button class="btn-scan-go btn-copy-grid" id="btn-copy-tickers" onclick="Screener.copyTickers()">Copy Tickers</button>
             </div>
         </div>
-        <button class="btn-scan-go" id="btn-scan">Scan</button>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-scan-go" id="btn-scan" style="flex:1;">Scan</button>
+            <button class="btn-scan-go" id="btn-save-settings" style="flex:0 0 auto; background:#1e2028; border:1px solid #2dd4bf; color:#2dd4bf;" onclick="Settings.saveAndConfirm(this)">Save Settings</button>
+        </div>
         </details>
     </div>
 

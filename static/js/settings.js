@@ -102,4 +102,19 @@ const Settings = {
             console.error('Save settings error:', err);
         }
     },
+
+    async saveAndConfirm(btn) {
+        await this.save();
+        const orig = btn.textContent;
+        btn.textContent = 'Saved';
+        btn.style.background = '#22c55e';
+        btn.style.borderColor = '#22c55e';
+        btn.style.color = '#000';
+        setTimeout(() => {
+            btn.textContent = orig;
+            btn.style.background = '#1e2028';
+            btn.style.borderColor = '#2dd4bf';
+            btn.style.color = '#2dd4bf';
+        }, 1500);
+    },
 };
