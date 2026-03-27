@@ -31,27 +31,27 @@ def _load_tradier_config() -> dict:
     if _tradier_config_cache is not None:
         return _tradier_config_cache
 
-    config = {
-        "access_token": os.environ.get("TRADIER_ACCESS_TOKEN", ""),
-        "account_id": os.environ.get("TRADIER_ACCOUNT_ID", ""),
-        "sandbox": True,
-    }
-
     # Load from .env if python-dotenv available
     try:
         from dotenv import load_dotenv
         load_dotenv()
-        config["access_token"] = os.environ.get("TRADIER_ACCESS_TOKEN", config["access_token"])
-        config["account_id"] = os.environ.get("TRADIER_ACCOUNT_ID", config["account_id"])
     except ImportError:
         pass
 
-    # Local settings file
+    env_token = os.environ.get("TRADIER_ACCESS_TOKEN", "")
+    env_sandbox = os.environ.get("TRADIER_SANDBOX", "").lower()
+    config = {
+        "access_token": env_token,
+        "account_id": os.environ.get("TRADIER_ACCOUNT_ID", ""),
+        "sandbox": env_sandbox in ("true", "1", "yes") if env_sandbox else (not bool(env_token)),
+    }
+
+    # Local settings file overrides env vars
     if os.path.exists(TRADIER_SETTINGS_FILE):
         try:
             with open(TRADIER_SETTINGS_FILE, "r") as f:
                 saved = json.load(f)
-            config.update({k: v for k, v in saved.items() if v})
+            config.update({k: v for k, v in saved.items() if v is not None and v != ""})
         except Exception:
             pass
 
