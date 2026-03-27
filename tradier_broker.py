@@ -18,18 +18,21 @@ PROD_BASE = "https://api.tradier.com/v1"
 
 def _load_config() -> Dict:
     """Load Tradier config from settings file or env vars."""
+    # Default sandbox to False (production) when token is from env vars
+    env_token = os.environ.get("TRADIER_ACCESS_TOKEN", "")
+    env_sandbox = os.environ.get("TRADIER_SANDBOX", "").lower()
     config = {
-        "access_token": os.environ.get("TRADIER_ACCESS_TOKEN", ""),
+        "access_token": env_token,
         "account_id": os.environ.get("TRADIER_ACCOUNT_ID", ""),
-        "sandbox": True,
+        "sandbox": env_sandbox in ("true", "1", "yes") if env_sandbox else (not bool(env_token)),
     }
 
-    # Try settings file
+    # Settings file overrides env vars
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r") as f:
                 saved = json.load(f)
-            config.update({k: v for k, v in saved.items() if v})
+            config.update({k: v for k, v in saved.items() if v is not None and v != ""})
         except Exception:
             pass
 
