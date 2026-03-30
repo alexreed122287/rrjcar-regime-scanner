@@ -47,6 +47,7 @@
                 <select id="setting-strategy">
                     <option value="v2">V2 (12-conf)</option>
                     <option value="v1">V1 (8-conf)</option>
+                    <option value="leaps">LEAPS (10-conf)</option>
                 </select>
             </div>
             <div class="setting-group">
@@ -266,6 +267,7 @@
         <button class="tab-btn" data-tab="drilldown">Chart</button>
         <button class="tab-btn" data-tab="orders">Orders</button>
         <button class="tab-btn" data-tab="positions">Positions</button>
+        <button class="tab-btn" data-tab="leaps">LEAPS</button>
         <button class="tab-btn" data-tab="heatmap">Heatmap</button>
         <button class="tab-btn" data-tab="config">Config</button>
     </div>
@@ -303,6 +305,15 @@
         <div id="positions-content">
             <div style="color:var(--text-dim); padding:1rem; text-align:center; font-size:0.75rem;">
                 No open positions.
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab: LEAPS -->
+    <div class="tab-content" id="tab-leaps">
+        <div id="leaps-content">
+            <div style="color:var(--text-dim); padding:1rem; text-align:center; font-size:0.75rem;">
+                Run a scan with LEAPS strategy, or click a ticker from Hits to see LEAPS contracts.
             </div>
         </div>
     </div>
@@ -414,6 +425,7 @@
 <script src="/static/js/scanner-results.js?v=120"></script>
 <script src="/static/js/drilldown.js?v=120"></script>
 <script src="/static/js/orders.js?v=120"></script>
+<script src="/static/js/leaps.js?v=120"></script>
 <script src="/static/js/settings.js?v=120"></script>
 <script src="/static/js/app.js?v=120"></script>
 

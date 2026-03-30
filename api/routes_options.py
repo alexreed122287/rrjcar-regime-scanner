@@ -7,6 +7,7 @@ router = APIRouter()
 # Import lazily to avoid slow startup
 _options_picker = None
 _gex_engine = None
+_leaps_strategy = None
 
 
 def _get_picker():
@@ -23,6 +24,87 @@ def _get_gex():
         import gex_engine as ge
         _gex_engine = ge
     return _gex_engine
+
+
+def _get_leaps():
+    global _leaps_strategy
+    if _leaps_strategy is None:
+        import strategy_leaps as sl
+        _leaps_strategy = sl
+    return _leaps_strategy
+
+
+@router.get("/leaps/{symbol}")
+async def get_leaps(symbol: str, top_n: int = 5, min_dte: int = 180, max_dte: int = 730):
+    """Get best LEAPS contracts for a symbol with scoring."""
+    try:
+        leaps = _get_leaps()
+
+        # Get spot price and HV rank from scan cache or fetch
+        spot = 0
+        hv_rank = 0.5
+        try:
+            from api.routes_scan import _scan_cache
+            full_results = _scan_cache.get("results_full", [])
+            cached = next((r for r in full_results if r.get("symbol", "").upper() == symbol.upper()), None)
+            if cached and cached.get("price"):
+                spot = cached["price"]
+                hv_rank = cached.get("hv_rank", 0.5) or 0.5
+        except Exception:
+            pass
+
+        if not spot:
+            from data_loader import fetch_data
+            df = fetch_data(symbol=symbol, period_days=30, interval="1d")
+            spot = float(df["Close"].iloc[-1])
+
+        result = leaps.find_best_leaps(
+            symbol=symbol,
+            spot_price=spot,
+            hv_rank=hv_rank,
+            min_dte=min_dte,
+            max_dte=max_dte,
+            top_n=top_n,
+        )
+
+        # Serialize numpy types
+        clean_recs = []
+        for r in result.get("recommendations", []):
+            cr = {}
+            for k, v in r.items():
+                if hasattr(v, "item"):
+                    cr[k] = v.item()
+                elif isinstance(v, float) and v != v:
+                    cr[k] = None
+                else:
+                    cr[k] = v
+            clean_recs.append(cr)
+
+        # Position sizing
+        from settings_manager import load_settings
+        settings = load_settings()
+        capital = settings.get("initial_capital", 100000)
+        risk_pct = settings.get("risk_pct", 10)
+        risk_amount = capital * (risk_pct / 100)
+
+        for cr in clean_recs:
+            mid = cr.get("mid", 0) or 0
+            if mid > 0:
+                contract_cost = mid * 100
+                cr["contracts"] = max(1, int(risk_amount / contract_cost))
+                cr["total_cost"] = round(cr["contracts"] * contract_cost, 2)
+                cr["pct_of_capital"] = round(cr["total_cost"] / capital * 100, 2)
+
+        return {
+            "symbol": result.get("symbol"),
+            "spot_price": result.get("spot_price"),
+            "recommendations": clean_recs,
+            "total_evaluated": result.get("total_evaluated", 0),
+            "error": result.get("error"),
+        }
+
+    except Exception as e:
+        return {"error": str(e), "symbol": symbol.upper()}
 
 
 @router.get("/gex/{symbol}")
