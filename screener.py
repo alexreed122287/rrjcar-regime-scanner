@@ -17,6 +17,7 @@ from data_loader import fetch_data, engineer_features, resolve_ticker
 from hmm_engine import RegimeDetector, REGIME_LABELS
 from backtester import compute_confirmations, get_current_signal
 from strategy_v2 import get_current_signal_v2
+from strategy_leaps import get_current_signal_leaps
 
 logger = logging.getLogger(__name__)
 
@@ -318,8 +319,10 @@ def scan_single_ticker(
         # Current regime
         current = detector.predict_current(regime_df)
 
-        # Current signal with confirmations (V1 or V2)
-        if strategy == "v2":
+        # Current signal with confirmations (V1, V2, or LEAPS)
+        if strategy == "leaps":
+            signal_data = get_current_signal_leaps(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
+        elif strategy == "v2":
             signal_data = get_current_signal_v2(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
         else:
             signal_data = get_current_signal(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
@@ -465,15 +468,21 @@ def _scan_batch(
 
 SIGNAL_PRIORITY = {
     "LONG -- ENTER": 0,
+    "LEAPS -- BUY": 0,
     "EXIT -- REGIME FLIP": 1,
+    "LEAPS -- EXIT": 1,
     "LONG -- CONFIRMING": 2,
+    "LEAPS -- WATCH": 2,
     "LONG -- HOLD": 3,
+    "LEAPS -- HOLD": 3,
     "CASH -- NEUTRAL": 4,
+    "LEAPS -- WAIT": 4,
     "CASH -- BEARISH": 5,
+    "LEAPS -- AVOID": 5,
     "ERROR": 99,
 }
 
-BULLISH_SIGNALS = {"LONG -- ENTER", "LONG -- CONFIRMING", "LONG -- HOLD"}
+BULLISH_SIGNALS = {"LONG -- ENTER", "LONG -- CONFIRMING", "LONG -- HOLD", "LEAPS -- BUY", "LEAPS -- WATCH", "LEAPS -- HOLD"}
 
 
 def scan_watchlist(

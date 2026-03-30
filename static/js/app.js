@@ -290,6 +290,12 @@ const App = {
                 Charts.regimeHeatmap('heatmap-chart', this.scanResults);
             }
 
+            // Render LEAPS tab if LEAPS strategy was used
+            const strategy = Settings.getVal('setting-strategy');
+            if (strategy === 'leaps' && this.scanResults.length) {
+                Leaps.render(this.scanResults, document.getElementById('leaps-content'));
+            }
+
         } catch (err) {
             if (err.name !== 'AbortError') {
                 document.getElementById('screener-content').innerHTML =
@@ -340,8 +346,14 @@ const App = {
     },
 
     async drillDown(symbol) {
-        this.showTab('drilldown');
-        await DrillDown.render(symbol, document.getElementById('drilldown-content'));
+        const strategy = Settings.getVal('setting-strategy');
+        if (strategy === 'leaps') {
+            this.showTab('leaps');
+            await Leaps.drillDown(symbol);
+        } else {
+            this.showTab('drilldown');
+            await DrillDown.render(symbol, document.getElementById('drilldown-content'));
+        }
     },
 };
 

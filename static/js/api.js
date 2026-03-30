@@ -45,6 +45,11 @@ const API = {
         return this.get(`/api/gex/${symbol}?min_dte=${minDte}&max_dte=${maxDte}`);
     },
 
+    // LEAPS
+    getLeaps(symbol, topN = 5, minDte = 180, maxDte = 730) {
+        return this.get(`/api/leaps/${symbol}?top_n=${topN}&min_dte=${minDte}&max_dte=${maxDte}`);
+    },
+
     // Settings
     getSettings() { return this.get('/api/settings'); },
     saveSettings(data) { return this.post('/api/settings', data); },
