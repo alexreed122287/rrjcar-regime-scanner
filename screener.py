@@ -290,12 +290,6 @@ def scan_single_ticker(
     try:
         ticker = resolve_ticker(symbol)
 
-        # Exclude Healthcare / Biotechnology sectors
-        ticker_info = _fetch_ticker_info(symbol)
-        if _is_excluded_sector_or_industry(ticker_info):
-            logger.debug(f"[Scan] {symbol} excluded: healthcare/biotech sector")
-            return None
-
         # Fetch and prepare data
         raw_df = fetch_data(symbol=symbol, period_days=period_days, interval=interval)
 
@@ -310,6 +304,14 @@ def scan_single_ticker(
             logger.debug(f"[Scan] {symbol} excluded: insufficient data ({len(feat_df)} pts)")
             return None
 
+        # Fetch ticker info (sector, name, options) — non-blocking, uses cache
+        ticker_info = _fetch_ticker_info(symbol)
+
+        # Exclude Healthcare / Biotechnology sectors
+        if _is_excluded_sector_or_industry(ticker_info):
+            logger.debug(f"[Scan] {symbol} excluded: healthcare/biotech sector")
+            return None
+
         # Train HMM (fewer iterations + looser tolerance on cloud for speed)
         hmm_iter = 50 if _IS_CLOUD else 100
         hmm_tol = 1e-2 if _IS_CLOUD else 1e-4
@@ -322,7 +324,7 @@ def scan_single_ticker(
         # Current signal with confirmations (V1, V2, or LEAPS)
         if strategy == "leaps":
             # LEAPS has 10 confs — auto-cap min_confirmations to sensible range
-            leaps_min = min(min_confirmations, 7)
+            leaps_min = min(min_confirmations, 6)
             signal_data = get_current_signal_leaps(regime_df, min_confirmations=leaps_min, regime_confirm_bars=regime_confirm_bars)
         elif strategy == "v2":
             signal_data = get_current_signal_v2(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)

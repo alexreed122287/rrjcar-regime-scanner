@@ -110,6 +110,9 @@ def compute_leaps_confirmations(df: pd.DataFrame) -> pd.DataFrame:
 
     # ── Aggregate ──
     conf_cols = [c for c in out.columns if c.startswith("conf_")]
+    # Fill NaN with False so missing data doesn't break aggregation
+    for c in conf_cols:
+        out[c] = out[c].fillna(False)
     out["confirmations_met"] = out[conf_cols].sum(axis=1).astype(int)
 
     return out
