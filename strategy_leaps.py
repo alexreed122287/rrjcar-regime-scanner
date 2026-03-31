@@ -142,20 +142,27 @@ def get_current_signal_leaps(df: pd.DataFrame, min_confirmations: int = 7, regim
 
     regime_confirmed = streak >= regime_confirm_bars
     is_bullish = regime_id in [0, 1, 2]
+    is_neutral_bull = regime_id in [0, 1, 2, 3]  # Include Neutral for LEAPS (long-term play)
     was_bullish = prev_regime in [0, 1, 2]
     is_bearish = regime_id in [5, 6]
 
-    # Signal determination (LEAPS-specific labels)
-    if is_bullish and confs >= min_confirmations and regime_confirmed:
-        if was_bullish:
-            signal = "LEAPS -- HOLD"
-            action = f"Maintain LEAPS position. {confs}/10 confirmations. Regime: {regime_label}."
-        else:
-            signal = "LEAPS -- BUY"
-            action = f"LEAPS entry. {confs}/10 confirmations. {regime_label} confirmed ({streak} bars). Low IV rank: {hv_rank:.0%}."
-    elif is_bullish and confs >= min_confirmations and not regime_confirmed:
+    # LEAPS signal determination — more permissive than short-term strategies
+    # because LEAPS care about long-term trend (200 EMA, golden cross) more than
+    # short-term regime. If confirmations pass, the trend is intact.
+    if confs >= min_confirmations and is_bullish and regime_confirmed:
+        signal = "LEAPS -- BUY"
+        action = f"Strong LEAPS entry. {confs}/10 confirmations. {regime_label} confirmed ({streak} bars). IV rank: {hv_rank:.0%}."
+    elif confs >= min_confirmations and is_bullish and not regime_confirmed:
         signal = "LEAPS -- WATCH"
         action = f"Bullish with {confs}/10 confs, confirming regime ({streak}/{regime_confirm_bars} bars). Prepare LEAPS entry."
+    elif confs >= min_confirmations and is_neutral_bull:
+        # Neutral regime but confirmations pass — long-term trend intact
+        signal = "LEAPS -- WATCH"
+        action = f"Trend intact ({confs}/10 confs) but regime is {regime_label}. Wait for bullish confirmation or enter on dip."
+    elif confs >= min_confirmations - 1 and is_neutral_bull:
+        # Close to threshold — worth monitoring
+        signal = "LEAPS -- WATCH"
+        action = f"Near threshold ({confs}/10 confs). {regime_label}. Monitor for confirmation."
     elif is_bearish:
         if was_bullish:
             signal = "LEAPS -- EXIT"
@@ -163,6 +170,9 @@ def get_current_signal_leaps(df: pd.DataFrame, min_confirmations: int = 7, regim
         else:
             signal = "LEAPS -- AVOID"
             action = "Bearish regime. No LEAPS entry."
+    elif confs >= min_confirmations and is_bearish:
+        signal = "LEAPS -- AVOID"
+        action = f"Confirmations pass ({confs}/10) but regime is bearish. Avoid."
     else:
         signal = "LEAPS -- WAIT"
         action = f"Regime: {regime_label}. {confs}/10 confirmations. Not enough for LEAPS entry."
