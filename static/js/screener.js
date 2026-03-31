@@ -65,7 +65,7 @@ const Screener = {
             const regimeHtml = r.regime_id != null ? this.regimeBadge(r.regime_id, r.regime_label, r.regime_confidence) : '<span class="sr-regime">--</span>';
 
             const { shortSig, sigHex } = this.signalInfo(r);
-            const flash = (r.signal || '').includes('ENTER') || (r.signal || '').includes('EXIT') ? 'alert-flash' : '';
+            const flash = (r.signal || '').includes('ENTER') || (r.signal || '').includes('EXIT') || (r.signal || '').includes('BUY') ? 'alert-flash' : '';
 
             const cmet = r.confirmations_met || 0;
             const cTotal = r.confirmations_total || 12;
@@ -109,8 +109,8 @@ const Screener = {
 
     signalInfo(r) {
         const sig = r.signal || '';
-        const shortSig = sig.replace('LONG -- ', '').replace('CASH -- ', '').replace('EXIT -- ', 'EXIT: ');
-        const colors = { ENTER: '#34d399', CONFIRMING: '#5eead4', HOLD: '#2dd4bf', EXIT: '#f87171', BEARISH: '#f87171' };
+        const shortSig = sig.replace('LONG -- ', '').replace('CASH -- ', '').replace('EXIT -- ', 'EXIT: ').replace('LEAPS -- ', 'LEAPS: ');
+        const colors = { BUY: '#34d399', ENTER: '#34d399', CONFIRMING: '#5eead4', WATCH: '#5eead4', HOLD: '#2dd4bf', EXIT: '#f87171', AVOID: '#f87171', BEARISH: '#f87171', WAIT: '#6b7280' };
         let sigHex = '#6b7280';
         for (const [k, v] of Object.entries(colors)) {
             if (sig.includes(k)) { sigHex = v; break; }
@@ -147,8 +147,9 @@ const Screener = {
 
     applySort(results) {
         const PRIORITY = {
-            'LONG -- ENTER': 0, 'EXIT -- REGIME FLIP': 1, 'LONG -- CONFIRMING': 2,
-            'LONG -- HOLD': 3, 'CASH -- NEUTRAL': 4, 'CASH -- BEARISH': 5, 'ERROR': 99,
+            'LONG -- ENTER': 0, 'LEAPS -- BUY': 0, 'EXIT -- REGIME FLIP': 1, 'LEAPS -- EXIT': 1,
+            'LONG -- CONFIRMING': 2, 'LEAPS -- WATCH': 2, 'LONG -- HOLD': 3, 'LEAPS -- HOLD': 3,
+            'CASH -- NEUTRAL': 4, 'LEAPS -- WAIT': 4, 'CASH -- BEARISH': 5, 'LEAPS -- AVOID': 5, 'ERROR': 99,
         };
 
         switch (this.currentSort) {
