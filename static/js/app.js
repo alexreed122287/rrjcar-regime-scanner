@@ -317,8 +317,9 @@ const App = {
     addFeedLine(r, isHit, container) {
         const line = document.createElement('div');
         if (isHit) {
-            const isEnter = (r.signal || '').includes('ENTER');
-            const sigLabel = isEnter ? 'ENTER' : 'CONFIRMING';
+            const sig = r.signal || '';
+            const isEnter = sig.includes('ENTER') || sig.includes('BUY');
+            const sigLabel = sig.replace('LONG -- ', '').replace('LEAPS -- ', 'LEAPS: ');
             const conf = r.regime_confidence ? ` ${Math.round(r.regime_confidence * 100)}%` : '';
             const chg = r.change_1d != null ? ` ${r.change_1d >= 0 ? '+' : ''}${r.change_1d.toFixed(1)}%` : '';
             const cmet = r.confirmations_met || 0;
