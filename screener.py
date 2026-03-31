@@ -321,7 +321,9 @@ def scan_single_ticker(
 
         # Current signal with confirmations (V1, V2, or LEAPS)
         if strategy == "leaps":
-            signal_data = get_current_signal_leaps(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
+            # LEAPS has 10 confs — auto-cap min_confirmations to sensible range
+            leaps_min = min(min_confirmations, 7)
+            signal_data = get_current_signal_leaps(regime_df, min_confirmations=leaps_min, regime_confirm_bars=regime_confirm_bars)
         elif strategy == "v2":
             signal_data = get_current_signal_v2(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
         else:
@@ -405,6 +407,7 @@ def scan_single_ticker(
             "adx": round(signal_data["adx"], 1) if signal_data["adx"] is not None else None,
             "macd_hist": round(signal_data["macd_hist"], 4) if signal_data["macd_hist"] is not None else None,
             "hv_rank": signal_data.get("hv_rank"),
+            "pct_52w": signal_data.get("pct_52w"),
             "ema_10": round(ema_10, 2),
             "ema_20": round(ema_20, 2),
             "ema_50": round(ema_50, 2),
