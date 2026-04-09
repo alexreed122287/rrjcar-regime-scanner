@@ -3,10 +3,10 @@
   "configurations": [
     {
       "name": "regime-terminal",
-      "runtimeExecutable": "/Users/alex/Downloads/hmm-regime-terminal/.venv/bin/uvicorn",
+      "runtimeExecutable": "/Users/alex/rrjcar-regime-scanner/venv/bin/uvicorn",
       "runtimeArgs": ["app:app", "--reload", "--port", "8000"],
       "port": 8000,
-      "cwd": "/Users/alex/Downloads/hmm-regime-terminal"
+      "cwd": "/Users/alex/rrjcar-regime-scanner"
     }
   ]
 }
