@@ -1,0 +1,502 @@
+/**
+ * drilldown.js — Single-ticker deep analysis view
+ * TradingView chart with EMAs + Order Blocks
+ * Buy/Sell ladder order buttons + auto-backtest
+ */
+
+const DrillDown = {
+    currentSymbol: null,
+    activeOrderId: null,
+
+    async render(symbol, container) {
+        this.currentSymbol = symbol;
+        container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-dim);">Loading analysis...</div>';
+
+        try {
+            const data = await API.scanSymbol(symbol);
+            if (data.error) {
+                container.innerHTML = `<div style="color:var(--red); padding:1rem;">${data.error}</div>`;
+                return;
+            }
+
+            const sigCss = this.signalCssClass(data.signal || '');
+            const rid = data.regime_id;
+            const regCss = rid <= 1 ? 'bull' : (rid >= 5 ? 'bear' : 'neutral');
+            const chg = data.change_1d;
+            const chgStr = chg != null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '--';
+            const chgCss = chg != null ? (chg >= 0 ? 'bull' : 'bear') : '';
+
+            container.innerHTML = `
+                <span class="back-link" onclick="App.showTab('screener')">&larr; Back to Hits</span>
+                <h2 style="font-size:1.1rem; color:var(--chrome); margin:0.3rem 0;">${data.symbol}
+                    <span style="font-size:0.8rem; font-weight:400; color:var(--text-dim);">$${(data.price || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+                    <span style="font-size:0.8rem; font-weight:400;" class="${chgCss}">${chgStr}</span>
+                </h2>
+
+                <div class="signal-banner ${sigCss}">
+                    ${data.signal || 'N/A'}
+                    <div style="font-size:0.75rem; font-weight:400; margin-top:2px; opacity:0.85;">
+                        ${data.action || ''}
+                    </div>
+                </div>
+
+                <!-- Order Panel -->
+                <div class="order-panel">
+                    <input type="number" class="order-qty" id="order-qty" value="1" min="1" placeholder="Qty">
+                    <button class="btn-buy" onclick="DrillDown.placeLadder('${data.symbol}', 'buy')">Buy</button>
+                    <button class="btn-sell" onclick="DrillDown.placeLadder('${data.symbol}', 'sell')">Sell</button>
+                    <span style="font-size:0.55rem; color:var(--text-dim); font-family:var(--mono);">Ladder: ±$0.10 × 15</span>
+                </div>
+                <div class="order-status" id="order-status"></div>
+
+                <!-- Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric-card"><div class="label">Regime</div><div class="value ${regCss}">${data.regime_label || '?'}</div></div>
+                    <div class="metric-card"><div class="label">Confidence</div><div class="value">${data.regime_confidence ? Math.round(data.regime_confidence * 100) + '%' : '?'}</div></div>
+                    <div class="metric-card"><div class="label">Confs</div><div class="value">${data.confirmations_met || 0}/${data.confirmations_total || 12}</div></div>
+                    <div class="metric-card"><div class="label">Streak</div><div class="value">${data.regime_streak || '?'}b</div></div>
+                    <div class="metric-card"><div class="label">RSI</div><div class="value">${data.rsi ? Math.round(data.rsi) : '?'}</div></div>
+                    <div class="metric-card"><div class="label">ADX</div><div class="value">${data.adx ? Math.round(data.adx) : '?'}</div></div>
+                </div>
+
+                ${this.renderConfirmations(data.confirmation_detail)}
+
+                <!-- Backtest Summary (auto-loaded) -->
+                <div id="dd-backtest-summary" style="margin:0.3rem 0;">
+                    <div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">Loading backtest...</div>
+                </div>
+
+                <!-- TradingView Chart -->
+                <div style="padding:2rem 0; margin:0.5rem 0;">
+                    <div id="tv-chart-container" style="border-radius:6px; overflow:hidden; height:500px;"></div>
+                </div>
+
+                <!-- Backtest trade history -->
+                <div id="dd-backtest-area"></div>
+
+                <!-- GEX Analysis -->
+                <div id="dd-gex-area" style="margin:0.5rem 0;">
+                    <div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">Loading GEX analysis...</div>
+                </div>
+                <div id="dd-gex-chart" style="margin:0.3rem 0;"></div>
+
+                <!-- Position Sizing + Optimal Contract (auto-loaded) -->
+                <div id="dd-position-area" style="margin:0.5rem 0;">
+                    <div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">Loading optimal contracts...</div>
+                </div>
+
+                <div id="dd-options-area"></div>
+            `;
+
+            // Embed TradingView
+            this.embedTradingView(data.symbol);
+
+            // Auto-load backtest + options + GEX
+            this.loadBacktest(data.symbol);
+            this.loadGex(data.symbol);
+            this.loadPositionSizing(data.symbol);
+
+        } catch (err) {
+            container.innerHTML = `<div style="color:var(--red); padding:1rem;">Error: ${err.message}</div>`;
+        }
+    },
+
+    // ── Ladder Order ──
+    async placeLadder(symbol, side) {
+        const qty = parseInt(document.getElementById('order-qty').value) || 1;
+        const statusEl = document.getElementById('order-status');
+        statusEl.className = 'order-status pending';
+        statusEl.textContent = `Placing ${side.toUpperCase()} ladder for ${qty} ${symbol}...`;
+
+        try {
+            const res = await API.ladderOrder(symbol, side, qty);
+            if (res.error) {
+                statusEl.className = 'order-status error';
+                statusEl.textContent = res.error;
+                return;
+            }
+
+            this.activeOrderId = res.order_id;
+            this.pollLadder(res.order_id, statusEl);
+
+        } catch (err) {
+            statusEl.className = 'order-status error';
+            statusEl.textContent = `Error: ${err.message}`;
+        }
+    },
+
+    async pollLadder(orderId, statusEl) {
+        const poll = async () => {
+            try {
+                const s = await API.ladderStatus(orderId);
+                if (s.status === 'filled') {
+                    statusEl.className = 'order-status success';
+                    statusEl.textContent = `Filled @ $${s.fill_price} (attempt ${s.filled_attempt}/${s.max_attempts})`;
+                    return;
+                } else if (s.status === 'exhausted') {
+                    statusEl.className = 'order-status error';
+                    statusEl.textContent = `Not filled after ${s.max_attempts} attempts (last: $${s.current_price})`;
+                    return;
+                } else if (s.status === 'error') {
+                    statusEl.className = 'order-status error';
+                    statusEl.textContent = `Error: ${s.error || 'Unknown'}`;
+                    return;
+                } else {
+                    statusEl.className = 'order-status pending';
+                    statusEl.textContent = `${s.side?.toUpperCase()} attempt ${s.attempt}/${s.max_attempts} @ $${s.current_price || '...'}`;
+                    setTimeout(poll, 1500);
+                }
+            } catch (_) {
+                setTimeout(poll, 2000);
+            }
+        };
+        poll();
+    },
+
+    // ── TradingView Chart ──
+    embedTradingView(symbol) {
+        const container = document.getElementById('tv-chart-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        const script = document.createElement('script');
+        script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+        script.type = 'text/javascript';
+        script.async = true;
+        script.innerHTML = JSON.stringify({
+            "autosize": true,
+            "symbol": symbol,
+            "interval": "D",
+            "timezone": "America/Chicago",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "backgroundColor": "rgba(0, 0, 0, 1)",
+            "gridColor": "rgba(30, 30, 30, 1)",
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "allow_symbol_change": true,
+            "save_image": false,
+            "calendar": false,
+            "hide_volume": true,
+            "support_host": "https://www.tradingview.com",
+            "studies": [
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 10 }, "overrides": { "Plot.color": "#22c55e", "Plot.linewidth": 2 } },
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 20 }, "overrides": { "Plot.color": "#eab308", "Plot.linewidth": 2 } },
+                { "id": "MAExp@tv-basicstudies", "inputs": { "length": 50 }, "overrides": { "Plot.color": "#ef4444", "Plot.linewidth": 2 } },
+                { "id": "STD;Order_Block_Breaker_Block" }
+            ]
+        });
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'tradingview-widget-container';
+        wrapper.style.height = '100%';
+        wrapper.style.width = '100%';
+
+        const inner = document.createElement('div');
+        inner.className = 'tradingview-widget-container__widget';
+        inner.style.height = 'calc(100% - 32px)';
+        inner.style.width = '100%';
+
+        wrapper.appendChild(inner);
+        wrapper.appendChild(script);
+        container.appendChild(wrapper);
+    },
+
+    signalCssClass(signal) {
+        if (signal.includes('ENTER')) return 'signal-long-enter';
+        if (signal.includes('CONFIRMING')) return 'signal-long-confirming';
+        if (signal.includes('HOLD')) return 'signal-long-hold';
+        if (signal.includes('EXIT')) return 'signal-exit';
+        if (signal.includes('BEARISH')) return 'signal-bearish';
+        return 'signal-cash';
+    },
+
+    renderConfirmations(detail) {
+        if (!detail || !Object.keys(detail).length) return '';
+        let html = '<div class="conf-grid">';
+        for (const [name, passed] of Object.entries(detail)) {
+            const cls = passed ? 'conf-pass' : 'conf-fail';
+            const icon = passed ? '+' : '-';
+            html += `<div class="conf-item ${cls}">${icon} ${name}</div>`;
+        }
+        html += '</div>';
+        return html;
+    },
+
+    // ── Auto Backtest ──
+    async loadBacktest(symbol) {
+        const summary = document.getElementById('dd-backtest-summary');
+        const area = document.getElementById('dd-backtest-area');
+
+        try {
+            const settings = await API.getSettings();
+            const bt = await API.backtest(symbol, {
+                strategy: settings.strategy || 'v2',
+                min_confs: settings.min_confs || 6,
+                cooldown: settings.cooldown || 3,
+                regime_confirm: settings.regime_confirm || 2,
+                capital: settings.initial_capital || 100000,
+            });
+
+            if (bt.error) {
+                summary.innerHTML = `<div style="color:var(--red); font-size:0.7rem;">${bt.error}</div>`;
+                return;
+            }
+
+            const m = bt.metrics;
+            const retCss = (m.total_return_pct || 0) >= 0 ? 'bull' : 'bear';
+
+            // Summary card
+            summary.innerHTML = `
+                <div class="bt-summary">
+                    <div class="bt-stat"><div class="bt-label">Return</div><div class="bt-val ${retCss}">${(m.total_return_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Win Rate</div><div class="bt-val">${(m.win_rate||0).toFixed(0)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Sharpe</div><div class="bt-val">${(m.sharpe_ratio||0).toFixed(2)}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Max DD</div><div class="bt-val bear">${(m.max_drawdown_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Trades</div><div class="bt-val">${m.total_trades || 0}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Avg Win</div><div class="bt-val bull">${(m.avg_win_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Avg Loss</div><div class="bt-val bear">${(m.avg_loss_pct||0).toFixed(1)}%</div></div>
+                    <div class="bt-stat"><div class="bt-label">Profit Factor</div><div class="bt-val">${(m.profit_factor||0).toFixed(2)}</div></div>
+                </div>
+            `;
+
+            // Trade history (no equity curve chart)
+            if (area) {
+                area.innerHTML = this.renderTradeTable(bt.trades);
+            }
+
+        } catch (err) {
+            summary.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem;">Backtest unavailable</div>`;
+        }
+    },
+
+    renderTradeTable(trades) {
+        if (!trades || !trades.length) return '';
+        let html = `<table class="trade-table"><thead><tr>
+            <th>Entry</th><th>Exit</th><th>Entry $</th><th>Exit $</th><th>P&L %</th><th>Reason</th>
+        </tr></thead><tbody>`;
+
+        trades.slice(-20).forEach(t => {
+            const pnl = t.pnl_pct || 0;
+            const pnlCss = pnl >= 0 ? 'color:#34d399' : 'color:#f87171';
+            html += `<tr>
+                <td>${(t.entry_date || '').substring(0, 10)}</td>
+                <td>${(t.exit_date || '').substring(0, 10)}</td>
+                <td>$${(t.entry_price || 0).toFixed(2)}</td>
+                <td>$${(t.exit_price || 0).toFixed(2)}</td>
+                <td style="${pnlCss}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%</td>
+                <td style="color:var(--text-dim); max-width:120px; overflow:hidden; text-overflow:ellipsis;">${t.exit_reason || ''}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        return html;
+    },
+
+    async loadPositionSizing(symbol) {
+        const area = document.getElementById('dd-position-area');
+        try {
+            const settings = Settings.gather();
+            const opts = await API.getOptions(symbol, settings.min_dte || 0, settings.max_dte || 365, 5);
+
+            if (opts.error || !opts.recommendations || !opts.recommendations.length) {
+                area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">No options data available</div>`;
+                return;
+            }
+
+            const ps = opts.position_sizing || {};
+            const gexStrat = opts.gex_strategy || {};
+            const gexData = opts.gex || {};
+
+            // Position sizing summary
+            let html = `
+                <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.3rem;">Position Sizing (${ps.risk_pct || 2}% risk)</div>
+                <div class="bt-summary" style="grid-template-columns: repeat(3,1fr);">
+                    <div class="bt-stat"><div class="bt-label">Equity Shares</div><div class="bt-val">${ps.shares_equity || 0}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Share Cost</div><div class="bt-val">$${(ps.shares_cost || 0).toLocaleString()}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Risk Budget</div><div class="bt-val">$${(ps.risk_amount || 0).toLocaleString()}</div></div>
+                </div>
+            `;
+
+            // GEX strategy recommendation
+            if (gexStrat && gexStrat.strategy) {
+                const biasColor = gexData.gex_bias === 'positive' ? '#22c55e' : '#f59e0b';
+                html += `
+                <div style="margin:0.4rem 0; padding:0.5rem; background:rgba(45,212,191,0.05); border:1px solid rgba(45,212,191,0.2); border-radius:4px;">
+                    <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.3rem;">GEX Strategy</div>
+                    <div style="font-size:0.85rem; font-weight:600; color:#2dd4bf;">${gexStrat.strategy}</div>
+                    <div style="font-size:0.65rem; color:var(--text-dim); margin-top:2px;">${gexStrat.description || ''}</div>
+                    <div class="bt-summary" style="grid-template-columns: repeat(4,1fr); margin-top:0.3rem;">
+                        <div class="bt-stat"><div class="bt-label">GEX Bias</div><div class="bt-val" style="color:${biasColor};">${(gexData.gex_bias || '?').toUpperCase()}</div></div>
+                        <div class="bt-stat"><div class="bt-label">Call Wall</div><div class="bt-val">$${gexData.call_wall || '?'}</div></div>
+                        <div class="bt-stat"><div class="bt-label">Put Wall</div><div class="bt-val">$${gexData.put_wall || '?'}</div></div>
+                        <div class="bt-stat"><div class="bt-label">GEX Flip</div><div class="bt-val">$${gexData.gex_flip || 'N/A'}</div></div>
+                    </div>
+                    <div style="font-size:0.6rem; color:var(--text-dim); margin-top:0.3rem; font-family:var(--mono);">
+                        Strike: ${gexStrat.strike_guidance || '?'} | DTE: ${gexStrat.recommended_dte_min || '?'}-${gexStrat.recommended_dte_max || '?'}d
+                        | Stop ref: $${gexStrat.stop_reference || '?'} | Target: $${gexStrat.target_reference || '?'}
+                    </div>
+                </div>`;
+            }
+
+            html += `<div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin:0.4rem 0 0.3rem;">Top Contracts (GEX-Scored)</div>
+            `;
+
+            // Top contract card
+            opts.recommendations.forEach((r, i) => {
+                const isBest = i === 0;
+                const border = isBest ? 'border-left:3px solid var(--green);' : '';
+                const label = isBest ? '<span style="color:var(--green); font-size:0.55rem; font-weight:600;">BEST</span> ' : '';
+                html += `
+                <div style="padding:0.4rem 0.5rem; margin-bottom:0.3rem; ${border} background:rgba(255,255,255,0.02); border-radius:3px;">
+                    <div style="display:flex; flex-wrap:wrap; gap:0.3rem 0.8rem; align-items:center; font-size:0.75rem;">
+                        ${label}
+                        <span style="color:var(--chrome); font-family:var(--mono); font-weight:600;">$${(r.strike || 0)} C</span>
+                        <span style="color:var(--text-dim);">${r.dte}d</span>
+                        <span style="color:var(--text-dim);">$${(r.mid || 0).toFixed(2)} mid</span>
+                        <span style="color:var(--green);">d=${(r.delta || 0).toFixed(2)}</span>
+                        <span style="color:var(--text-dim);">IV ${(r.iv_pct || 0).toFixed(0)}%</span>
+                        <span style="color:var(--text-dim);">Vol ${r.volume || 0}</span>
+                        <span style="color:var(--text-dim);">OI ${r.openInterest || 0}</span>
+                    </div>
+                    <div style="font-size:0.65rem; color:var(--chrome); margin-top:0.2rem; font-family:var(--mono);">
+                        <span style="color:var(--green); font-weight:600;">${r.contracts || 0} contracts</span>
+                        &nbsp;= $${(r.total_cost || 0).toLocaleString()} (${(r.pct_of_capital || 0).toFixed(1)}% of capital)
+                        &nbsp;| Score: ${(r.score || 0).toFixed(0)}
+                    </div>
+                </div>`;
+            });
+
+            area.innerHTML = html;
+
+            // Populate Orders tab with top 3 contracts
+            Orders.setContracts(symbol, opts.recommendations);
+
+            // Also populate the options area below
+            document.getElementById('dd-options-area').innerHTML = '';
+
+        } catch (err) {
+            area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem;">Options: ${err.message}</div>`;
+        }
+    },
+
+    async loadGex(symbol) {
+        const area = document.getElementById('dd-gex-area');
+        const chartEl = document.getElementById('dd-gex-chart');
+
+        try {
+            const settings = Settings.gather();
+            const gex = await API.getGex(symbol, settings.min_dte || 0, settings.max_dte || 365);
+
+            if (gex.error) {
+                area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem; font-family:var(--mono);">GEX: ${gex.error}</div>`;
+                return;
+            }
+
+            const biasColor = gex.gex_bias === 'positive' ? '#22c55e' : '#f59e0b';
+            const strat = gex.strategy || {};
+
+            area.innerHTML = `
+                <div style="font-size:0.6rem; font-family:var(--mono); color:var(--chrome); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.3rem;">Gamma Exposure (GEX)</div>
+                <div class="bt-summary" style="grid-template-columns: repeat(5,1fr);">
+                    <div class="bt-stat"><div class="bt-label">Bias</div><div class="bt-val" style="color:${biasColor};">${(gex.gex_bias || '?').toUpperCase()}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Call Wall</div><div class="bt-val">$${gex.call_wall || '?'}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Put Wall</div><div class="bt-val">$${gex.put_wall || '?'}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Flip</div><div class="bt-val">${gex.gex_flip ? '$' + gex.gex_flip : 'N/A'}</div></div>
+                    <div class="bt-stat"><div class="bt-label">Max Gamma</div><div class="bt-val">$${gex.max_gamma_strike || '?'}</div></div>
+                </div>
+            `;
+
+            // Render GEX chart using Plotly
+            if (chartEl && gex.gex_by_strike && gex.gex_by_strike.length && typeof Plotly !== 'undefined') {
+                // Filter to strikes within 15% of spot
+                const spot = gex.spot_price;
+                const relevant = gex.gex_by_strike.filter(g =>
+                    Math.abs(g.strike - spot) / spot < 0.15
+                );
+
+                if (relevant.length > 0) {
+                    const strikes = relevant.map(g => g.strike);
+                    const callGex = relevant.map(g => g.call_gex);
+                    const putGex = relevant.map(g => g.put_gex);
+                    const netGex = relevant.map(g => g.net_gex);
+
+                    const traces = [
+                        { x: strikes, y: callGex, type: 'bar', name: 'Call GEX', marker: { color: '#22c55e' } },
+                        { x: strikes, y: putGex, type: 'bar', name: 'Put GEX', marker: { color: '#ef4444' } },
+                        { x: strikes, y: netGex, type: 'scatter', mode: 'lines', name: 'Net GEX', line: { color: '#2dd4bf', width: 2 } },
+                    ];
+
+                    // Add vertical lines for key levels
+                    const shapes = [
+                        { type: 'line', x0: spot, x1: spot, y0: 0, y1: 1, yref: 'paper', line: { color: '#fff', dash: 'dot', width: 1 } },
+                    ];
+                    if (gex.call_wall) shapes.push({ type: 'line', x0: gex.call_wall, x1: gex.call_wall, y0: 0, y1: 1, yref: 'paper', line: { color: '#22c55e', dash: 'dash', width: 1 } });
+                    if (gex.put_wall) shapes.push({ type: 'line', x0: gex.put_wall, x1: gex.put_wall, y0: 0, y1: 1, yref: 'paper', line: { color: '#ef4444', dash: 'dash', width: 1 } });
+
+                    const annotations = [
+                        { x: spot, y: 1.02, yref: 'paper', text: 'SPOT', showarrow: false, font: { color: '#fff', size: 9 } },
+                    ];
+                    if (gex.call_wall) annotations.push({ x: gex.call_wall, y: 1.02, yref: 'paper', text: 'CALL WALL', showarrow: false, font: { color: '#22c55e', size: 9 } });
+                    if (gex.put_wall) annotations.push({ x: gex.put_wall, y: 1.02, yref: 'paper', text: 'PUT WALL', showarrow: false, font: { color: '#ef4444', size: 9 } });
+
+                    Plotly.newPlot(chartEl, traces, {
+                        barmode: 'group',
+                        paper_bgcolor: '#0a0a0f',
+                        plot_bgcolor: '#0a0a0f',
+                        font: { color: '#9ca3af', size: 10 },
+                        margin: { t: 30, b: 40, l: 50, r: 20 },
+                        height: 250,
+                        shapes: shapes,
+                        annotations: annotations,
+                        xaxis: { title: 'Strike', gridcolor: '#1e2028' },
+                        yaxis: { title: 'GEX ($)', gridcolor: '#1e2028' },
+                        legend: { orientation: 'h', y: -0.2, font: { size: 9 } },
+                        showlegend: true,
+                    }, { responsive: true, displayModeBar: false });
+                }
+            }
+
+        } catch (err) {
+            area.innerHTML = `<div style="color:var(--text-dim); font-size:0.65rem;">GEX unavailable: ${err.message}</div>`;
+        }
+    },
+
+    async loadOptions(symbol) {
+        const area = document.getElementById('dd-options-area');
+        area.innerHTML = '<div style="color:var(--text-dim); padding:0.5rem;">Loading options...</div>';
+
+        try {
+            const settings = await API.getSettings();
+            const opts = await API.getOptions(symbol, settings.min_dte || 21, settings.max_dte || 45, settings.top_n_options || 3);
+
+            if (opts.error) {
+                area.innerHTML = `<div style="color:var(--red);">${opts.error}</div>`;
+                return;
+            }
+
+            if (!opts.recommendations || !opts.recommendations.length) {
+                area.innerHTML = '<div style="color:var(--text-dim); font-size:0.7rem;">No options recommendations.</div>';
+                return;
+            }
+
+            let html = '';
+            opts.recommendations.forEach(r => {
+                html += `
+                <div class="opt-card">
+                    <span class="opt-symbol">${r.contractSymbol || '?'}</span>
+                    <span class="opt-detail">$${(r.strike || 0).toFixed(0)} strike</span>
+                    <span class="opt-detail">${r.dte || '?'}d</span>
+                    <span class="opt-detail">$${(r.mid || 0).toFixed(2)} mid</span>
+                    <span class="opt-detail" style="color:var(--accent);">d=${(r.delta || 0).toFixed(2)}</span>
+                    <span class="opt-detail">IV ${((r.iv || 0) * 100).toFixed(0)}%</span>
+                </div>`;
+            });
+
+            area.innerHTML = html;
+        } catch (err) {
+            area.innerHTML = `<div style="color:var(--red);">Options error: ${err.message}</div>`;
+        }
+    },
+};
