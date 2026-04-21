@@ -451,7 +451,7 @@ RECOMMENDED_SETTINGS = {
     "min_dte": 14,
     "max_dte": 45,
     "min_avg_volume": 1_000_000,
-    "min_price": 5,
+    "min_price": 1,
     "max_price": None,
     "price_above_ema50": True,
     "ema10_above_20": False,

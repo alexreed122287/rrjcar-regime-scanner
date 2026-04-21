@@ -221,7 +221,7 @@ RECOMMENDED_SETTINGS = {
     "min_dte": 30,
     "max_dte": 60,
     "min_avg_volume": 500_000,
-    "min_price": 10,
+    "min_price": 1,
     "max_price": None,
     "price_above_ema50": False,  # implicit via conf_10
     "ema10_above_20": False,     # implicit via conf_11
