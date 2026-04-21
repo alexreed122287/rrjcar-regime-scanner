@@ -427,7 +427,7 @@ RECOMMENDED_SETTINGS = {
     "regime_confirm": 3,
     "cooldown": 10,
     "min_dte": 180,
-    "max_dte": None,
+    "max_dte": 730,
     "min_avg_volume": 1_000_000,
     "min_price": 1,
     "max_price": None,
