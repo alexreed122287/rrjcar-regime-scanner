@@ -54,6 +54,12 @@ const API = {
     getSettings() { return this.get('/api/settings'); },
     saveSettings(data) { return this.post('/api/settings', data); },
 
+    async getStrategyDefaults() {
+        if (this._strategyDefaultsCache) return this._strategyDefaultsCache;
+        this._strategyDefaultsCache = await this.get('/api/strategy-defaults');
+        return this._strategyDefaultsCache;
+    },
+
     // APIs status
     getApis() { return this.get('/api/apis'); },
 
