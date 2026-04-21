@@ -109,7 +109,7 @@ const Screener = {
 
     signalInfo(r) {
         const sig = r.signal || '';
-        const shortSig = sig.replace('LONG -- ', '').replace('CASH -- ', '').replace('EXIT -- ', 'EXIT: ').replace('LEAPS -- ', 'LEAPS: ');
+        const shortSig = sig.replace('LONG -- ', '').replace('CASH -- ', '').replace('EXIT -- ', 'EXIT: ').replace('LEAPS -- ', 'LEAPS: ').replace('BOTTOM -- ', 'BOTTOM: ');
         const colors = { BUY: '#34d399', ENTER: '#34d399', CONFIRMING: '#5eead4', WATCH: '#5eead4', HOLD: '#2dd4bf', EXIT: '#f87171', AVOID: '#f87171', BEARISH: '#f87171', WAIT: '#6b7280' };
         let sigHex = '#6b7280';
         for (const [k, v] of Object.entries(colors)) {
@@ -147,9 +147,13 @@ const Screener = {
 
     applySort(results) {
         const PRIORITY = {
-            'LONG -- ENTER': 0, 'LEAPS -- BUY': 0, 'EXIT -- REGIME FLIP': 1, 'LEAPS -- EXIT': 1,
-            'LONG -- CONFIRMING': 2, 'LEAPS -- WATCH': 2, 'LONG -- HOLD': 3, 'LEAPS -- HOLD': 3,
-            'CASH -- NEUTRAL': 4, 'LEAPS -- WAIT': 4, 'CASH -- BEARISH': 5, 'LEAPS -- AVOID': 5, 'ERROR': 99,
+            'LONG -- ENTER': 0, 'LEAPS -- BUY': 0, 'BOTTOM -- BUY': 0,
+            'EXIT -- REGIME FLIP': 1, 'LEAPS -- EXIT': 1,
+            'LONG -- CONFIRMING': 2, 'LEAPS -- WATCH': 2, 'BOTTOM -- WATCH': 2,
+            'LONG -- HOLD': 3, 'LEAPS -- HOLD': 3,
+            'CASH -- NEUTRAL': 4, 'LEAPS -- WAIT': 4, 'BOTTOM -- WAIT': 4,
+            'CASH -- BEARISH': 5, 'LEAPS -- AVOID': 5, 'BOTTOM -- AVOID': 5, 'BOTTOM -- N/A': 6,
+            'ERROR': 99,
         };
 
         switch (this.currentSort) {

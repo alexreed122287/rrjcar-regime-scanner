@@ -4,7 +4,7 @@
  * Includes ENTER + CONFIRMING hits (bullish signals)
  */
 
-const BULLISH_SIGNALS = ['LONG -- ENTER', 'LONG -- CONFIRMING', 'LONG -- HOLD', 'LEAPS -- BUY', 'LEAPS -- WATCH', 'LEAPS -- HOLD'];
+const BULLISH_SIGNALS = ['LONG -- ENTER', 'LONG -- CONFIRMING', 'LONG -- HOLD', 'LEAPS -- BUY', 'LEAPS -- WATCH', 'LEAPS -- HOLD', 'BOTTOM -- BUY', 'BOTTOM -- WATCH'];
 
 const App = {
     scanResults: [],
