@@ -111,3 +111,104 @@ def compute_bottoming_confirmations(df: pd.DataFrame) -> pd.DataFrame:
     out["confirmations_met"] = out[conf_cols].sum(axis=1).astype(int)
 
     return out
+
+
+# Regime IDs: 0=Bull Run, 1=Bull Trend, 2=Mild Bull, 3=Neutral/Chop,
+#             4=Mild Bear, 5=Bear Trend, 6=Crash/Capitulation
+BULLISH_OR_NEUTRAL_REGIMES = {0, 1, 2, 3}
+CRASH_REGIME = 6
+
+
+def get_current_signal_bottoming(
+    df: pd.DataFrame,
+    min_confirmations: int = 8,
+    regime_confirm_bars: int = 2,
+) -> dict:
+    """
+    Produce the current bottoming signal for a ticker.
+
+    Returns:
+        dict with signal, action, regime info, confirmations breakdown, and
+        bottoming-specific stats (pct_off_52w_high, pct_off_52w_low).
+    """
+    data = compute_bottoming_confirmations(df)
+    latest = data.iloc[-1]
+    prev = data.iloc[-2] if len(data) > 1 else latest
+
+    regime_id = int(latest["regime_id"])
+    regime_label = str(latest["regime_label"])
+    confidence = float(latest.get("regime_confidence", 0.0))
+    confs = int(latest["confirmations_met"])
+
+    # Streak (how long has current regime held?)
+    regime_ids = data["regime_id"].values.astype(int)
+    streak = 1
+    for j in range(len(regime_ids) - 2, -1, -1):
+        if regime_ids[j] == regime_ids[-1]:
+            streak += 1
+        else:
+            break
+
+    # Drawdown gate — both confs required
+    gate_passes = bool(latest["conf_01_drawdown_depth"]) and bool(latest["conf_02_off_lows"])
+
+    # % off 52w high/low for display
+    high_252 = float(latest.get("high_252", np.nan))
+    low_252 = float(latest.get("low_252", np.nan))
+    price = float(latest["Close"])
+    pct_off_52w_high = (
+        round((price / high_252 - 1.0) * 100, 1) if high_252 and not np.isnan(high_252) else None
+    )
+    pct_off_52w_low = (
+        round((price / low_252 - 1.0) * 100, 1) if low_252 and not np.isnan(low_252) else None
+    )
+
+    # ── Signal determination ──
+    if not gate_passes:
+        signal = "BOTTOM -- N/A"
+        action = f"Not a bottoming candidate (off-high {pct_off_52w_high}%, off-low {pct_off_52w_low}%)."
+    elif regime_id == CRASH_REGIME:
+        signal = "BOTTOM -- AVOID"
+        action = f"Valid setup ({confs}/12) but regime is Crash/Capitulation. Do not catch falling knives."
+    elif confs >= 9 and regime_id in BULLISH_OR_NEUTRAL_REGIMES:
+        signal = "BOTTOM -- BUY"
+        action = (
+            f"Strong bottoming entry. {confs}/12 confs. {regime_label}. "
+            f"Price {pct_off_52w_high}% from 52w high, {pct_off_52w_low}% above 52w low."
+        )
+    elif confs >= min_confirmations:
+        signal = "BOTTOM -- WATCH"
+        action = f"Setup valid ({confs}/12) but regime is {regime_label}. Watch for confirmation."
+    else:
+        signal = "BOTTOM -- WAIT"
+        action = f"{confs}/12 confirmations in {regime_label}. Not enough for bottoming entry."
+
+    # Confirmation breakdown
+    conf_cols = [c for c in data.columns if c.startswith("conf_")]
+    conf_detail = {}
+    for c in conf_cols:
+        name = c.replace("conf_", "").replace("_", " ").title()
+        parts = name.split(" ", 1)
+        if len(parts) > 1 and parts[0].isdigit():
+            name = parts[1]
+        conf_detail[name] = bool(latest[c])
+
+    return {
+        "signal": signal,
+        "action": action,
+        "regime_id": regime_id,
+        "regime_label": regime_label,
+        "confidence": confidence,
+        "confirmations_met": confs,
+        "confirmations_required": min_confirmations,
+        "confirmations_total": 12,
+        "confirmation_detail": conf_detail,
+        "price": price,
+        "pct_off_52w_high": pct_off_52w_high,
+        "pct_off_52w_low": pct_off_52w_low,
+        "regime_streak": streak,
+        "regime_confirm_bars": regime_confirm_bars,
+        "regime_confirmed": streak >= regime_confirm_bars,
+        "prev_regime": str(prev["regime_label"]) if "regime_label" in prev else regime_label,
+        "regime_changed": int(prev["regime_id"]) != regime_id if "regime_id" in prev else False,
+    }

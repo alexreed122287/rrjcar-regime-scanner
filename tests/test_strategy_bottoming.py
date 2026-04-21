@@ -47,3 +47,62 @@ def test_off_lows_gate_fails_on_freefalling_ticker(make_ohlcv, attach_regime):
 
     # Price should be near its 52w low after 260 bars of downtrend → conf_02 False
     assert bool(latest["conf_02_off_lows"]) is False
+
+
+def test_signal_buy_on_buy_fixture(bottoming_buy_fixture):
+    from strategy_bottoming import get_current_signal_bottoming
+    result = get_current_signal_bottoming(bottoming_buy_fixture, min_confirmations=8)
+
+    assert result["signal"] == "BOTTOM -- BUY"
+    assert result["confirmations_met"] >= 9      # BUY threshold
+    assert result["confirmations_total"] == 12
+    assert result["regime_label"] == "Mild Bull"
+
+
+def test_signal_na_when_drawdown_gate_fails(make_ohlcv, attach_regime):
+    """Stock near 52w high should return BOTTOM -- N/A (not a candidate)."""
+    from strategy_bottoming import get_current_signal_bottoming
+
+    df = make_ohlcv(n_bars=260, start_price=50, trend_slope=0.003, volatility=0.005)
+    df = attach_regime(df, regime_id=0, label="Bull Run")
+    result = get_current_signal_bottoming(df, min_confirmations=8)
+
+    assert result["signal"] == "BOTTOM -- N/A"
+
+
+def test_signal_avoid_in_crash_regime(bottoming_buy_fixture, attach_regime):
+    """Even a valid bottoming setup should return AVOID in Crash regime."""
+    from strategy_bottoming import get_current_signal_bottoming
+
+    # Re-label regime to Crash on the BUY fixture
+    df = bottoming_buy_fixture.copy()
+    df["regime_id"] = 6
+    df["regime_label"] = "Crash / Capitulation"
+
+    result = get_current_signal_bottoming(df, min_confirmations=8)
+    assert result["signal"] == "BOTTOM -- AVOID"
+
+
+def test_signal_watch_in_bearish_regime(bottoming_buy_fixture):
+    """Valid setup in a bearish (non-crash) regime → WATCH, not BUY."""
+    from strategy_bottoming import get_current_signal_bottoming
+
+    df = bottoming_buy_fixture.copy()
+    df["regime_id"] = 5
+    df["regime_label"] = "Bear Trend"
+
+    result = get_current_signal_bottoming(df, min_confirmations=8)
+    assert result["signal"] == "BOTTOM -- WATCH"
+
+
+def test_returns_required_metadata_fields(bottoming_buy_fixture):
+    from strategy_bottoming import get_current_signal_bottoming
+    result = get_current_signal_bottoming(bottoming_buy_fixture, min_confirmations=8)
+
+    required = {
+        "signal", "action", "regime_id", "regime_label", "confidence",
+        "confirmations_met", "confirmations_required", "confirmations_total",
+        "confirmation_detail", "price", "pct_off_52w_high", "pct_off_52w_low",
+    }
+    missing = required - set(result.keys())
+    assert not missing, f"missing keys: {missing}"
