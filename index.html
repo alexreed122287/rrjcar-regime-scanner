@@ -48,7 +48,16 @@
                     <option value="v2">V2 (12-conf)</option>
                     <option value="v1">V1 (8-conf)</option>
                     <option value="leaps">LEAPS (10-conf)</option>
+                    <option value="bottoming">Bottoming (12-conf)</option>
                 </select>
+                <button type="button"
+                        id="btn-load-strategy-defaults"
+                        class="btn-load-defaults"
+                        style="margin-top:0.4rem; padding:0.3rem 0.6rem; font-size:0.85rem; background:#1e2028; border:1px solid #2dd4bf; color:#2dd4bf; cursor:pointer; border-radius:4px;"
+                        title="Overwrite current settings with the recommended defaults for the selected strategy"
+                        onclick="Settings.loadRecommendedDefaults()">
+                    &#x21bb; Load recommended defaults
+                </button>
             </div>
             <div class="setting-group">
                 <label>Min Confs</label>
@@ -160,6 +169,8 @@
                     <option value="LEAPS -- BUY">LEAPS BUY</option>
                     <option value="LEAPS -- WATCH">LEAPS WATCH</option>
                     <option value="LEAPS -- HOLD">LEAPS HOLD</option>
+                    <option value="BOTTOM -- BUY">BOTTOM BUY</option>
+                    <option value="BOTTOM -- WATCH">BOTTOM WATCH</option>
                 </select>
             </div>
             <div class="setting-group">
