@@ -48,7 +48,16 @@
                     <option value="v2">V2 (12-conf)</option>
                     <option value="v1">V1 (8-conf)</option>
                     <option value="leaps">LEAPS (10-conf)</option>
+                    <option value="bottoming">Bottoming (12-conf)</option>
                 </select>
+                <button type="button"
+                        id="btn-load-strategy-defaults"
+                        class="btn-load-defaults"
+                        style="margin-top:0.4rem; padding:0.3rem 0.6rem; font-size:0.85rem; background:#1e2028; border:1px solid #2dd4bf; color:#2dd4bf; cursor:pointer; border-radius:4px;"
+                        title="Overwrite current settings with the recommended defaults for the selected strategy"
+                        onclick="Settings.loadRecommendedDefaults()">
+                    &#x21bb; Load recommended defaults
+                </button>
             </div>
             <div class="setting-group">
                 <label>Min Confs</label>
@@ -83,6 +92,8 @@
                     <option value="3" selected>3</option>
                     <option value="5">5</option>
                     <option value="10">10</option>
+                    <option value="24">24</option>
+                    <option value="48">48</option>
                 </select>
             </div>
             <div class="setting-group">
@@ -121,6 +132,8 @@
                     <option value="60">60</option>
                     <option value="90">90</option>
                     <option value="180">180</option>
+                    <option value="270">270</option>
+                    <option value="540">540</option>
                 </select>
             </div>
             <div class="setting-group">
@@ -133,7 +146,9 @@
                     <option value="60">60</option>
                     <option value="90">90</option>
                     <option value="180">180</option>
+                    <option value="270">270</option>
                     <option value="365" selected>365</option>
+                    <option value="540">540</option>
                     <option value="730">730 (LEAPS)</option>
                 </select>
             </div>
@@ -160,6 +175,8 @@
                     <option value="LEAPS -- BUY">LEAPS BUY</option>
                     <option value="LEAPS -- WATCH">LEAPS WATCH</option>
                     <option value="LEAPS -- HOLD">LEAPS HOLD</option>
+                    <option value="BOTTOM -- BUY">BOTTOM BUY</option>
+                    <option value="BOTTOM -- WATCH">BOTTOM WATCH</option>
                 </select>
             </div>
             <div class="setting-group">
@@ -422,15 +439,15 @@
 </div>
 
 <!-- Scripts -->
-<script src="./js/api.js?v=120"></script>
+<script src="./js/api.js?v=121"></script>
 <script src="./js/charts.js?v=120"></script>
-<script src="./js/screener.js?v=120"></script>
+<script src="./js/screener.js?v=121"></script>
 <script src="./js/scanner-results.js?v=120"></script>
 <script src="./js/drilldown.js?v=120"></script>
 <script src="./js/orders.js?v=120"></script>
 <script src="./js/leaps.js?v=120"></script>
-<script src="./js/settings.js?v=120"></script>
-<script src="./js/app.js?v=120"></script>
+<script src="./js/settings.js?v=121"></script>
+<script src="./js/app.js?v=121"></script>
 
 </body>
 </html>

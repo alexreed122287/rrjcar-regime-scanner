@@ -442,3 +442,17 @@ def _compute_metrics(trades, equity, df, initial_capital, leverage) -> dict:
         "initial_capital": initial_capital,
         "leverage": leverage,
     }
+
+
+RECOMMENDED_SETTINGS = {
+    "min_confs": 7,
+    "regime_confirm": 2,
+    "cooldown": 48,
+    "min_dte": 14,
+    "max_dte": 45,
+    "min_avg_volume": 1_000_000,
+    "min_price": 1,
+    "max_price": None,
+    "price_above_ema50": True,
+    "ema10_above_20": False,
+}

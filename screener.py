@@ -18,6 +18,7 @@ from hmm_engine import RegimeDetector, REGIME_LABELS
 from backtester import compute_confirmations, get_current_signal
 from strategy_v2 import get_current_signal_v2
 from strategy_leaps import get_current_signal_leaps
+from strategy_bottoming import get_current_signal_bottoming
 
 logger = logging.getLogger(__name__)
 
@@ -321,15 +322,19 @@ def scan_single_ticker(
         # Current regime
         current = detector.predict_current(regime_df)
 
-        # Current signal with confirmations (V1, V2, or LEAPS)
+        # Current signal with confirmations (V1, V2, LEAPS, or Bottoming)
         if strategy == "leaps":
             # LEAPS has 10 confs — use 5 as default for broader results
             leaps_min = min(min_confirmations, 5)
             signal_data = get_current_signal_leaps(regime_df, min_confirmations=leaps_min, regime_confirm_bars=regime_confirm_bars)
         elif strategy == "v2":
             signal_data = get_current_signal_v2(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
-        else:
+        elif strategy == "bottoming":
+            signal_data = get_current_signal_bottoming(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
+        elif strategy == "v1":
             signal_data = get_current_signal(regime_df, min_confirmations=min_confirmations, regime_confirm_bars=regime_confirm_bars)
+        else:
+            raise ValueError(f"unknown strategy: {strategy!r} (expected one of: v1, v2, leaps, bottoming)")
 
         # Price change stats
         price_now = float(regime_df["Close"].iloc[-1])

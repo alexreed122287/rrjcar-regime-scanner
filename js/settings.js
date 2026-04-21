@@ -137,4 +137,69 @@ const Settings = {
             btn.style.color = '#2dd4bf';
         }, 1500);
     },
+
+    async loadRecommendedDefaults() {
+        const strategy = this.getVal('setting-strategy');
+        if (!strategy) return;
+        try {
+            const allDefaults = await API.getStrategyDefaults();
+            const defaults = allDefaults[strategy];
+            if (!defaults) {
+                console.warn('No recommended defaults for strategy:', strategy);
+                return;
+            }
+
+            const FIELD_MAP = {
+                min_confs:       'setting-min-confs',
+                regime_confirm:  'setting-regime-confirm',
+                cooldown:        'setting-cooldown',
+                min_dte:         'setting-min-dte',
+                max_dte:         'setting-max-dte',
+                min_avg_volume:  'filter-min-volume',
+                min_price:       'filter-min-price',
+                max_price:       'filter-max-price',
+            };
+            const TOGGLE_MAP = {
+                price_above_ema50: 'filter-price-above-ema50',
+                ema10_above_20:    'filter-ema10-above-20',
+            };
+
+            Object.entries(FIELD_MAP).forEach(([key, id]) => {
+                if (!(key in defaults)) return;
+                const val = defaults[key];
+                this.setVal(id, val === null ? '' : val);
+            });
+
+            Object.entries(TOGGLE_MAP).forEach(([key, id]) => {
+                if (!(key in defaults)) return;
+                const el = document.getElementById(id);
+                if (el) el.checked = !!defaults[key];
+            });
+
+            // Re-run client-side filter pipeline manually
+            // (filter-* fields bypass their onchange handlers when set programmatically)
+            if (window.Screener && typeof Screener.render === 'function') {
+                Screener.minPrice        = parseFloat(this.getVal('filter-min-price')) || 0;
+                Screener.maxPrice        = parseFloat(this.getVal('filter-max-price')) || 0;
+                Screener.minVolume       = parseFloat(this.getVal('filter-min-volume')) || 0;
+                const emaEl = document.getElementById('filter-price-above-ema50');
+                const stackEl = document.getElementById('filter-ema10-above-20');
+                Screener.priceAboveEma50 = emaEl ? emaEl.checked : false;
+                Screener.ema10Above20    = stackEl ? stackEl.checked : false;
+                Screener.render(Screener.results, document.getElementById('screener-content'));
+            }
+
+            this.flashButton('btn-load-strategy-defaults', 'Loaded');
+        } catch (err) {
+            console.error('Load recommended defaults failed:', err);
+        }
+    },
+
+    flashButton(id, msg) {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const orig = btn.textContent;
+        btn.textContent = msg;
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+    },
 };

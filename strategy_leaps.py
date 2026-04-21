@@ -420,3 +420,17 @@ def find_best_leaps(
         result["error"] = str(e)
 
     return result
+
+
+RECOMMENDED_SETTINGS = {
+    "min_confs": 7,
+    "regime_confirm": 3,
+    "cooldown": 10,
+    "min_dte": 180,
+    "max_dte": 730,
+    "min_avg_volume": 1_000_000,
+    "min_price": 1,
+    "max_price": None,
+    "price_above_ema50": True,
+    "ema10_above_20": False,
+}

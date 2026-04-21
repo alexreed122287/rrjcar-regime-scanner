@@ -44,6 +44,12 @@ DEFAULT_SETTINGS = {
     "scheduled_scans_enabled": False,
     "scheduled_scan_times": "09:30,12:00,15:30",
     "scheduled_scan_timezone": "America/Chicago",
+    # New filter settings (previously frontend-only, now persisted)
+    "min_avg_volume": 500_000,
+    "min_price": 1,
+    "max_price": None,
+    "price_above_ema50": False,
+    "ema10_above_20": False,
 }
 
 

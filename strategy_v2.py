@@ -596,3 +596,17 @@ def _compute_metrics_v2(trades, equity, df, initial_capital) -> dict:
         "final_equity": round(final_equity, 2),
         "initial_capital": initial_capital,
     }
+
+
+RECOMMENDED_SETTINGS = {
+    "min_confs": 8,
+    "regime_confirm": 2,
+    "cooldown": 3,
+    "min_dte": 30,
+    "max_dte": 60,
+    "min_avg_volume": 500_000,
+    "min_price": 1,
+    "max_price": None,
+    "price_above_ema50": False,
+    "ema10_above_20": False,
+}
