@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>RRJCAR</title>
-    <link rel="stylesheet" href="/static/css/terminal.css?v=120">
+    <link rel="stylesheet" href="./css/terminal.css?v=120">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -15,9 +15,9 @@
 <!-- ═══ HOMEPAGE: Logo + Avatar ═══ -->
 <div class="home" id="home">
     <div class="home-logo">
-        <img src="/static/img/logo.png" alt="RRJCAR" class="logo-img">
+        <img src="./img/logo.png" alt="RRJCAR" class="logo-img">
     </div>
-    <img src="/static/img/avatar.png" alt="Scanner" class="home-dollar" id="home-dollar">
+    <img src="./img/avatar.png" alt="Scanner" class="home-dollar" id="home-dollar">
 </div>
 
 <!-- ═══ SIDEBAR (settings + results + everything) ═══ -->
@@ -48,7 +48,16 @@
                     <option value="v2">V2 (12-conf)</option>
                     <option value="v1">V1 (8-conf)</option>
                     <option value="leaps">LEAPS (10-conf)</option>
+                    <option value="bottoming">Bottoming (12-conf)</option>
                 </select>
+                <button type="button"
+                        id="btn-load-strategy-defaults"
+                        class="btn-load-defaults"
+                        style="margin-top:0.4rem; padding:0.3rem 0.6rem; font-size:0.85rem; background:#1e2028; border:1px solid #2dd4bf; color:#2dd4bf; cursor:pointer; border-radius:4px;"
+                        title="Overwrite current settings with the recommended defaults for the selected strategy"
+                        onclick="Settings.loadRecommendedDefaults()">
+                    &#x21bb; Load recommended defaults
+                </button>
             </div>
             <div class="setting-group">
                 <label>Min Confs</label>
@@ -160,6 +169,8 @@
                     <option value="LEAPS -- BUY">LEAPS BUY</option>
                     <option value="LEAPS -- WATCH">LEAPS WATCH</option>
                     <option value="LEAPS -- HOLD">LEAPS HOLD</option>
+                    <option value="BOTTOM -- BUY">BOTTOM BUY</option>
+                    <option value="BOTTOM -- WATCH">BOTTOM WATCH</option>
                 </select>
             </div>
             <div class="setting-group">
@@ -422,15 +433,15 @@
 </div>
 
 <!-- Scripts -->
-<script src="/static/js/api.js?v=120"></script>
-<script src="/static/js/charts.js?v=120"></script>
-<script src="/static/js/screener.js?v=120"></script>
-<script src="/static/js/scanner-results.js?v=120"></script>
-<script src="/static/js/drilldown.js?v=120"></script>
-<script src="/static/js/orders.js?v=120"></script>
-<script src="/static/js/leaps.js?v=120"></script>
-<script src="/static/js/settings.js?v=120"></script>
-<script src="/static/js/app.js?v=120"></script>
+<script src="./js/api.js?v=121"></script>
+<script src="./js/charts.js?v=120"></script>
+<script src="./js/screener.js?v=120"></script>
+<script src="./js/scanner-results.js?v=120"></script>
+<script src="./js/drilldown.js?v=120"></script>
+<script src="./js/orders.js?v=120"></script>
+<script src="./js/leaps.js?v=120"></script>
+<script src="./js/settings.js?v=121"></script>
+<script src="./js/app.js?v=120"></script>
 
 </body>
 </html>
