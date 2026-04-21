@@ -212,3 +212,17 @@ def get_current_signal_bottoming(
         "prev_regime": str(prev["regime_label"]) if "regime_label" in prev else regime_label,
         "regime_changed": int(prev["regime_id"]) != regime_id if "regime_id" in prev else False,
     }
+
+
+RECOMMENDED_SETTINGS = {
+    "min_confs": 8,
+    "regime_confirm": 2,
+    "cooldown": 5,
+    "min_dte": 30,
+    "max_dte": 60,
+    "min_avg_volume": 500_000,
+    "min_price": 10,
+    "max_price": None,
+    "price_above_ema50": False,  # implicit via conf_10
+    "ema10_above_20": False,     # implicit via conf_11
+}
