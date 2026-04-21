@@ -71,6 +71,11 @@ class SettingsUpdate(BaseModel):
     refresh_minutes: Optional[int] = None
     risk_pct: Optional[int] = None
     bullish_only: Optional[bool] = None
+    min_avg_volume: Optional[int] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    price_above_ema50: Optional[bool] = None
+    ema10_above_20: Optional[bool] = None
 
 
 @router.get("/settings")
@@ -85,3 +90,18 @@ async def update_settings(req: SettingsUpdate):
     current.update(updates)
     save_settings(current)
     return current
+
+
+@router.get("/strategy-defaults")
+async def get_strategy_defaults():
+    """Return per-strategy recommended default settings for all strategies."""
+    from backtester import RECOMMENDED_SETTINGS as V1_DEFAULTS
+    from strategy_v2 import RECOMMENDED_SETTINGS as V2_DEFAULTS
+    from strategy_leaps import RECOMMENDED_SETTINGS as LEAPS_DEFAULTS
+    from strategy_bottoming import RECOMMENDED_SETTINGS as BOTTOMING_DEFAULTS
+    return {
+        "v1": V1_DEFAULTS,
+        "v2": V2_DEFAULTS,
+        "leaps": LEAPS_DEFAULTS,
+        "bottoming": BOTTOMING_DEFAULTS,
+    }
