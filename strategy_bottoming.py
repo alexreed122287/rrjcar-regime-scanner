@@ -41,6 +41,13 @@ def compute_bottoming_confirmations(df: pd.DataFrame) -> pd.DataFrame:
     out["low_252"] = out["Low"].rolling(252, min_periods=60).min()
 
     # ── Technical indicators ──
+    # RSI + ADX are not used by any conf signal but are exposed in the result
+    # dict so screener.py can display them (matches V2/LEAPS pattern).
+    out["rsi"] = ta.momentum.RSIIndicator(out["Close"], window=14).rsi()
+
+    adx_ind = ta.trend.ADXIndicator(out["High"], out["Low"], out["Close"], window=14)
+    out["adx"] = adx_ind.adx()
+
     atr_ind = ta.volatility.AverageTrueRange(out["High"], out["Low"], out["Close"], window=20)
     out["atr_20"] = atr_ind.average_true_range()
 
@@ -206,6 +213,11 @@ def get_current_signal_bottoming(
         "price": price,
         "pct_off_52w_high": pct_off_52w_high,
         "pct_off_52w_low": pct_off_52w_low,
+        # Fields below are consumed by screener.py for display/drilldown —
+        # missing any of them causes a KeyError on subscript access.
+        "rsi": float(latest["rsi"]) if pd.notna(latest.get("rsi")) else None,
+        "adx": float(latest["adx"]) if pd.notna(latest.get("adx")) else None,
+        "macd_hist": float(latest["macd_hist"]) if pd.notna(latest.get("macd_hist")) else None,
         "regime_streak": streak,
         "regime_confirm_bars": regime_confirm_bars,
         "regime_confirmed": streak >= regime_confirm_bars,

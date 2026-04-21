@@ -106,3 +106,18 @@ def test_returns_required_metadata_fields(bottoming_buy_fixture):
     }
     missing = required - set(result.keys())
     assert not missing, f"missing keys: {missing}"
+
+
+def test_returns_screener_display_fields(bottoming_buy_fixture):
+    """screener.py:413 subscripts signal_data['rsi'], ['adx'], ['macd_hist'] without
+    .get() fallback. Missing any of these keys crashes the scan for every ticker.
+    This test guards against that regression (which shipped once).
+    """
+    from strategy_bottoming import get_current_signal_bottoming
+    result = get_current_signal_bottoming(bottoming_buy_fixture, min_confirmations=8)
+
+    for key in ("rsi", "adx", "macd_hist"):
+        assert key in result, f"{key!r} missing — screener.py will KeyError on subscript access"
+        # Allowed to be None (e.g. for tickers with insufficient data), but must exist
+        val = result[key]
+        assert val is None or isinstance(val, (int, float)), f"{key!r} has bad type {type(val)}"
