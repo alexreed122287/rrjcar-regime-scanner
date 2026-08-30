@@ -21,6 +21,7 @@ Three hypotheses tested, three negative results.
 | 3 | The entry filters (confidence × confirmations) can be tuned into edge | **No.** Best tune setting decayed to exactly zero out of sample |
 | 4 | The 3 features separate regimes in a way that predicts forward returns | **No.** Regimes carry no forward information, and the ranking inverts |
 | 5 | Regimes are informative at longer horizons (5/10/20 bars) even if not at 1 | **No.** Flat null at every horizon tested |
+| 6 | Transaction costs are a second-order detail | **No.** They cost 18-37% of gross return and *widen* the gap to random |
 
 The system's one demonstrated virtue is capital preservation, not alpha. In the 2022
 window SPY lost **-4.01% against buy-and-hold's -18.78%**. It runs at 3-19% market
@@ -257,6 +258,52 @@ a finding.
 
 ---
 
+## 6. Transaction costs, finally modelled
+
+Every result above was originally produced with zero friction, which made them all
+optimistic by an unknown amount. `run_backtest` now takes `cost_bps_per_side`
+(default 0.0, preserving prior behaviour exactly) and `benchmark_random_entry` takes the
+same parameter — **charging only the strategy would hand the benchmark a free edge and
+make the comparison meaningless.**
+
+Reference points for liquid US equities: ~1-2 bps per side is optimistic, 5 bps is a fair
+central estimate, 10+ bps applies to wider spreads or size. Tradier charges no equity
+commission, so this is spread plus slippage.
+
+| bps/side | strategy | random | excess | p | win% | cost paid |
+|---|---|---|---|---|---|---|
+| 0 | +2.01% | +2.12% | -0.12 | 0.896 | 42% | 0.00 |
+| 1 | +1.93% | +2.10% | -0.16 | 0.854 | 40% | 0.07 |
+| 2 | +1.86% | +2.07% | -0.21 | 0.814 | 40% | 0.14 |
+| **5** | +1.64% | +1.98% | **-0.34** | 0.694 | 35% | 0.35 |
+| 10 | +1.27% | +1.84% | -0.57 | 0.510 | 35% | 0.71 |
+| 20 | +0.55% | +1.56% | -1.02 | 0.233 | 31% | 1.42 |
+
+Cost of the gross result: **18% at 5 bps, 37% at 10 bps, 73% at 20 bps.** Per ticker, at
+10 bps XLF (-0.37%) turns negative and QQQ (+0.05%) rounds to nothing; at 20 bps SPY,
+QQQ and XLF are all negative outright.
+
+### Costs do not cancel — turnover is asymmetric
+
+The intuitive expectation is that friction cancels in the comparison, since both sides pay
+it. It does not, and the reason is turnover:
+
+| | round trips / 126-bar window | avg hold |
+|---|---|---|
+| strategy | 3.55 at 9.1% exposure | **3.2 bars** |
+| benchmark | 1.15 (fixed 10-bar holds) | 10 bars |
+
+At *matched exposure* the strategy gets there with ~3.1x as many round trips, so it pays
+roughly 3.1x the friction for the same time in market. Excess therefore degrades
+monotonically with cost, from -0.12 to -1.02 pp. None of these are significant, but the
+direction is structural rather than noise: short holds are expensive, and the benchmark's
+10-bar holds are not.
+
+This also means the earlier zero-cost results were the strategy's **best case**, and the
+comparison was tilted in its favour rather than against it.
+
+---
+
 ## Known measurement bugs found along the way
 
 1. **Annualization** — `data_loader.fetch_data` defaults to **hourly** bars, but
@@ -276,8 +323,9 @@ a finding.
   untested and are where any remaining upside lives.
 - **More windows.** 14 per ticker is too few for ~1% effects. Shorter OOS steps, more
   tickers, or overlapping windows with corrected standard errors would all help.
-- **Transaction costs.** Not modeled anywhere. Including them would move every result
-  above in the wrong direction.
+- **Realistic slippage on the entry bar.** Costs are charged as a flat bps figure on the
+  close. Real fills on a regime flip may be worse than that, and the 3.2-bar average hold
+  makes the strategy unusually sensitive to it.
 
 ## How to reproduce
 
@@ -287,6 +335,9 @@ a finding.
 
 # ...at any holding horizon?
 .venv/bin/python tools/regime_horizons.py --regimes auto --horizons 1,5,10,20
+
+# What do transaction costs do to all of the above?
+.venv/bin/python tools/cost_sensitivity.py --regimes 7 --costs 0,1,2,5,10,20
 
 # Baseline walk-forward on one ticker
 .venv/bin/python walk_forward.py SPY --interval 1d --period-days 3000 --regimes 7

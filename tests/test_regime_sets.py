@@ -229,3 +229,77 @@ def test_raising_confidence_is_monotone_in_trade_count(make_ohlcv):
         for c in (0.4, 0.6, 0.8, 0.95)
     ]
     assert counts == sorted(counts, reverse=True), counts
+
+
+# ── transaction costs ────────────────────────────────────────────────────────────
+
+def _costed_frame(n=400, seed=0):
+    """Synthetic frame with regimes attached, good for many round trips."""
+    import numpy as np
+    import pandas as pd
+    from backtester import compute_confirmations
+
+    rng = np.random.default_rng(seed)
+    close = 100 * np.cumprod(1 + rng.normal(0.0008, 0.01, n))
+    idx = pd.date_range("2020-01-01", periods=n, freq="B")
+    df = pd.DataFrame({"Open": close, "High": close * 1.005, "Low": close * 0.995,
+                       "Close": close, "Volume": 1e6}, index=idx)
+    df["regime_id"] = np.tile([0, 0, 0, 1, 4, 5], n // 6 + 1)[:n]
+    df["regime_label"] = "x"
+    df["regime_confidence"] = 0.9
+    df["returns"] = df["Close"].pct_change().fillna(0)
+    df["range"] = (df["High"] - df["Low"]) / df["Close"]
+    df["volume_change"] = 0.0
+    return compute_confirmations(df)
+
+
+def test_zero_cost_is_the_default_and_changes_nothing():
+    """The default must preserve every pre-existing result exactly."""
+    df = _costed_frame()
+    a = run_backtest(df, skip_confirmations=True, n_regimes=7)
+    b = run_backtest(df, skip_confirmations=True, n_regimes=7, cost_bps_per_side=0.0)
+    assert a["metrics"]["total_return_pct"] == b["metrics"]["total_return_pct"]
+    assert a["metrics"]["total_cost_paid_pct"] == 0.0
+
+
+def test_costs_reduce_return_monotonically():
+    df = _costed_frame()
+    rets = [run_backtest(df, skip_confirmations=True, n_regimes=7,
+                         cost_bps_per_side=b)["metrics"]["total_return_pct"]
+            for b in (0, 1, 5, 10, 20)]
+    assert rets == sorted(rets, reverse=True), rets
+
+
+def test_cost_charged_on_both_sides_of_each_trade():
+    """Gross minus net must equal exactly two sides of friction."""
+    df = _costed_frame()
+    bt = run_backtest(df, skip_confirmations=True, n_regimes=7, cost_bps_per_side=10.0)
+    for tr in bt["trades"]:
+        assert abs((tr["gross_pnl_pct"] - tr["pnl_pct"]) - 0.20) < 1e-6
+
+
+def test_total_cost_paid_matches_trade_count():
+    df = _costed_frame()
+    bt = run_backtest(df, skip_confirmations=True, n_regimes=7, cost_bps_per_side=5.0)
+    expected = len(bt["trades"]) * 2 * 5.0 / 10_000.0 * 100.0
+    assert abs(bt["metrics"]["total_cost_paid_pct"] - expected) < 1e-6
+
+
+def test_cost_scales_with_leverage():
+    """A levered position transacts more notional, so it pays more friction."""
+    df = _costed_frame()
+    one = run_backtest(df, skip_confirmations=True, n_regimes=7,
+                       cost_bps_per_side=10.0, leverage=1.0)
+    two = run_backtest(df, skip_confirmations=True, n_regimes=7,
+                       cost_bps_per_side=10.0, leverage=2.0)
+    assert two["metrics"]["total_cost_paid_pct"] > one["metrics"]["total_cost_paid_pct"]
+
+
+def test_random_benchmark_also_pays_costs():
+    """Costing only the strategy would hand the benchmark a free edge."""
+    from walk_forward import benchmark_random_entry
+    df = _costed_frame()
+    free = benchmark_random_entry(df, n_trials=20, exposure_target=0.3)
+    paid = benchmark_random_entry(df, n_trials=20, exposure_target=0.3,
+                                  cost_bps_per_side=25.0)
+    assert paid["total_return_pct"] < free["total_return_pct"]

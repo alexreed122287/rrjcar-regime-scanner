@@ -86,6 +86,7 @@ def run_backtest(
     n_regimes: int = None,
     min_confidence: float = 0.5,
     neutral_exit_confidence: float = 0.6,
+    cost_bps_per_side: float = 0.0,
 ) -> dict:
     """
     Run the full regime-based backtest.
@@ -122,6 +123,15 @@ def run_backtest(
     neutral_exit_confidence : float
         Confidence above which a move into a neutral regime closes the position. Was
         hardcoded at 0.6; the default preserves that exactly.
+    cost_bps_per_side : float
+        Trading friction in basis points charged on EACH side (entry and exit). Covers
+        commission plus half-spread plus slippage. Scaled by ``leverage``, since a levered
+        position transacts a correspondingly larger notional.
+
+        Default 0.0 preserves the previous cost-free behaviour exactly. It is NOT a
+        realistic value: for liquid US equities ~1-2 bps per side is optimistic, 5 bps is
+        a fair central estimate, and 10+ bps applies to wider spreads or size. See
+        docs/validation-findings.md for the sensitivity analysis.
     n_regimes : int
         Number of regimes the model was fit with, used only to derive the bullish and
         bearish sets when they are not passed explicitly. If None, inferred from
@@ -195,6 +205,8 @@ def run_backtest(
     entry_regime = None
     cooldown_remaining = 0
     capital = initial_capital
+    cost_frac = float(cost_bps_per_side) / 10_000.0
+    total_cost_paid_pct = 0.0
 
     trades = []
     equity = [initial_capital]
@@ -235,7 +247,13 @@ def run_backtest(
                     exit_reason = "Trailing stop (-8% from peak)"
 
             if exit_reason:
-                pnl_pct = (price - entry_price) / entry_price * leverage * 100
+                # Exit friction: charged on notional, so it scales with leverage.
+                if cost_frac:
+                    capital *= (1.0 - cost_frac * leverage)
+                    total_cost_paid_pct += cost_frac * leverage * 100.0
+                gross_pnl_pct = (price - entry_price) / entry_price * leverage * 100
+                # Round trip: the entry side was charged when the position opened.
+                pnl_pct = gross_pnl_pct - 2.0 * cost_frac * leverage * 100
                 trades.append({
                     "entry_bar": entry_bar,
                     "entry_date": str(data.index[entry_bar]),
@@ -247,6 +265,7 @@ def run_backtest(
                     "exit_regime": row["regime_label"],
                     "exit_reason": exit_reason,
                     "pnl_pct": round(pnl_pct, 2),
+                    "gross_pnl_pct": round(gross_pnl_pct, 2),
                     "confirmations_at_entry": int(data.iloc[entry_bar]["confirmations_met"]),
                 })
                 position_open = False
@@ -271,6 +290,9 @@ def run_backtest(
 
             if is_bullish and enough_confs and high_confidence and regime_confirmed:
                 position_open = True
+                if cost_frac:
+                    capital *= (1.0 - cost_frac * leverage)
+                    total_cost_paid_pct += cost_frac * leverage * 100.0
                 entry_price = price
                 entry_bar = i
                 entry_regime = row["regime_label"]
@@ -292,7 +314,13 @@ def run_backtest(
     # Close any open position at end
     if position_open:
         final_price = float(data.iloc[-1]["Close"])
-        pnl_pct = (final_price - entry_price) / entry_price * leverage * 100
+        if cost_frac:
+            capital *= (1.0 - cost_frac * leverage)
+            total_cost_paid_pct += cost_frac * leverage * 100.0
+            if equity:
+                equity[-1] = capital
+        gross_pnl_pct = (final_price - entry_price) / entry_price * leverage * 100
+        pnl_pct = gross_pnl_pct - 2.0 * cost_frac * leverage * 100
         trades.append({
             "entry_bar": entry_bar,
             "entry_date": str(data.index[entry_bar]),
@@ -304,6 +332,7 @@ def run_backtest(
             "exit_regime": data.iloc[-1]["regime_label"],
             "exit_reason": "End of backtest",
             "pnl_pct": round(pnl_pct, 2),
+            "gross_pnl_pct": round(gross_pnl_pct, 2),
             "confirmations_at_entry": int(data.iloc[entry_bar]["confirmations_met"]),
         })
 
@@ -322,6 +351,8 @@ def run_backtest(
 
     # --- METRICS ---
     metrics = _compute_metrics(trades, equity, data, initial_capital, leverage)
+    metrics["cost_bps_per_side"] = float(cost_bps_per_side)
+    metrics["total_cost_paid_pct"] = round(total_cost_paid_pct, 3)
 
     return {
         "trades": trades,
