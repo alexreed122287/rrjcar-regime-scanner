@@ -9,3 +9,5 @@ __pycache__/
 .regime_cache.json
 .env
 .am_scan_results.json
+.equity_history.json
+HALT_TRADING

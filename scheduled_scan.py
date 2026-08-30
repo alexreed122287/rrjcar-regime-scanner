@@ -129,6 +129,63 @@ def filter_results(results: list, min_confs: int) -> list:
     return filtered
 
 
+def get_risk_state() -> dict:
+    """
+    Read-only circuit-breaker state for the alert banner.
+
+    The scan is informational, so this never records an equity snapshot — history is
+    accumulated where orders are actually placed. Never blocks or alters the scan.
+    """
+    try:
+        from risk_manager import check_risk_status
+
+        return check_risk_status(record=False).to_dict()
+    except Exception as e:
+        return {"status": "UNKNOWN", "reasons": [f"Risk state unavailable: {e}"],
+                "halted": False}
+
+
+def format_risk_banner_html(risk: dict) -> str:
+    """HTML banner showing circuit-breaker status at the top of each alert email."""
+    status = risk.get("status", "UNKNOWN")
+    if status == "OK":
+        return ""
+
+    colors = {
+        "HALTED": ("#7f1d1d", "#fecaca"),
+        "NO_ENTRY": ("#7c2d12", "#fed7aa"),
+        "REDUCED": ("#713f12", "#fde68a"),
+        "UNKNOWN": ("#374151", "#d1d5db"),
+    }
+    bg, fg = colors.get(status, colors["UNKNOWN"])
+    reasons = "".join(f"<li>{r}</li>" for r in risk.get("reasons", []))
+    headline = {
+        "HALTED": "TRADING HALTED — do not act on these signals",
+        "NO_ENTRY": "NEW ENTRIES BLOCKED — exits only",
+        "REDUCED": "POSITION SIZES REDUCED",
+        "UNKNOWN": "RISK STATE UNKNOWN",
+    }.get(status, status)
+
+    return (
+        f'<div style="background:{bg};color:{fg};padding:14px 18px;border-radius:8px;'
+        f'margin:0 0 16px 0;font-family:Arial,sans-serif;">'
+        f'<div style="font-weight:bold;font-size:15px;letter-spacing:0.4px;">'
+        f"RISK: {headline}</div>"
+        f'<ul style="margin:8px 0 0 18px;padding:0;font-size:13px;">{reasons}</ul>'
+        f"</div>"
+    )
+
+
+def format_risk_banner_text(risk: dict) -> str:
+    """Plain-text banner for Telegram alerts."""
+    status = risk.get("status", "UNKNOWN")
+    if status == "OK":
+        return ""
+    lines = [f"RISK: {status}"]
+    lines += [f"- {r}" for r in risk.get("reasons", [])]
+    return "\n".join(lines) + "\n\n"
+
+
 def run_scan(strategy: str, min_confs: int) -> list:
     """Run a scan with specified strategy on ALL TICKERS and return filtered results."""
     tickers = WATCHLISTS.get("ALL TICKERS", [])
@@ -318,6 +375,13 @@ def run_session(session: str):
 
     session_label = "PM Confirmation" if is_pm else "AM"
 
+    # ── Circuit-breaker state (informational — never blocks the scan) ──
+    risk = get_risk_state()
+    risk_html = format_risk_banner_html(risk)
+    risk_text = format_risk_banner_text(risk)
+    if risk.get("status") != "OK":
+        print(f"[Risk] status={risk.get('status')} reasons={risk.get('reasons')}")
+
     # ── V1 Scan (6/8) ──
     print("=" * 60)
     print(f"V1 SCAN ({session_label}) — {today_str}")
@@ -327,10 +391,10 @@ def run_session(session: str):
 
     confirmed_v1 = am_v1_syms if is_pm else None
     subject_v1 = f"V1 Hits {session_label} {today_str}"
-    email_html = format_email(v1_hits, f"All Tickers — {session_label}", "v1", V1_MIN_CONFS, confirmed_v1)
+    email_html = risk_html + format_email(v1_hits, f"All Tickers — {session_label}", "v1", V1_MIN_CONFS, confirmed_v1)
     send_email(subject_v1, email_html)
 
-    telegram_msg = format_telegram(v1_hits, session_label, "v1", V1_MIN_CONFS)
+    telegram_msg = risk_text + format_telegram(v1_hits, session_label, "v1", V1_MIN_CONFS)
     send_telegram(telegram_msg)
 
     if v1_hits:
@@ -352,10 +416,10 @@ def run_session(session: str):
 
     confirmed_v2 = am_v2_syms if is_pm else None
     subject_v2 = f"V2 Hits {session_label} {today_str}"
-    email_html = format_email(v2_hits, f"All Tickers — {session_label}", "v2", V2_MIN_CONFS, confirmed_v2)
+    email_html = risk_html + format_email(v2_hits, f"All Tickers — {session_label}", "v2", V2_MIN_CONFS, confirmed_v2)
     send_email(subject_v2, email_html)
 
-    telegram_msg = format_telegram(v2_hits, session_label, "v2", V2_MIN_CONFS)
+    telegram_msg = risk_text + format_telegram(v2_hits, session_label, "v2", V2_MIN_CONFS)
     send_telegram(telegram_msg)
 
     if v2_hits:

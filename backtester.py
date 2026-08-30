@@ -80,6 +80,7 @@ def run_backtest(
     bearish_regimes: list = None,
     initial_capital: float = 100_000.0,
     aggressive_mode: bool = False,
+    skip_confirmations: bool = False,
 ) -> dict:
     """
     Run the full regime-based backtest.
@@ -106,6 +107,13 @@ def run_backtest(
         Starting equity.
     aggressive_mode : bool
         If True: leverage=4x, min_confirmations=5, cooldown=3, confirm=2.
+    skip_confirmations : bool
+        If True, assume df already carries conf_* / confirmations_met columns and skip
+        recomputing them. Used by walk_forward.py, which computes indicators over a
+        warmup buffer and then trims to the out-of-sample window — without this the
+        indicator warmup (EMA-50, MACD) would be re-lost to dropna() and silently eat
+        the first ~50 bars of every evaluation window. Default False preserves the
+        original behavior exactly.
 
     Returns
     -------
@@ -127,7 +135,14 @@ def run_backtest(
         regime_confirm_bars = 2
 
     # Compute confirmations
-    data = compute_confirmations(df)
+    if skip_confirmations:
+        if "confirmations_met" not in df.columns:
+            raise ValueError(
+                "skip_confirmations=True requires precomputed confirmations_met column"
+            )
+        data = df.copy()
+    else:
+        data = compute_confirmations(df)
     data = data.dropna().copy()
 
     # Pre-compute regime streak (consecutive bars in same regime)
