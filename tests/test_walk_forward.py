@@ -286,3 +286,45 @@ def test_stress_test_reports_scenarios_and_summary(engine, featured):
     if result["summary"]:
         assert "worst_return_delta_pct" in result["summary"]
         assert result["summary"]["n_scenarios"] >= 1
+
+
+# ── annualization ──
+
+def test_periods_per_year_lookup():
+    from walk_forward import periods_per_year
+    assert periods_per_year("1d") == 252
+    assert periods_per_year("1h") == pytest.approx(252 * 6.5)
+    assert periods_per_year("1wk") == 52
+    # Unknown intervals fall back to hourly, the repo's fetch_data default.
+    assert periods_per_year("nonsense") == pytest.approx(252 * 6.5)
+
+
+def test_sharpe_scales_with_annualization_factor():
+    """
+    Using the daily factor on hourly bars overstates Sharpe by sqrt(6.5).
+
+    This is the bug the ppy parameter exists to prevent.
+    """
+    rng = np.random.default_rng(0)
+    curve = 100_000 * np.cumprod(1 + rng.normal(0.0002, 0.005, 500))
+
+    daily = _equity_metrics(curve, 100_000.0, ppy=252)
+    hourly = _equity_metrics(curve, 100_000.0, ppy=252 * 6.5)
+
+    ratio = hourly["sharpe"] / daily["sharpe"]
+    assert ratio == pytest.approx(np.sqrt(6.5), rel=1e-6)
+
+
+def test_engine_derives_annualization_from_interval():
+    daily = WalkForwardEngine(is_bars=100, oos_bars=50, interval="1d")
+    hourly = WalkForwardEngine(is_bars=100, oos_bars=50, interval="1h")
+    assert daily.ppy == 252
+    assert hourly.ppy == pytest.approx(252 * 6.5)
+
+
+def test_config_reports_interval(featured):
+    eng = WalkForwardEngine(is_bars=150, oos_bars=80, n_regimes=3,
+                            hmm_iter=10, interval="1d")
+    result = eng.run(featured, verbose=False)
+    assert result["config"]["interval"] == "1d"
+    assert result["config"]["periods_per_year"] == 252
