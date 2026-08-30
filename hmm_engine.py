@@ -206,6 +206,7 @@ def select_n_regimes(
     random_state: int = 42,
     tol: float = 1e-4,
     criterion: str = "bic",
+    feature_columns=None,
 ) -> dict:
     """
     Choose the number of regimes from the data instead of hardcoding it.
@@ -225,11 +226,12 @@ def select_n_regimes(
     if criterion not in ("bic", "holdout"):
         raise ValueError("criterion must be 'bic' or 'holdout'")
 
-    missing = [c for c in FEATURE_COLUMNS if c not in df.columns]
+    cols = list(feature_columns) if feature_columns else list(FEATURE_COLUMNS)
+    missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError(f"df missing feature columns: {missing}")
 
-    X_raw = df[FEATURE_COLUMNS].values
+    X_raw = df[cols].values
     n_samples, n_features = X_raw.shape
 
     X = StandardScaler().fit_transform(X_raw)
@@ -332,6 +334,7 @@ class RegimeDetector:
         tol: float = 1e-4,
         auto_candidates=range(3, 8),
         auto_criterion: str = "bic",
+        feature_columns=None,
     ):
         if isinstance(n_regimes, str):
             if n_regimes.strip().lower() != "auto":
@@ -341,6 +344,11 @@ class RegimeDetector:
         else:
             self.auto = False
             self.n_regimes = int(n_regimes)
+
+        # Which columns the HMM is fitted on. Defaults to the three core features so
+        # every existing caller is unaffected. Overridden by the cross-asset feature
+        # experiments in tools/, which need to fit on rates/credit/breadth columns.
+        self.feature_columns = list(feature_columns) if feature_columns else list(FEATURE_COLUMNS)
 
         self.auto_candidates = auto_candidates
         self.auto_criterion = auto_criterion
@@ -357,11 +365,12 @@ class RegimeDetector:
         self.is_trained = False
 
     def _prepare_features(self, df: pd.DataFrame) -> np.ndarray:
-        """Extract the 3 core features."""
-        missing = [c for c in FEATURE_COLUMNS if c not in df.columns]
+        """Extract the configured feature columns (the 3 core features by default)."""
+        cols = self.feature_columns
+        missing = [c for c in cols if c not in df.columns]
         if missing:
             raise ValueError(f"df missing feature columns: {missing}")
-        return df[FEATURE_COLUMNS].values
+        return df[cols].values
 
     def _label(self, regime_id: int) -> str:
         labels = self.labels or REGIME_LABELS
@@ -393,6 +402,7 @@ class RegimeDetector:
                 random_state=self.random_state,
                 tol=self.tol,
                 criterion=self.auto_criterion,
+                feature_columns=self.feature_columns,
             )
             self.regime_selection = selection
             self.n_regimes = int(selection["best_n"])
