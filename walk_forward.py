@@ -33,6 +33,21 @@ INDICATOR_WARMUP_BARS = 60
 
 TRADING_DAYS = 252
 
+# Periods per year, by bar interval. The scanner defaults to HOURLY bars
+# (data_loader.fetch_data interval="1h"), so annualizing Sharpe/CAGR with 252 would
+# overstate Sharpe by sqrt(6.5) ~= 2.5x. Always pass the interval you actually fetched.
+PERIODS_PER_YEAR = {
+    "1d": 252, "1day": 252, "daily": 252,
+    "1h": 252 * 6.5, "60m": 252 * 6.5, "hourly": 252 * 6.5,
+    "30m": 252 * 13, "15m": 252 * 26, "5m": 252 * 78, "1m": 252 * 390,
+    "1wk": 52, "weekly": 52,
+}
+
+
+def periods_per_year(interval: str) -> float:
+    """Annualization factor for a bar interval. Defaults to hourly, the repo default."""
+    return float(PERIODS_PER_YEAR.get(str(interval).lower().strip(), 252 * 6.5))
+
 
 @dataclass
 class WindowResult:
@@ -93,11 +108,19 @@ def _exposure_fraction(trades: List[dict], n_bars: int) -> Optional[float]:
     return min(1.0, held / n_bars) if held else None
 
 
-def _equity_metrics(equity_curve: np.ndarray, initial_capital: float) -> dict:
+def _equity_metrics(
+    equity_curve: np.ndarray,
+    initial_capital: float,
+    ppy: float = TRADING_DAYS,
+) -> dict:
     """
     Total return / CAGR / Sharpe / max drawdown for an arbitrary equity curve.
 
     Used for benchmarks, which produce a curve but no discrete trade list.
+
+    ``ppy`` is periods per year, used to annualize CAGR and Sharpe. Pass the value for
+    the bar interval actually being tested (see periods_per_year) — using the daily 252
+    on hourly bars overstates Sharpe by roughly 2.5x.
     """
     eq = np.asarray(equity_curve, dtype=float)
     if eq.size < 2:
@@ -107,14 +130,14 @@ def _equity_metrics(equity_curve: np.ndarray, initial_capital: float) -> dict:
         }
 
     total_return = (eq[-1] / eq[0] - 1.0) * 100.0
-    years = max(len(eq) / TRADING_DAYS, 1e-9)
+    years = max(len(eq) / ppy, 1e-9)
     cagr = ((eq[-1] / eq[0]) ** (1.0 / years) - 1.0) * 100.0 if eq[0] > 0 else 0.0
 
     rets = np.diff(eq) / eq[:-1]
     rets = rets[np.isfinite(rets)]
     sharpe = 0.0
     if rets.size > 1 and rets.std() > 0:
-        sharpe = float(rets.mean() / rets.std() * np.sqrt(TRADING_DAYS))
+        sharpe = float(rets.mean() / rets.std() * np.sqrt(ppy))
 
     running_peak = np.maximum.accumulate(eq)
     dd = (eq - running_peak) / running_peak
@@ -131,13 +154,14 @@ def _equity_metrics(equity_curve: np.ndarray, initial_capital: float) -> dict:
 
 # ──────────────────────────────── benchmarks ────────────────────────────────
 
-def benchmark_buy_and_hold(df: pd.DataFrame, initial_capital: float = 100_000.0) -> dict:
+def benchmark_buy_and_hold(df: pd.DataFrame, initial_capital: float = 100_000.0,
+                           ppy: float = TRADING_DAYS) -> dict:
     """Fully invested for the whole window. The bar every strategy must clear."""
     close = df["Close"].values.astype(float)
     if close.size < 2 or close[0] <= 0:
-        return _equity_metrics(np.array([initial_capital]), initial_capital)
+        return _equity_metrics(np.array([initial_capital]), initial_capital, ppy)
     equity = initial_capital * (close / close[0])
-    out = _equity_metrics(equity, initial_capital)
+    out = _equity_metrics(equity, initial_capital, ppy)
     out["exposure_pct"] = 100.0
     out["n_trades"] = 1
     return out
@@ -147,6 +171,7 @@ def benchmark_sma_trend(
     df: pd.DataFrame,
     window: int = 200,
     initial_capital: float = 100_000.0,
+    ppy: float = TRADING_DAYS,
 ) -> dict:
     """
     Long only while close > SMA(window), flat otherwise.
@@ -164,7 +189,7 @@ def benchmark_sma_trend(
     equity = initial_capital * np.cumprod(1.0 + strat_rets)
     equity = np.concatenate([[initial_capital], equity])[: len(strat_rets) + 1]
 
-    out = _equity_metrics(equity, initial_capital)
+    out = _equity_metrics(equity, initial_capital, ppy)
     out["exposure_pct"] = float(signal.mean() * 100.0)
     # Count entries (flat → long transitions)
     out["n_trades"] = int(((signal == 1) & (np.roll(signal, 1) == 0)).sum())
@@ -178,6 +203,7 @@ def benchmark_random_entry(
     exposure_target: Optional[float] = None,
     initial_capital: float = 100_000.0,
     seed: int = 42,
+    ppy: float = TRADING_DAYS,
 ) -> dict:
     """
     Random entries held a fixed number of bars, averaged over n_trials.
@@ -191,7 +217,7 @@ def benchmark_random_entry(
     rets = close.pct_change().fillna(0.0).values
     n = len(rets)
     if n < hold_bars + 2:
-        return _equity_metrics(np.array([initial_capital]), initial_capital)
+        return _equity_metrics(np.array([initial_capital]), initial_capital, ppy)
 
     rng = np.random.default_rng(seed)
 
@@ -210,7 +236,7 @@ def benchmark_random_entry(
         strat_rets = signal * rets
         equity = initial_capital * np.cumprod(1.0 + strat_rets)
         equity = np.concatenate([[initial_capital], equity])
-        m = _equity_metrics(equity, initial_capital)
+        m = _equity_metrics(equity, initial_capital, ppy)
         m["exposure_pct"] = float(signal.mean() * 100.0)
         trial_metrics.append(m)
 
@@ -310,6 +336,7 @@ class WalkForwardEngine:
         backtest_kwargs: Optional[dict] = None,
         hmm_iter: int = 100,
         random_state: int = 42,
+        interval: str = "1h",
     ):
         if is_bars < 30:
             raise ValueError("is_bars must be at least 30")
@@ -324,6 +351,9 @@ class WalkForwardEngine:
         self.backtest_kwargs = dict(backtest_kwargs or {})
         self.hmm_iter = hmm_iter
         self.random_state = random_state
+        self.interval = interval
+        # Annualization factor must match the bar interval actually being tested.
+        self.ppy = periods_per_year(interval)
 
         self.windows: List[WindowResult] = []
 
@@ -435,10 +465,15 @@ class WalkForwardEngine:
                     raise ValueError(f"only {len(scored)} usable OOS bars after warmup")
 
                 # 3. Score the strategy on untouched data.
+                # Pass the resolved regime count so the bullish/bearish sets match the
+                # model that was actually fitted. Without this, auto mode picking 3-4
+                # regimes would fall through to a 7-state layout and treat every state
+                # as bullish -- i.e. silently become buy-and-hold.
                 bt = run_backtest(
                     scored,
                     initial_capital=self.initial_capital,
                     skip_confirmations=True,
+                    n_regimes=int(detector.n_regimes),
                     **self.backtest_kwargs,
                 )
                 result.strategy = dict(bt["metrics"])
@@ -452,15 +487,16 @@ class WalkForwardEngine:
 
                 # 4. Benchmarks over the identical OOS bars.
                 result.benchmarks = {
-                    "buy_and_hold": benchmark_buy_and_hold(scored, self.initial_capital),
+                    "buy_and_hold": benchmark_buy_and_hold(
+                        scored, self.initial_capital, ppy=self.ppy),
                     "sma_200_trend": benchmark_sma_trend(
                         scored, window=min(200, max(20, len(scored) // 2)),
-                        initial_capital=self.initial_capital,
+                        initial_capital=self.initial_capital, ppy=self.ppy,
                     ),
                     "random_entry": benchmark_random_entry(
                         scored, exposure_target=exposure_frac,
                         initial_capital=self.initial_capital,
-                        seed=self.random_state,
+                        seed=self.random_state, ppy=self.ppy,
                     ),
                 }
 
@@ -490,6 +526,8 @@ class WalkForwardEngine:
                 "n_regimes": self.n_regimes,
                 "initial_capital": self.initial_capital,
                 "backtest_kwargs": self.backtest_kwargs,
+                "interval": self.interval,
+                "periods_per_year": self.ppy,
             },
         }
 
@@ -637,6 +675,8 @@ def format_report(result: dict) -> str:
         f"In-sample window : {cfg.get('is_bars')} bars",
         f"Out-of-sample    : {cfg.get('oos_bars')} bars, step {cfg.get('step_bars')}",
         f"Regimes          : {cfg.get('n_regimes')}",
+        f"Bar interval     : {cfg.get('interval')} "
+        f"({cfg.get('periods_per_year')} periods/yr)",
         "",
         f"Windows scored   : {agg.get('n_windows', 0)} (failed: {agg.get('n_failed', 0)})",
         f"OOS trades       : {agg.get('oos_total_trades', 0)}",
@@ -656,6 +696,12 @@ def format_report(result: dict) -> str:
         f"({agg.get('pct_windows_beating_sma_trend', 0):.1f}%)",
         f"Random entry: {agg.get('mean_excess_vs_random_pct', 0):+.2f}%  "
         f"({agg.get('pct_windows_beating_random', 0):.1f}%)",
+    ]
+    lines += [
+        "",
+        "NOTE: strategy Sharpe comes from backtester._compute_metrics, which hardcodes",
+        "sqrt(252). On non-daily bars it is not comparable to the benchmark Sharpes",
+        "above, which use the interval-correct factor. Pre-existing; see PR notes.",
     ]
     tiers = agg.get("confidence_tiers") or {}
     if tiers:
@@ -681,6 +727,8 @@ def _cli():
     parser = argparse.ArgumentParser(description="Walk-forward validation")
     parser.add_argument("symbol")
     parser.add_argument("--period-days", type=int, default=1500)
+    parser.add_argument("--interval", default="1d",
+                        help="bar interval; '1d' for daily, '1h' for the scanner default")
     parser.add_argument("--is-bars", type=int, default=252)
     parser.add_argument("--oos-bars", type=int, default=126)
     parser.add_argument("--step-bars", type=int, default=None)
@@ -696,7 +744,8 @@ def _cli():
     from data_loader import fetch_data, engineer_features
 
     print(f"Fetching {args.symbol}...")
-    df = fetch_data(args.symbol, period_days=args.period_days)
+    df = fetch_data(args.symbol, period_days=args.period_days,
+                    interval=args.interval)
     if df is None or df.empty:
         raise SystemExit(f"No data returned for {args.symbol}")
     df = engineer_features(df)
@@ -710,6 +759,7 @@ def _cli():
         step_bars=args.step_bars,
         n_regimes=n_regimes,
         initial_capital=args.capital,
+        interval=args.interval,
     )
 
     result = engine.run(df)

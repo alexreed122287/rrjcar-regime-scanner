@@ -32,6 +32,7 @@ async def backtest_symbol(
                 cooldown_bars=cooldown,
                 regime_confirm_bars=regime_confirm,
                 initial_capital=capital,
+                n_regimes=int(detector.n_regimes),
             )
         else:
             bt = run_backtest(
@@ -40,6 +41,7 @@ async def backtest_symbol(
                 cooldown_bars=cooldown,
                 regime_confirm_bars=regime_confirm,
                 initial_capital=capital,
+                n_regimes=int(detector.n_regimes),
             )
 
         metrics = bt["metrics"]

@@ -33,19 +33,91 @@ REGIME_LABELS = [
     "Crash / Capitulation"  # Extreme negative returns
 ]
 
+# The 7-label scheme is the reference shape: 3 bullish states, 2 neutral, 2 bearish.
+# Every other regime count is mapped proportionally onto it, so the invariant
+# "regime 0 is most bullish, regime n-1 is most bearish" always holds.
+REFERENCE_N = 7
+REFERENCE_BULLISH = 3
+REFERENCE_BEARISH = 2
+
+
 def labels_for(n_regimes: int) -> list:
     """
     Ordered labels (most bullish first) for a given regime count.
 
-    NOTE: this preserves the original truncation behavior — with n_regimes < 7 the list
-    is cut from the bullish end, so e.g. n_regimes=5 yields no bearish label and
-    backtester's default bearish_regimes=[5, 6] can never fire. That is pre-existing
-    behavior for the cloud scanner (routes_scan.py uses n_regimes=5) and is left alone
-    here deliberately rather than silently changing live scan semantics.
+    Labels are interpolated across the full bullish-to-bearish span of REGIME_LABELS so
+    the last regime is always the most bearish. n_regimes=7 reproduces REGIME_LABELS
+    exactly.
+
+    This replaces the previous behavior of truncating the list from the bullish end,
+    which left no bearish label at all for n_regimes < 7 -- a 5-regime model could never
+    report a bear regime. See regime_sets() for the matching index sets.
     """
-    if n_regimes <= len(REGIME_LABELS):
-        return list(REGIME_LABELS[:n_regimes])
-    return list(REGIME_LABELS) + [f"State {i}" for i in range(len(REGIME_LABELS), n_regimes)]
+    if n_regimes < 1:
+        raise ValueError("n_regimes must be >= 1")
+    if n_regimes == 1:
+        return [REGIME_LABELS[REFERENCE_N // 2]]
+
+    span = REFERENCE_N - 1
+    labels = [REGIME_LABELS[round(i * span / (n_regimes - 1))] for i in range(n_regimes)]
+
+    # More states than reference labels causes collisions; disambiguate by occurrence so
+    # labels stay unique and still read in bullish-to-bearish order.
+    if len(set(labels)) != len(labels):
+        counts = {l: labels.count(l) for l in labels}
+        seen, out = {}, []
+        for l in labels:
+            if counts[l] == 1:
+                out.append(l)
+            else:
+                seen[l] = seen.get(l, 0) + 1
+                out.append(f"{l} ({seen[l]})")
+        labels = out
+    return labels
+
+
+def regime_sets(n_regimes: int) -> dict:
+    """
+    Which regime ids count as bullish, neutral, and bearish for a given regime count.
+
+    Regime ids are rank-ordered by mean return (0 = most bullish), so these sets are
+    derived proportionally from the 7-regime reference shape rather than hardcoded.
+
+    n_regimes=7 returns exactly the historical defaults -- bullish [0, 1, 2] and
+    bearish [5, 6]. This function exists because those literals were hardcoded in
+    run_backtest, which meant a 3-regime model treated EVERY state as bullish
+    (ids 0, 1, 2) and was therefore always in the market. That silently turned the
+    strategy into buy-and-hold whenever n_regimes was reduced or auto-selected.
+
+    Always leaves at least one neutral state so there is a genuine "do nothing" band.
+
+    Returns
+    -------
+    dict with keys ``bullish``, ``neutral``, ``bearish`` (lists of int), ``n_regimes``.
+    """
+    n = int(n_regimes)
+    if n < 1:
+        raise ValueError("n_regimes must be >= 1")
+    if n == 1:
+        return {"bullish": [], "neutral": [0], "bearish": [], "n_regimes": 1}
+    if n == 2:
+        return {"bullish": [0], "neutral": [], "bearish": [1], "n_regimes": 2}
+
+    n_bull = max(1, round(n * REFERENCE_BULLISH / REFERENCE_N))
+    n_bear = max(1, round(n * REFERENCE_BEARISH / REFERENCE_N))
+
+    while n_bull + n_bear > n - 1:
+        if n_bull >= n_bear and n_bull > 1:
+            n_bull -= 1
+        elif n_bear > 1:
+            n_bear -= 1
+        else:
+            break
+
+    bullish = list(range(n_bull))
+    bearish = list(range(n - n_bear, n))
+    neutral = [i for i in range(n) if i not in bullish and i not in bearish]
+    return {"bullish": bullish, "neutral": neutral, "bearish": bearish, "n_regimes": n}
 
 
 def _frame_log_likelihood(model: GaussianHMM, X: np.ndarray) -> np.ndarray:
@@ -468,6 +540,12 @@ class RegimeDetector:
                 "pct_of_total": len(subset) / len(df) * 100,
             })
         self.regime_stats = pd.DataFrame(stats)
+
+    def regime_sets(self) -> dict:
+        """Bullish / neutral / bearish regime ids for this detector's regime count."""
+        if self.n_regimes is None:
+            raise RuntimeError("n_regimes unresolved. Call train() first for auto mode.")
+        return regime_sets(self.n_regimes)
 
     def get_transition_matrix(self) -> pd.DataFrame:
         """Return the regime transition probability matrix (labeled)."""
