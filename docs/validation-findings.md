@@ -20,6 +20,7 @@ Three hypotheses tested, three negative results.
 | 2 | 7 regimes is over-parameterized; a converged 3-4 regime model does better | **No.** Level with 7, worse on NVDA |
 | 3 | The entry filters (confidence × confirmations) can be tuned into edge | **No.** Best tune setting decayed to exactly zero out of sample |
 | 4 | The 3 features separate regimes in a way that predicts forward returns | **No.** Regimes carry no forward information, and the ranking inverts |
+| 5 | Regimes are informative at longer horizons (5/10/20 bars) even if not at 1 | **No.** Flat null at every horizon tested |
 
 The system's one demonstrated virtue is capital preservation, not alpha. In the 2022
 window SPY lost **-4.01% against buy-and-hold's -18.78%**. It runs at 3-19% market
@@ -206,6 +207,56 @@ is.
 
 ---
 
+## 5. No information at any holding horizon
+
+Test 4 measured next-bar returns, which left a fair objection open: regime models are
+usually motivated as *medium*-horizon descriptions, so a 1-bar null could be the wrong
+question rather than a real absence. `tools/regime_horizons.py` reruns the same causal
+setup at h = 1, 5, 10, 20 bars.
+
+Overlapping forward returns are strongly autocorrelated, so observations are **subsampled
+with stride h** to be non-overlapping. That leaves too few per window at long h, so the
+primary test pools non-overlapping observations across windows within each ticker (regime
+ids are comparable across windows by construction) and treats tickers as the independent
+unit.
+
+| h | mean rho (want negative) | tickers with intended sign | tickers with KW p<0.05 |
+|---|---|---|---|
+| 1 | +0.009 | 2/5 | 1/5 |
+| 5 | -0.022 | 4/5 | 0/5 |
+| 10 | +0.014 | 1/5 | 0/5 |
+| 20 | -0.009 | 3/5 | 0/5 |
+
+A flat null. Mean rho oscillates around zero with no trend in horizon, sign counts are
+coin flips, and the single nominally significant Kruskal-Wallis result (QQQ at h=1,
+p=0.027) is exactly what 20 ticker × horizon tests produce by chance — expected count
+under the null is 1.0.
+
+This closes the horizon loophole. The features carry no forward information at any holding
+period from one day to one month.
+
+### Secondary observation, deliberately underweighted
+
+Regime 0 — the state labeled most bullish — underperformed the window average at longer
+horizons:
+
+| h | tickers where regime 0 < average | mean gap | sign p |
+|---|---|---|---|
+| 1 | 2/5 | +0.01 pp | 1.000 |
+| 5 | 2/5 | -0.05 pp | 1.000 |
+| 10 | **5/5** | -0.78 pp | 0.062 |
+| 20 | **5/5** | -1.24 pp | 0.062 |
+
+Consistent with the adverse tilt in test 4, and with the mean-reversion mechanism: rank
+states on trailing mean return and regime 0 tends to mark a local top. But this should not
+be traded on. The five tickers are correlated US equities over identical windows, so 5/5 is
+nowhere near five independent successes; 0.062 is the floor for n=5 and does not clear
+0.05; and rho is ~0 at exactly these horizons, so the rank ordering does not corroborate a
+regime-0-specific effect. It is a hypothesis for a future test with independent assets, not
+a finding.
+
+---
+
 ## Known measurement bugs found along the way
 
 1. **Annualization** — `data_loader.fetch_data` defaults to **hourly** bars, but
@@ -223,8 +274,6 @@ is.
 - **Better features.** Test 4 rules out the current three, not the approach. Longer
   lookbacks, cross-asset context (rates, credit, breadth) or realized-vol regimes are
   untested and are where any remaining upside lives.
-- **Longer holding horizons.** Forward return here is one bar. Regimes could plausibly
-  carry information at 5-20 bars while carrying none at 1.
 - **More windows.** 14 per ticker is too few for ~1% effects. Shorter OOS steps, more
   tickers, or overlapping windows with corrected standard errors would all help.
 - **Transaction costs.** Not modeled anywhere. Including them would move every result
@@ -235,6 +284,9 @@ is.
 ```bash
 # Does the regime labeling predict anything out-of-sample?
 .venv/bin/python tools/regime_separability.py --regimes auto
+
+# ...at any holding horizon?
+.venv/bin/python tools/regime_horizons.py --regimes auto --horizons 1,5,10,20
 
 # Baseline walk-forward on one ticker
 .venv/bin/python walk_forward.py SPY --interval 1d --period-days 3000 --regimes 7
