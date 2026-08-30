@@ -84,6 +84,8 @@ def run_backtest(
     aggressive_mode: bool = False,
     skip_confirmations: bool = False,
     n_regimes: int = None,
+    min_confidence: float = 0.5,
+    neutral_exit_confidence: float = 0.6,
 ) -> dict:
     """
     Run the full regime-based backtest.
@@ -112,6 +114,14 @@ def run_backtest(
         Starting equity.
     aggressive_mode : bool
         If True: leverage=4x, min_confirmations=5, cooldown=3, confirm=2.
+    min_confidence : float
+        Minimum regime posterior probability required to open a position. Was hardcoded
+        at 0.5; the default preserves that exactly. Note this is NOT the same knob as
+        scheduled_scan.MIN_CONFIDENCE (0.80), which only filters which alerts get
+        emailed and never affected backtest or live entry logic.
+    neutral_exit_confidence : float
+        Confidence above which a move into a neutral regime closes the position. Was
+        hardcoded at 0.6; the default preserves that exactly.
     n_regimes : int
         Number of regimes the model was fit with, used only to derive the bullish and
         bearish sets when they are not passed explicitly. If None, inferred from
@@ -215,7 +225,7 @@ def run_backtest(
             # Exit if regime is no longer bullish (neutral zone)
             elif regime not in bullish_regimes and regime not in bearish_regimes:
                 # Only exit neutral if confidence is high that we left bull
-                if float(row["regime_confidence"]) > 0.6:
+                if float(row["regime_confidence"]) > neutral_exit_confidence:
                     exit_reason = f"Regime neutral - {row['regime_label']} (conf {row['regime_confidence']:.0%})"
 
             # Trailing stop in aggressive mode: -8% from peak
@@ -256,7 +266,7 @@ def run_backtest(
         if not position_open:
             is_bullish = regime in bullish_regimes
             enough_confs = confs >= min_confirmations
-            high_confidence = float(row["regime_confidence"]) > 0.5
+            high_confidence = float(row["regime_confidence"]) > min_confidence
             regime_confirmed = streak >= regime_confirm_bars
 
             if is_bullish and enough_confs and high_confidence and regime_confirmed:

@@ -188,3 +188,44 @@ def test_three_regime_model_is_not_always_long(make_ohlcv):
     )
     exposure = bars_held / len(out["df"]) if len(out["df"]) else 0.0
     assert exposure < 0.75, f"3-regime model still nearly always long (exposure {exposure:.2f})"
+
+
+# ── confidence threshold parameterization ──
+
+def test_default_confidence_thresholds_preserve_behavior(make_ohlcv):
+    """Defaults must reproduce the previously hardcoded 0.5 / 0.6 gates exactly."""
+    df = _regime_frame(make_ohlcv, 7, 0)
+    a = run_backtest(df.copy(), n_regimes=7, skip_confirmations=False)
+    b = run_backtest(
+        df.copy(), n_regimes=7, skip_confirmations=False,
+        min_confidence=0.5, neutral_exit_confidence=0.6,
+    )
+    assert a["metrics"]["total_trades"] == b["metrics"]["total_trades"]
+    assert a["metrics"]["total_return_pct"] == b["metrics"]["total_return_pct"]
+
+
+def test_impossible_confidence_blocks_all_entries(make_ohlcv):
+    df = _regime_frame(make_ohlcv, 7, 0)
+    out = run_backtest(
+        df, n_regimes=7, skip_confirmations=False, min_confidence=1.01,
+    )
+    assert out["metrics"]["total_trades"] == 0
+
+
+def test_raising_confidence_is_monotone_in_trade_count(make_ohlcv):
+    """Tightening the gate must never increase the number of entries."""
+    import numpy as np
+    rng = np.random.default_rng(3)
+    df = make_ohlcv(n_bars=400, trend_slope=0.0004, volatility=0.01)
+    ids = np.repeat(rng.integers(0, 7, size=40), 10)[: len(df)]
+    df["regime_id"] = ids
+    df["regime_label"] = [labels_for(7)[i] for i in ids]
+    df["regime_confidence"] = rng.uniform(0.35, 0.99, len(df))
+
+    counts = [
+        run_backtest(
+            df.copy(), n_regimes=7, skip_confirmations=False, min_confidence=c
+        )["metrics"]["total_trades"]
+        for c in (0.4, 0.6, 0.8, 0.95)
+    ]
+    assert counts == sorted(counts, reverse=True), counts
