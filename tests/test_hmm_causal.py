@@ -216,15 +216,32 @@ def test_labels_for_default_is_unchanged():
     assert labels_for(7) == REGIME_LABELS
 
 
-def test_labels_for_truncates_from_the_bullish_end():
-    # Documented pre-existing behavior; routes_scan.py relies on n_regimes=5.
-    assert labels_for(5) == REGIME_LABELS[:5]
+def test_labels_for_spans_full_range_below_seven():
+    """Previously truncated from the bullish end, leaving no bearish label at all."""
+    for n in range(2, 8):
+        labels = labels_for(n)
+        assert len(labels) == n
+        assert labels[0] == REGIME_LABELS[0]
+        assert labels[-1] == REGIME_LABELS[-1], f"n={n} has no bearish label: {labels}"
+
+
+def test_labels_for_five_includes_a_bear_label():
+    labels = labels_for(5)
+    assert len(labels) == 5
+    assert any("Bear" in l or "Crash" in l for l in labels)
 
 
 def test_labels_for_handles_more_than_seven():
     labels = labels_for(9)
     assert len(labels) == 9
-    assert labels[:7] == REGIME_LABELS
+    assert len(set(labels)) == 9, "labels must stay unique"
+    assert labels[0] == REGIME_LABELS[0]
+    assert labels[-1] == REGIME_LABELS[-1]
+
+
+def test_labels_for_rejects_zero():
+    with pytest.raises(ValueError):
+        labels_for(0)
 
 
 def test_transition_matrix_shape_matches_regimes(trained):
