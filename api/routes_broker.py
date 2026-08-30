@@ -3,10 +3,14 @@
 import time
 import threading
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
 router = APIRouter()
+
+# HTTP 423 Locked — used when circuit breakers refuse an order.
+HTTP_LOCKED = 423
 
 # Track active ladder orders
 _ladder_status: Dict[str, Any] = {}
@@ -16,6 +20,63 @@ class BrokerConnect(BaseModel):
     access_token: str
     account_id: str
     sandbox: bool = True
+
+
+def _risk_gate(side: str) -> Optional[JSONResponse]:
+    """
+    Consult the account-level circuit breakers before submitting an order.
+
+    Returns None when the order may proceed, or a 423 Locked JSONResponse describing
+    the breach. Exits are permitted unless trading is fully halted — see
+    risk_manager.is_order_permitted.
+
+    Do not remove or weaken this gate. See .github/copilot-instructions.md.
+    """
+    from risk_manager import check_risk_status, is_order_permitted, is_exit_side
+
+    try:
+        status = check_risk_status()
+    except Exception as exc:
+        # Fail closed: if risk state cannot be established, do not submit new risk.
+        if is_exit_side(side):
+            return None
+        return JSONResponse(
+            status_code=HTTP_LOCKED,
+            content={
+                "error": "Risk state unavailable — new entries blocked.",
+                "detail": str(exc),
+                "risk_status": "UNKNOWN",
+            },
+        )
+
+    if is_order_permitted(side, status):
+        return None
+
+    return JSONResponse(
+        status_code=HTTP_LOCKED,
+        content={
+            "error": "Order refused by risk manager.",
+            "risk_status": status.status,
+            "halted": status.halted,
+            "reasons": status.reasons,
+            "breaches": status.breaches,
+            "daily_pct": status.daily_pct,
+            "weekly_pct": status.weekly_pct,
+            "drawdown_pct": status.drawdown_pct,
+            "sentinel_path": status.sentinel_path,
+        },
+    )
+
+
+@router.get("/risk/status")
+async def risk_status():
+    """Current circuit-breaker state, for the dashboard risk panel."""
+    try:
+        from risk_manager import check_risk_status
+
+        return check_risk_status().to_dict()
+    except Exception as e:
+        return {"status": "UNKNOWN", "error": str(e)}
 
 
 @router.get("/broker/status")
@@ -194,12 +255,34 @@ async def ladder_order(req: LadderOrder):
     if not is_configured():
         return {"error": "Tradier not configured. Go to Config tab to connect."}
 
+    # ── Circuit breakers veto everything downstream of here ──
+    refusal = _risk_gate(req.side)
+    if refusal is not None:
+        return refusal
+
+    # Scale size down if a reduced-risk breaker is active (exits are never scaled).
+    quantity = req.quantity
+    from risk_manager import apply_size_multiplier, check_risk_status, is_exit_side
+
+    if not is_exit_side(req.side):
+        try:
+            status = check_risk_status(record=False)
+            quantity = apply_size_multiplier(req.quantity, status)
+        except Exception:
+            quantity = req.quantity
+        if quantity < 1:
+            return JSONResponse(
+                status_code=HTTP_LOCKED,
+                content={"error": "Risk manager reduced order size to zero."},
+            )
+
     order_id = f"{req.side}_{req.symbol}_{int(time.time())}"
     _ladder_status[order_id] = {
         "order_id": order_id,
         "symbol": req.symbol.upper(),
         "side": req.side,
-        "quantity": req.quantity,
+        "quantity": quantity,
+        "requested_quantity": req.quantity,
         "max_attempts": req.max_attempts,
         "increment": req.increment,
         "status": "starting",
@@ -211,13 +294,18 @@ async def ladder_order(req: LadderOrder):
     # Run in background thread
     t = threading.Thread(
         target=_run_ladder,
-        args=(order_id, req.symbol, req.side, req.quantity,
+        args=(order_id, req.symbol, req.side, quantity,
               req.max_attempts, req.increment),
         daemon=True,
     )
     t.start()
 
-    return {"order_id": order_id, "status": "started"}
+    return {
+        "order_id": order_id,
+        "status": "started",
+        "quantity": quantity,
+        "requested_quantity": req.quantity,
+    }
 
 
 @router.get("/broker/ladder/{order_id}")
