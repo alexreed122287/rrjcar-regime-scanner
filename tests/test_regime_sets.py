@@ -303,3 +303,43 @@ def test_random_benchmark_also_pays_costs():
     paid = benchmark_random_entry(df, n_trials=20, exposure_target=0.3,
                                   cost_bps_per_side=25.0)
     assert paid["total_return_pct"] < free["total_return_pct"]
+
+
+def test_detector_accepts_custom_feature_columns():
+    """Cross-asset experiments need to fit on non-default columns."""
+    import numpy as np
+    import pandas as pd
+    from hmm_engine import RegimeDetector, FEATURE_COLUMNS
+
+    rng = np.random.default_rng(0)
+    n = 300
+    df = pd.DataFrame({
+        "returns": rng.normal(0, 0.01, n),
+        "range": rng.uniform(0.005, 0.02, n),
+        "volume_change": rng.normal(0, 0.1, n),
+        "credit": rng.normal(0, 0.003, n),
+        "rates": rng.normal(0, 0.008, n),
+        "breadth": rng.normal(0, 0.004, n),
+        "Close": 100 + np.arange(n) * 0.1,
+    }, index=pd.date_range("2020-01-01", periods=n, freq="B"))
+
+    det = RegimeDetector(n_regimes=3, n_iter=20,
+                         feature_columns=["credit", "rates", "breadth"])
+    det.train(df)
+    assert det.is_trained
+    assert det.feature_columns == ["credit", "rates", "breadth"]
+    # Default must still be the production set.
+    assert RegimeDetector(n_regimes=3).feature_columns == list(FEATURE_COLUMNS)
+
+
+def test_custom_feature_columns_validated():
+    import numpy as np
+    import pandas as pd
+    import pytest
+    from hmm_engine import RegimeDetector
+
+    df = pd.DataFrame({"returns": np.zeros(50), "range": np.zeros(50),
+                       "volume_change": np.zeros(50)})
+    det = RegimeDetector(n_regimes=3, feature_columns=["returns", "nope"])
+    with pytest.raises(ValueError, match="missing feature columns"):
+        det.train(df)

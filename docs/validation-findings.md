@@ -22,6 +22,7 @@ Three hypotheses tested, three negative results.
 | 4 | The 3 features separate regimes in a way that predicts forward returns | **No.** Regimes carry no forward information, and the ranking inverts |
 | 5 | Regimes are informative at longer horizons (5/10/20 bars) even if not at 1 | **No.** Flat null at every horizon tested |
 | 6 | Transaction costs are a second-order detail | **No.** They cost 18-37% of gross return and *widen* the gap to random |
+| 7 | Cross-asset features (credit, rates, breadth) give regimes forward information | **No.** Macro-only regimes score exactly at the null |
 
 The system's one demonstrated virtue is capital preservation, not alpha. In the 2022
 window SPY lost **-4.01% against buy-and-hold's -18.78%**. It runs at 3-19% market
@@ -304,6 +305,60 @@ comparison was tilted in its favour rather than against it.
 
 ---
 
+## 7. Cross-asset features do not rescue it
+
+Tests 4 and 5 ruled out the three core features, all of which are short-horizon
+restatements of the target's own volatility and momentum. The obvious follow-up is regimes
+built on *macro* state instead. `RegimeDetector` now takes an optional `feature_columns`
+argument (defaulting to the core three, so production is unaffected) and
+`tools/cross_asset_features.py` compares three sets on identical windows and identical
+tests:
+
+| set | features | count |
+|---|---|---|
+| core | returns, range, volume_change | 3 |
+| cross | credit, rates, breadth | 3 |
+| both | all of the above | 6 |
+
+Cross-asset series are ETF proxies, because index tickers (`^VIX`, `^TNX`) are not
+available from any configured data source:
+
+- **credit** — log(HYG/LQD) change, high-yield vs investment-grade, i.e. credit appetite
+- **rates** — TLT return, long-duration Treasuries
+- **breadth** — log(RSP/SPY) change, equal- vs cap-weighted S&P, i.e. participation
+
+### Result
+
+| set | n features | mean rho (want negative) | KW p<0.05 rate | vs 5% null | regime 0 > avg |
+|---|---|---|---|---|---|
+| core | 3 | +0.026 | 4% | p=1.000 | 56% |
+| cross | 3 | **+0.000** | 5% | p=1.000 | 52% |
+| both | 6 | +0.040 | 10% | p=0.050 | **36%** |
+
+**`cross` is the fair comparison** — same feature count as `core`, so any difference
+cannot be attributed to parameter count. It scores a mean rho of exactly 0.000 and a
+Kruskal-Wallis significance rate of 5%, which is precisely the null. Macro state, as
+encoded by these three proxies, carries no information about this target's forward returns.
+
+`both` is the one ambiguous cell: 10% KW significance against a 5% null, nominally
+p=0.050. Three reasons it is not a finding:
+
+1. Three feature sets were compared, so the Bonferroni threshold is 0.017. p=0.050 does
+   not clear it.
+2. Mean rho is **+0.040** — the wrong sign. Whatever separation exists runs opposite to
+   the labelling, so it is not tradeable as built.
+3. Regime 0 beat the window average only **36%** of the time, worse than a coin flip and
+   consistent with the inverted ordering already seen in tests 4 and 5.
+4. It is concentrated in 2 of 5 tickers (SPY 23%, XLF 21%; AAPL and NVDA both 0%).
+
+It also fits 6 features with full covariance on 252 samples, so it is the most
+over-parameterized configuration tested.
+
+The consistent story across tests 4, 5 and 7 is that the labelled-bullish regime mildly
+*under*performs out of sample, whatever features are used to define it.
+
+---
+
 ## Known measurement bugs found along the way
 
 1. **Annualization** — `data_loader.fetch_data` defaults to **hourly** bars, but
@@ -318,9 +373,14 @@ comparison was tilted in its favour rather than against it.
 
 ## What has not been tested
 
-- **Better features.** Test 4 rules out the current three, not the approach. Longer
-  lookbacks, cross-asset context (rates, credit, breadth) or realized-vol regimes are
-  untested and are where any remaining upside lives.
+- **Better features.** Tests 4, 5 and 7 rule out the core three *and* credit/rates/breadth
+  proxies. Untested: longer lookbacks (these are all 1-day changes), genuine volatility
+  regimes rather than the `range` proxy, and real index data (`^VIX`, `^TNX`) which no
+  configured source currently provides.
+- **The inverted ordering itself.** Three independent tests now show the labelled-bullish
+  regime underperforming. Ranking states by a *forward*-looking or longer-window statistic,
+  rather than 252-bar trailing mean return, is the one untested change with a mechanism
+  behind it.
 - **More windows.** 14 per ticker is too few for ~1% effects. Shorter OOS steps, more
   tickers, or overlapping windows with corrected standard errors would all help.
 - **Realistic slippage on the entry bar.** Costs are charged as a flat bps figure on the
@@ -335,6 +395,9 @@ comparison was tilted in its favour rather than against it.
 
 # ...at any holding horizon?
 .venv/bin/python tools/regime_horizons.py --regimes auto --horizons 1,5,10,20
+
+# Do cross-asset features help?
+.venv/bin/python tools/cross_asset_features.py --regimes auto
 
 # What do transaction costs do to all of the above?
 .venv/bin/python tools/cost_sensitivity.py --regimes 7 --costs 0,1,2,5,10,20
