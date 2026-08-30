@@ -19,6 +19,7 @@ Three hypotheses tested, three negative results.
 | 1 | The strategy beats matched-exposure random entry | **No.** Point estimates negative on 4 of 5 tickers, none significant |
 | 2 | 7 regimes is over-parameterized; a converged 3-4 regime model does better | **No.** Level with 7, worse on NVDA |
 | 3 | The entry filters (confidence × confirmations) can be tuned into edge | **No.** Best tune setting decayed to exactly zero out of sample |
+| 4 | The 3 features separate regimes in a way that predicts forward returns | **No.** Regimes carry no forward information, and the ranking inverts |
 
 The system's one demonstrated virtue is capital preservation, not alpha. In the 2022
 window SPY lost **-4.01% against buy-and-hold's -18.78%**. It runs at 3-19% market
@@ -141,6 +142,70 @@ improvement. It is recorded here for a human decision.
 
 ---
 
+## 4. The root cause: regimes carry no forward information
+
+The first three tests all ran through the backtest, so entry rules, confirmations and
+cooldowns sat between the signal and the result. `tools/regime_separability.py` removes
+all of it and tests the premise directly.
+
+`RegimeDetector` assigns regime ids by ranking states on their **in-sample** mean return,
+so id 0 is the most bullish state *on the training window*, and `run_backtest` treats ids
+0..k as bullish. That is only meaningful if the ranking persists on unseen data. So, with
+causal labels, per window: rank-correlate regime id against the return realized **after**
+the regime is observed (`Close.pct_change().shift(-1)`), and test whether the
+forward-return distributions differ across regimes at all.
+
+### Do regimes separate forward returns?
+
+No. Kruskal-Wallis across regimes, fraction of windows significant at p<0.05:
+
+| Model | KW p<0.05 | vs 5% null | Verdict |
+|---|---|---|---|
+| 7 regimes | 10% of 70 windows | p=0.088 | not significant |
+| auto (3-4, converged) | **4% of 69 windows** | p=1.000 | **exactly the null** |
+
+With converged models the regimes are indistinguishable from a random partition of bars
+with respect to forward returns. This is the finding that explains all three results
+above: there was never any forward information for the downstream layers to exploit.
+
+### The little signal there is points the wrong way
+
+For the labeling to be tradeable, rank correlation between regime id and forward return
+must be reliably **negative** (low id → high return). It is positive at every level of
+aggregation and in every ticker:
+
+| Aggregation | 7 regimes | auto (3-4) |
+|---|---|---|
+| Mean rho (should be negative) | **+0.032** | **+0.026** |
+| Time-clustered t-test (n=14 periods) | p=0.038 | p=0.064 |
+| Tickers with intended sign | **0 of 5** (p=0.062) | **0 of 5** (p=0.062) |
+| Windows where regime 0 beat window avg | 43% (p=0.585) | — |
+
+0 of 5 tickers show the intended direction, at both regime counts — and with n=5, 0.062
+is the smallest p-value attainable. So the direction is consistent, though no single
+test clears 0.05.
+
+The mechanism is straightforward. States are ranked on trailing mean return over 252 bars,
+then the top-ranked state is bought. On daily equity bars that statistic is dominated by
+noise and mildly mean-reverting, so the strategy systematically buys what has just run.
+That is a coherent explanation for losing to matched-exposure random by roughly 1% per
+window while never being significantly bad.
+
+**Effect size caveat:** rho ≈ +0.03 explains about 0.1% of forward-return variance. The
+correct read is not "this is a good short signal" but "this is noise with a faint adverse
+tilt".
+
+### What this implies
+
+Further tuning of thresholds, confirmations, cooldowns or regime counts cannot help,
+because those layers all consume a signal with no demonstrated forward information. The
+two honest paths are to change the inputs — the features are `returns`, `range`,
+`volume_change`, all short-horizon and largely restatements of realized volatility and
+momentum — or to reposition the system as the defensive exposure filter it demonstrably
+is.
+
+---
+
 ## Known measurement bugs found along the way
 
 1. **Annualization** — `data_loader.fetch_data` defaults to **hourly** bars, but
@@ -155,9 +220,11 @@ improvement. It is recorded here for a human decision.
 
 ## What has not been tested
 
-- **The feature set.** The HMM uses only 3 features. If they cannot separate regimes,
-  nothing downstream can work. This is the last untested hypothesis and the most likely
-  remaining explanation.
+- **Better features.** Test 4 rules out the current three, not the approach. Longer
+  lookbacks, cross-asset context (rates, credit, breadth) or realized-vol regimes are
+  untested and are where any remaining upside lives.
+- **Longer holding horizons.** Forward return here is one bar. Regimes could plausibly
+  carry information at 5-20 bars while carrying none at 1.
 - **More windows.** 14 per ticker is too few for ~1% effects. Shorter OOS steps, more
   tickers, or overlapping windows with corrected standard errors would all help.
 - **Transaction costs.** Not modeled anywhere. Including them would move every result
@@ -166,6 +233,9 @@ improvement. It is recorded here for a human decision.
 ## How to reproduce
 
 ```bash
+# Does the regime labeling predict anything out-of-sample?
+.venv/bin/python tools/regime_separability.py --regimes auto
+
 # Baseline walk-forward on one ticker
 .venv/bin/python walk_forward.py SPY --interval 1d --period-days 3000 --regimes 7
 
