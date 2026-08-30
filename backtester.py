@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import ta
 
+from hmm_engine import regime_sets
+
 
 def compute_confirmations(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -81,6 +83,7 @@ def run_backtest(
     initial_capital: float = 100_000.0,
     aggressive_mode: bool = False,
     skip_confirmations: bool = False,
+    n_regimes: int = None,
 ) -> dict:
     """
     Run the full regime-based backtest.
@@ -100,13 +103,20 @@ def run_backtest(
         before it's confirmed for entry. Prevents whipsawing on noisy
         regime transitions. (default 3 = regime must hold for 3 bars)
     bullish_regimes : list
-        regime_ids considered bullish for entry (default [0, 1]).
+        regime_ids considered bullish for entry. If None, derived from n_regimes via
+        hmm_engine.regime_sets() (for n_regimes=7 this is [0, 1, 2], as before).
     bearish_regimes : list
-        regime_ids that trigger immediate exit (default [5, 6]).
+        regime_ids that trigger immediate exit. If None, derived from n_regimes via
+        hmm_engine.regime_sets() (for n_regimes=7 this is [5, 6], as before).
     initial_capital : float
         Starting equity.
     aggressive_mode : bool
         If True: leverage=4x, min_confirmations=5, cooldown=3, confirm=2.
+    n_regimes : int
+        Number of regimes the model was fit with, used only to derive the bullish and
+        bearish sets when they are not passed explicitly. If None, inferred from
+        df["regime_id"].max() + 1. Pass it explicitly when a regime may be absent from
+        this particular slice of data, since inference would then undercount.
     skip_confirmations : bool
         If True, assume df already carries conf_* / confirmations_met columns and skip
         recomputing them. Used by walk_forward.py, which computes indicators over a
@@ -123,10 +133,22 @@ def run_backtest(
         metrics: dict of performance stats
         df: annotated dataframe
     """
-    if bullish_regimes is None:
-        bullish_regimes = [0, 1, 2]
-    if bearish_regimes is None:
-        bearish_regimes = [5, 6]
+    # Derive the regime sets from the actual regime count instead of hardcoding a
+    # 7-state layout. Hardcoding meant a 3-regime model had every state in
+    # bullish_regimes=[0, 1, 2] and so was permanently in the market.
+    if bullish_regimes is None or bearish_regimes is None:
+        if n_regimes is None:
+            if "regime_id" not in df.columns or df["regime_id"].dropna().empty:
+                raise ValueError(
+                    "run_backtest needs regime_id in df, or an explicit n_regimes, to "
+                    "derive bullish/bearish regime sets."
+                )
+            n_regimes = int(df["regime_id"].max()) + 1
+        derived = regime_sets(n_regimes)
+        if bullish_regimes is None:
+            bullish_regimes = derived["bullish"]
+        if bearish_regimes is None:
+            bearish_regimes = derived["bearish"]
 
     if aggressive_mode:
         leverage = 4.0

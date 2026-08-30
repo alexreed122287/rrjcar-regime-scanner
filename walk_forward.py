@@ -465,10 +465,15 @@ class WalkForwardEngine:
                     raise ValueError(f"only {len(scored)} usable OOS bars after warmup")
 
                 # 3. Score the strategy on untouched data.
+                # Pass the resolved regime count so the bullish/bearish sets match the
+                # model that was actually fitted. Without this, auto mode picking 3-4
+                # regimes would fall through to a 7-state layout and treat every state
+                # as bullish -- i.e. silently become buy-and-hold.
                 bt = run_backtest(
                     scored,
                     initial_capital=self.initial_capital,
                     skip_confirmations=True,
+                    n_regimes=int(detector.n_regimes),
                     **self.backtest_kwargs,
                 )
                 result.strategy = dict(bt["metrics"])
