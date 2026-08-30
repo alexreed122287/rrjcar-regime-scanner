@@ -204,6 +204,7 @@ def benchmark_random_entry(
     initial_capital: float = 100_000.0,
     seed: int = 42,
     ppy: float = TRADING_DAYS,
+    cost_bps_per_side: float = 0.0,
 ) -> dict:
     """
     Random entries held a fixed number of bars, averaged over n_trials.
@@ -212,6 +213,11 @@ def benchmark_random_entry(
     matched exposure, the regime signal is not adding anything. When ``exposure_target``
     (fraction of bars in market, 0-1) is given, the number of random entries is chosen to
     match the strategy's own exposure so the comparison is like-for-like.
+
+    ``cost_bps_per_side`` charges the same friction the strategy pays, on each entry and
+    exit. It MUST be passed whenever the strategy is costed: charging only the strategy
+    would hand the benchmark a free edge and make the comparison meaningless. Costs apply
+    per position transition, so overlapping random entries are not double-charged.
     """
     close = pd.Series(df["Close"].values.astype(float))
     rets = close.pct_change().fillna(0.0).values
@@ -234,7 +240,19 @@ def benchmark_random_entry(
             signal[s: s + hold_bars] = 1.0
 
         strat_rets = signal * rets
-        equity = initial_capital * np.cumprod(1.0 + strat_rets)
+
+        # Friction on each transition into and out of the market. Overlapping draws
+        # merge into one block, so charging transitions avoids double-counting.
+        cost_arr = np.zeros(n)
+        cf = float(cost_bps_per_side) / 10_000.0
+        if cf:
+            trans = np.diff(np.concatenate([[0.0], signal]))
+            cost_arr[trans > 0] += cf
+            cost_arr[trans < 0] += cf
+            if signal[-1] == 1.0:
+                cost_arr[-1] += cf
+
+        equity = initial_capital * np.cumprod(1.0 + strat_rets - cost_arr)
         equity = np.concatenate([[initial_capital], equity])
         m = _equity_metrics(equity, initial_capital, ppy)
         m["exposure_pct"] = float(signal.mean() * 100.0)
