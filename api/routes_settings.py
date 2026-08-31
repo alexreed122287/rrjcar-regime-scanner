@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/apis")
-async def api_status():
+def api_status():
     """Show which data APIs are configured and available."""
     from data_loader import _tradier_available
     return {
@@ -79,12 +79,12 @@ class SettingsUpdate(BaseModel):
 
 
 @router.get("/settings")
-async def get_settings():
+def get_settings():
     return load_settings()
 
 
 @router.post("/settings")
-async def update_settings(req: SettingsUpdate):
+def update_settings(req: SettingsUpdate):
     current = load_settings()
     updates = req.model_dump(exclude_none=True)
     current.update(updates)
@@ -93,7 +93,7 @@ async def update_settings(req: SettingsUpdate):
 
 
 @router.get("/strategy-defaults")
-async def get_strategy_defaults():
+def get_strategy_defaults():
     """Return per-strategy recommended default settings for all strategies."""
     from backtester import RECOMMENDED_SETTINGS as V1_DEFAULTS
     from strategy_v2 import RECOMMENDED_SETTINGS as V2_DEFAULTS

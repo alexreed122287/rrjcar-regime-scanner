@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.get("/backtest/{symbol}")
-async def backtest_symbol(
+def backtest_symbol(
     symbol: str,
     strategy: str = "v2",
     min_confs: int = 6,

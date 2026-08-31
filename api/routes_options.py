@@ -37,7 +37,7 @@ def _get_leaps():
 
 
 @router.get("/leaps/{symbol}")
-async def get_leaps(symbol: str, top_n: int = 5, min_dte: int = 180, max_dte: int = 730):
+def get_leaps(symbol: str, top_n: int = 5, min_dte: int = 180, max_dte: int = 730):
     """Get best LEAPS contracts for a symbol with scoring."""
     try:
         leaps = _get_leaps()
@@ -110,7 +110,7 @@ async def get_leaps(symbol: str, top_n: int = 5, min_dte: int = 180, max_dte: in
 
 
 @router.get("/gex/{symbol}")
-async def get_gex(symbol: str, min_dte: int = 0, max_dte: int = 365):
+def get_gex(symbol: str, min_dte: int = 0, max_dte: int = 365):
     """Get full GEX profile for a symbol."""
     try:
         gex = _get_gex()
@@ -146,7 +146,7 @@ async def get_gex(symbol: str, min_dte: int = 0, max_dte: int = 365):
 
 
 @router.get("/options/{symbol}")
-async def get_options(
+def get_options(
     symbol: str,
     min_dte: int = 0,
     max_dte: int = 365,

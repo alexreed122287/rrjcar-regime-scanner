@@ -71,7 +71,7 @@ def _risk_gate(side: str) -> Optional[JSONResponse]:
 
 
 @router.get("/risk/status")
-async def risk_status():
+def risk_status():
     """Current circuit-breaker state, for the dashboard risk panel."""
     try:
         from risk_manager import check_risk_status
@@ -82,7 +82,7 @@ async def risk_status():
 
 
 @router.get("/broker/status")
-async def broker_status():
+def broker_status():
     try:
         from tradier_broker import is_configured, get_account_info
         configured = is_configured()
@@ -98,7 +98,7 @@ async def broker_status():
 
 
 @router.post("/broker/connect")
-async def broker_connect(req: BrokerConnect):
+def broker_connect(req: BrokerConnect):
     try:
         from tradier_broker import save_config, is_configured, get_account_info
         save_config(req.access_token, req.account_id, req.sandbox)
@@ -247,7 +247,7 @@ def _run_ladder(order_id: str, symbol: str, side: str, quantity: int,
 
 
 @router.post("/broker/ladder")
-async def ladder_order(req: LadderOrder):
+def ladder_order(req: LadderOrder):
     """
     Place a ladder order: incremental limit price attempts.
     BUY: starts bid + 0.10, increments +0.10 each attempt (up to 15)
@@ -311,7 +311,7 @@ async def ladder_order(req: LadderOrder):
 
 
 @router.get("/broker/ladder/{order_id}")
-async def ladder_status(order_id: str):
+def ladder_status(order_id: str):
     """Check status of a ladder order."""
     if order_id not in _ladder_status:
         return error_response("Order not found", 404)
@@ -319,12 +319,12 @@ async def ladder_status(order_id: str):
 
 
 @router.get("/broker/positions")
-async def get_positions():
+def get_positions():
     from tradier_broker import get_positions
     return {"positions": get_positions()}
 
 
 @router.get("/broker/orders")
-async def get_orders_route(status: str = "all"):
+def get_orders_route(status: str = "all"):
     from tradier_broker import get_orders
     return {"orders": get_orders(status)}
