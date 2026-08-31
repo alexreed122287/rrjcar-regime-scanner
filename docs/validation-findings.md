@@ -415,7 +415,20 @@ from **+0.04% at 0 bps to -0.44% at 5 bps**, and strategy Sharpe from +1.08 to +
    **Fixed** — `run_backtest`/`run_backtest_v2` now take `periods_per_year`, and
    `walk_forward` passes its own factor so strategy and benchmark match. See
    "Reporting fixes" above.
-3. **Still open:** `strategy_v2`'s roll model credits a flat 0.5% per roll up to 3 times
+3. **A regression I introduced.** The commit "Derive bullish/bearish regime sets from
+   n_regimes" added `n_regimes=` to *both* call sites in `api/routes_backtest.py` but added
+   the parameter only to `run_backtest`. `strategy_v2.run_backtest_v2` never accepted it,
+   and v2 is that route's **default** strategy -- so `GET /backtest/{symbol}` raised
+   `TypeError: unexpected keyword argument 'n_regimes'` on every default request from that
+   commit until it was fixed. No test exercised the route's kwargs against the engines'
+   signatures, so nothing caught it.
+
+   Fixing it exposed a second defect underneath: v2's fallbacks were hardcoded
+   `[0, 1, 2]` bullish / `[5, 6]` bearish, correct only at 7 regimes. `regime_sets(3)`
+   returns bearish `[2]` and `regime_sets(4)` returns `[3]`, so below 7 the hardcoded set
+   matched **no state at all** -- nothing was ever bearish and the regime-flip exit was
+   unreachable. This is the same bug that commit fixed for `run_backtest`; v2 was missed.
+4. **Still open:** `strategy_v2`'s roll model credits a flat 0.5% per roll up to 3 times
    per trade, unconditional on actual option pricing. That is a free +1.5% on any trade
    that trends, and it is not derived from anything. It inflates v2 results by an amount
    nobody has measured.

@@ -452,3 +452,76 @@ def test_walk_forward_default_is_cost_free_for_library_callers():
 
     eng = WalkForwardEngine(is_bars=100, oos_bars=60, n_regimes=3, interval="1d")
     assert eng.cost_bps_per_side == 0.0
+
+
+# ───────────────── API/strategy signature compatibility (regression) ─────────────────
+
+# The kwargs api/routes_backtest.py passes to whichever engine the caller selects. Both
+# engines must accept all of them. This is the check that was missing when n_regimes= was
+# added to the route's two call sites but only to run_backtest's signature, leaving the
+# route's DEFAULT strategy (v2) raising TypeError on every request.
+_API_BACKTEST_KWARGS = {
+    "min_confirmations": 6,
+    "cooldown_bars": 3,
+    "regime_confirm_bars": 2,
+    "initial_capital": 100000,
+    "n_regimes": 7,
+    "cost_bps_per_side": 5.0,
+    "periods_per_year": 252.0,
+}
+
+
+def test_api_kwargs_bind_to_both_engines():
+    import inspect
+    from backtester import run_backtest
+    from strategy_v2 import run_backtest_v2
+
+    for fn in (run_backtest, run_backtest_v2):
+        sig = inspect.signature(fn)
+        missing = [k for k in _API_BACKTEST_KWARGS if k not in sig.parameters]
+        assert not missing, f"{fn.__name__} cannot accept API kwargs: {missing}"
+        # Must actually bind, not merely appear in the parameter list.
+        sig.bind_partial(**_API_BACKTEST_KWARGS)
+
+
+def test_api_route_passes_only_supported_kwargs():
+    """Guard the route itself, so a future edit there cannot drift from the signatures."""
+    import inspect
+    import re
+    from pathlib import Path
+    from backtester import run_backtest
+    from strategy_v2 import run_backtest_v2
+
+    src = Path(inspect.getfile(run_backtest)).parent / "api" / "routes_backtest.py"
+    text = src.read_text()
+    for fname, fn in (("run_backtest_v2", run_backtest_v2), ("run_backtest", run_backtest)):
+        m = re.search(rf"bt = {fname}\((.*?)\n            \)", text, re.S)
+        if not m:
+            continue
+        passed = set(re.findall(r"(\w+)\s*=", m.group(1)))
+        allowed = set(inspect.signature(fn).parameters)
+        assert passed <= allowed, f"route passes unsupported kwargs to {fname}: {passed - allowed}"
+
+
+def test_v2_derives_regime_sets_like_v1():
+    """Hardcoded [5, 6] as bearish matches no state below 7 regimes."""
+    from hmm_engine import regime_sets
+    from strategy_v2 import run_backtest_v2
+
+    scored = _synthetic_scored()
+    for n in (3, 4, 7):
+        r = run_backtest_v2(scored, min_confirmations=3, n_regimes=n)
+        expected = regime_sets(n)
+        # Bearish set must exist and be in range, otherwise the regime-flip exit is dead.
+        assert expected["bearish"], f"no bearish regimes derived for n={n}"
+        assert max(expected["bearish"]) < n
+        assert isinstance(r["metrics"]["total_return_pct"], (int, float))
+
+
+def test_v2_explicit_regime_sets_still_win():
+    from strategy_v2 import run_backtest_v2
+
+    scored = _synthetic_scored()
+    r = run_backtest_v2(scored, min_confirmations=3, n_regimes=7,
+                        bullish_regimes=[0], bearish_regimes=[2])
+    assert isinstance(r["trades"], list)
