@@ -115,9 +115,11 @@ def run_backtest(
     df : pd.DataFrame
         Must have regime_id, regime_label, regime_confidence, and OHLCV + features.
     leverage : float
-        Position leverage multiplier (default 2.5x).
+        Position leverage multiplier. Default 1.0 (unlevered). The docstring previously said
+        2.5x, which the signature has never done.
     min_confirmations : int
-        Minimum confirmations needed to enter (default 7 of 8).
+        Minimum confirmations needed to enter, out of 8. Default 5. The docstring previously
+        said 7, which the signature has never done.
     cooldown_bars : int
         Bars to wait after exit before re-entry (default 5 on daily).
     regime_confirm_bars : int
