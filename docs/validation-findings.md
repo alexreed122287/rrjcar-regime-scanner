@@ -12,7 +12,7 @@ whether the regime signal beats coin-flip entries held for the same fraction of 
 
 ## Summary
 
-Thirteen hypotheses tested: **twelve negative, one positive -- and the positive one has since
+Fourteen hypotheses tested: **thirteen negative, one positive -- and the positive one has since
 been shown to be useless.** Test 9 found the regimes carry forward-*volatility* information.
 Tests 11, 12 and 13 then established that the information is redundant against a free EWMA,
 that acting on it makes performance significantly *worse*, and that purpose-built volatility
@@ -33,6 +33,7 @@ features do not fix it. The honest bottom line is that this model has no demonst
 | 11 | The test-9 volatility signal beats, or adds to, a free EWMA forecast | **No.** Every comparison a statistical tie. The regime label alone is *worse* than EWMA on point estimate; adding it to EWMA improves R² 0.484 -> 0.497 but the interval brackets zero |
 | 12 | Sizing positions off predicted volatility rescues the model | **Sizing yes, the model no.** Vol-targeted sizing beats the shipped filter massively (Sharpe 0.88 vs 0.36) -- but the *EWMA* forecast does that, and adding the regime makes it **significantly worse** (-0.079 Sharpe) |
 | 13 | The nulls are an input problem; purpose-built volatility features would fix it | **No.** Vol-specific features are *worse* than the shipped ones, and none beats a free EWMA. The limitation is the architecture, not the inputs |
+| 14 | The volatility overlay from #12 is robust enough to replace the shipped filter | **No.** Robust in sign across 240 configurations, but it never beats a *constant position at its own average exposure* on drawdown -- and most of its edge over the filter is simply the filter's 49.6 turnover |
 
 **Nothing in this repo now has a demonstrated edge, defensive or otherwise.** The one positive
 result survived exactly two more tests before collapsing: it is not better than an exponential
@@ -728,6 +729,103 @@ that keeps winning -- at which point nothing of the HMM remains. That is the fin
 
 ---
 
+## 14. The overlay does not survive its own control either
+
+`tools/vol_overlay_sweep.py`. Test 12 produced the largest improvement in this document: vol
+targeting beat the shipped filter by +0.52 Sharpe. It was measured at **one** target vol, one
+exposure cap, one cost assumption, and no rebalancing band. A result that exists at a single
+point in a four-dimensional space is not a finding, so this scores the same overlay across the
+grid -- 5 target vols x 2 caps x 4 cost levels x 3 deadbands x 2 forecasts = 240
+configurations, 50 walk-forward windows each. One HMM pass saves the forward returns, the
+calibrated forecasts and the filter's exposure path; every configuration is re-scored from
+those, so the grid costs one pass rather than 240.
+
+### It does beat the shipped filter, robustly in sign
+
+The overlay's Sharpe exceeds the filter's in **120 of 120** unlevered configurations, is
+significantly better in **90 of 120**, and is **never significantly worse**. The advantage
+ranges from +0.092 to +1.725, median +0.713.
+
+But the 30 configurations that fail significance are not scattered -- they are *exactly* the 30
+zero-cost ones. That is the tell:
+
+| cost charged | `hmm_filter` Sharpe | `buy_hold` Sharpe |
+|---|---|---|
+| 0 bps | 0.74 | 0.97 |
+| 5 bps | **0.36** | 0.97 |
+| 10 bps | **-0.02** | 0.96 |
+| 20 bps | **-0.78** | 0.95 |
+
+**Most of the overlay's advantage over the filter is not the overlay. It is the filter's
+turnover.** Charge the regime filter nothing and it recovers to 0.74; charge it 10 bps and it
+stops making money at all; charge it 20 and it destroys capital. Turnover 49.6 against the
+overlay's 1.5 does that. The comparison in test 12 was fair -- 5 bps is generous, not harsh --
+but the mechanism deserves naming: this is a cost result at least as much as a forecasting one.
+
+### And against the correct control it adds nothing at all
+
+Test 10 established the discipline: a strategy that reduces drawdown by holding less must be
+compared against **simply holding less**. So each configuration is scored against a constant
+position at its own realized average exposure -- same average risk, no timing whatsoever.
+
+| comparison (120 unlevered configs) | significantly better | significantly worse | median diff |
+|---|---|---|---|
+| max drawdown vs constant-exposure | **0 / 120** | 51 / 120 | **-0.17pp (deeper)** |
+| max drawdown vs buy-and-hold | 120 / 120 | 0 / 120 | +5.28pp |
+| Sharpe vs buy-and-hold | 0 / 120 | 100 / 120 | -0.072 |
+
+**The overlay never produces a shallower drawdown than a constant position holding the same
+average exposure -- in any of 240 configurations -- and in 51 of them it is significantly
+deeper.** Every bit of the 5.28pp drawdown reduction against buy-and-hold is bought by holding
+less on average. None of it comes from knowing *when* to hold less. This is the same verdict
+test 10 delivered on the regime filter, reached independently, on the thing that was supposed
+to replace it.
+
+*(A note on the Sharpe row of that control: Sharpe is scale-invariant, so a constant-exposure
+control has the same Sharpe as buy-and-hold by construction, up to cost drag. That row is
+identical to the buy-and-hold row and carries no independent information. Drawdown is not
+scale-invariant, which is why it is the informative comparison. The tool prints this caveat
+itself so the row cannot be mistaken for a second piece of evidence.)*
+
+### The sensitivity table says the same thing a third way
+
+| target vol | Sharpe | return | max DD | turnover |
+|---|---|---|---|---|
+| 10% | 0.83 | 4.56% | -8.34% | 1.6 |
+| 12% | 0.84 | 5.39% | -9.75% | 1.6 |
+| 15% | 0.89 | 6.60% | -11.42% | 1.6 |
+| 20% | 0.92 | 8.04% | -13.33% | 1.4 |
+| 25% | **0.95** | 9.13% | -14.43% | 1.3 |
+
+Sharpe rises monotonically with target vol, and the only 20 configurations that are
+statistically indistinguishable from buy-and-hold are the highest-exposure ones (20-25%
+target). **The overlay gets better the more it resembles doing nothing.** Extrapolate the
+column and the optimum is buy-and-hold, which is exactly what the constant-exposure control
+already said.
+
+Two minor positives, recorded because they are real even though the headline is negative:
+
+* **Cost decay is mild.** Mean Sharpe falls only 0.90 -> 0.87 across 0 to 20 bps. At turnover
+  1.5 the overlay is genuinely cheap to run, unlike the filter.
+* **A rebalancing band is free.** A 10pp deadband cuts turnover from 1.9 to 1.2 and *slightly
+  improves* Sharpe (0.88 -> 0.89). Anyone building a vol overlay for other reasons should use
+  one.
+
+### Recommendation
+
+**Do not ship the overlay as a replacement for the regime filter, and do not change any
+default.** It is not an edge: it loses to buy-and-hold on Sharpe in 100 of 120 configurations
+and beats it in none. It is not even a better *de-risking* tool than the trivial alternative of
+holding a constant smaller position. The honest description is "a way to hold less stock, with
+extra steps."
+
+What test 14 does establish, and this is worth stating plainly: **the case for the shipped
+regime filter is now weaker than the case for doing nothing at all.** At realistic costs it has
+a negative Sharpe. That is a live recommendation to remove it from the default path -- which is
+a decision about the product, not a research finding, and so is left to the maintainer.
+
+---
+
 ## Reporting fixes (not hypotheses)
 
 Two defects made reported performance wrong rather than merely optimistic. Both are fixed;
@@ -959,11 +1057,12 @@ interest earned on the cash side, and IV tracks trailing realized vol. These bia
   one-parameter EWMA matches or beats it at its only surviving task points at GARCH, HAR, or a
   plain rolling standard deviation. None has been tried as a *replacement* rather than a
   benchmark, and on the evidence one of them should be.
-- **Vol targeting as a product in its own right.** Test 12 found `size_trail20` earns Sharpe
-  0.89 against the shipped filter's 0.36, using no regime model at all. It is still worse than
-  buy-and-hold on Sharpe, so it is not an edge -- but as a drawdown-reduction overlay it is the
-  best-performing thing measured in this repo, and it has not been tuned or stress-tested at
-  all (one target vol, one cap, one cost assumption, no leverage).
+- ~~**Vol targeting as a product in its own right.**~~ Closed by test 14: stress-tested across
+  240 configurations, it is robust in sign against the shipped filter but adds nothing over a
+  constant position at the same average exposure, and never beats buy-and-hold on Sharpe.
+- **Whether the default path should include the regime filter at all.** Test 14 shows it has a
+  negative Sharpe at 10 bps and worse at 20. Nothing here has measured the *product* decision
+  of removing it, and no default has been changed.
 - **More windows.** 10-14 per ticker is too few for ~1% effects. Shorter OOS steps, more
   tickers, or overlapping windows with corrected standard errors would all help.
 - **Realistic slippage on the entry bar.** Costs are charged as a flat bps figure on the
@@ -1020,6 +1119,12 @@ for T in SPY QQQ NVDA AAPL XLF; do
   python tools/vol_features.py --tickers $T --save-obs fsobs/$T.csv
 done
 python tools/vol_features.py --from-obs 'fsobs/*.csv' --json docs/vol_features.json
+
+# Is the vol overlay robust, and does it beat its own control? (test 14)
+for T in SPY QQQ NVDA AAPL XLF; do
+  python tools/vol_overlay_sweep.py --tickers $T --save-obs swobs/$T.csv
+done
+python tools/vol_overlay_sweep.py --from-obs 'swobs/*.csv' --json docs/vol_overlay_sweep.json
 
 # Baseline walk-forward on one ticker
 .venv/bin/python walk_forward.py SPY --interval 1d --period-days 3000 --regimes 7

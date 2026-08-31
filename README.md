@@ -6,7 +6,7 @@ and the results that harness produced, which are not flattering.
 
 ## Validation status — read this first
 
-This system has been tested out of sample thirteen times: **twelve negative results and one
+This system has been tested out of sample fourteen times: **thirteen negative results and one
 positive — and the positive one has since been shown to be useless.** Full detail, with effect sizes
 and reproduction commands, is in [`docs/validation-findings.md`](docs/validation-findings.md).
 
@@ -24,6 +24,7 @@ The short version:
 | Does that volatility signal beat a **free EWMA** forecast? | **No.** Every comparison a statistical tie; the regime label alone ranks 4th of 6 forecasts, below one line of pandas |
 | Does **sizing** off predicted vol rescue the model? | **Sizing yes, the model no.** Vol targeting lifts Sharpe 0.36 → 0.88 — but adding the regime *significantly worsens* it (−0.079 Sharpe) |
 | Would purpose-built **volatility features** fix it? | **No.** They performed *worse* than the shipped features. The constraint is the 7-state discrete architecture, not the inputs |
+| Is the volatility overlay robust enough to replace the filter? | **No.** Across 240 configurations it never beats a *constant position at its own average exposure* on drawdown, and most of its edge over the filter is the filter's 49.6 turnover |
 
 **The capital-preservation claim has now been benchmarked, and it did not survive.** The old
 headline — SPY **-4.01%** against buy-and-hold's **-18.78%** in 2022 — is still arithmetically
@@ -42,10 +43,19 @@ but the *EWMA* delivers it while adding the regime makes it **significantly wors
 turnover (test 12), and purpose-built volatility features perform worse than the shipped ones
 (test 13). **No component of this model currently has a demonstrated use.**
 
-The one positive by-product: naive volatility targeting — a 20-bar rolling standard deviation,
-no regime model — earns Sharpe **0.89** against the shipped filter's **0.36** at a
-twenty-fourth of the turnover. It is still below buy-and-hold on Sharpe, so it is not an edge,
-but it is the best-performing thing measured in this repo.
+The apparent consolation prize did not survive either. Naive volatility targeting — a 20-bar
+rolling standard deviation, no regime model — does earn Sharpe **0.89** against the shipped
+filter's **0.36**. But stress-tested across 240 configurations (test 14) it **never** produces a
+shallower drawdown than simply holding a constant smaller position at the same average
+exposure, and it beats buy-and-hold on Sharpe in none of them. Its drawdown reduction is
+de-risking, not volatility timing. And most of its margin over the regime filter turns out to be
+the filter's turnover: charge the filter 0 bps and it recovers to Sharpe 0.74; charge it 10 bps
+and it earns **-0.02**; charge it 20 and it earns **-0.78**.
+
+**The most actionable finding in this repo is therefore about costs, not regimes:** at realistic
+transaction costs the shipped regime filter has a negative Sharpe, and buy-and-hold beats
+everything measured here on risk-adjusted return. No default has been changed on the strength of
+that — see test 14's recommendation.
 
 The genuinely useful artifact in this repo is the validation harness (`walk_forward.py` plus
 `tools/`), which is capable of producing negative results about its own strategy. Treat the
@@ -158,13 +168,15 @@ Nine negative results share one root cause: the three features carry no forward 
 information. Tuning thresholds on a signal with no information can only fit noise, so the
 entry-timing direction is exhausted. Both of the directions this section used to propose have
 since been run — they are tests 9 and 10 — as have the three that replaced them (tests 11, 12
-and 13). What is left is no longer about tuning this model:
+and 13), and the overlay they pointed at has now been stress-tested and rejected too (test 14).
+What is left is no longer about tuning this model:
 
+- **Should the default path include the regime filter at all?** Test 14 puts its Sharpe at
+  -0.02 at 10 bps and -0.78 at 20. That is a product decision, not a research question, and no
+  default has been changed.
 - **Try a different model class.** Every test here measures *this* HMM. A one-parameter EWMA
-  keeps matching or beating it at its only surviving task, which points at GARCH, HAR, or a
-  plain rolling standard deviation as a *replacement* rather than a benchmark.
-- **Tune the volatility overlay** that fell out of test 12. `size_trail20` is the best result in
-  the repo and has been run at exactly one target vol, one exposure cap and one cost assumption.
+  keeps matching or beating it, which points at GARCH, HAR, or a plain rolling standard
+  deviation as a *replacement* rather than a benchmark.
 - **Real index data** (`^VIX`, `^TNX`), which no configured source provides. Test 13 makes this
   much less promising than it looked: better vol inputs made the model worse, not better.
 
