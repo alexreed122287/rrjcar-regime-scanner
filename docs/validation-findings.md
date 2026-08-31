@@ -12,11 +12,13 @@ whether the regime signal beats coin-flip entries held for the same fraction of 
 
 ## Summary
 
-Fourteen hypotheses tested: **thirteen negative, one positive -- and the positive one has since
+Fifteen hypotheses tested: **fourteen negative, one positive -- and the positive one has since
 been shown to be useless.** Test 9 found the regimes carry forward-*volatility* information.
 Tests 11, 12 and 13 then established that the information is redundant against a free EWMA,
 that acting on it makes performance significantly *worse*, and that purpose-built volatility
-features do not fix it. The honest bottom line is that this model has no demonstrated use.
+features do not fix it. Test 15 closed the last escape route: GARCH(1,1) and HAR cannot beat
+that same one-parameter EWMA either, so the ceiling is the forecasting problem rather than the
+model. The honest bottom line is that this model has no demonstrated use.
 
 | # | Hypothesis | Verdict |
 |---|---|---|
@@ -34,6 +36,7 @@ features do not fix it. The honest bottom line is that this model has no demonst
 | 12 | Sizing positions off predicted volatility rescues the model | **Sizing yes, the model no.** Vol-targeted sizing beats the shipped filter massively (Sharpe 0.88 vs 0.36) -- but the *EWMA* forecast does that, and adding the regime makes it **significantly worse** (-0.079 Sharpe) |
 | 13 | The nulls are an input problem; purpose-built volatility features would fix it | **No.** Vol-specific features are *worse* than the shipped ones, and none beats a free EWMA. The limitation is the architecture, not the inputs |
 | 14 | The volatility overlay from #12 is robust enough to replace the shipped filter | **No.** Robust in sign across 240 configurations, but it never beats a *constant position at its own average exposure* on drawdown -- and most of its edge over the filter is simply the filter's 49.6 turnover |
+| 15 | A better model class (GARCH, HAR) beats the one-parameter EWMA the HMM kept losing to | **No.** Every comparison a tie; HAR is *significantly worse* than a fitted EWMA. The lambda surface does reveal the hardcoded 0.94 sits past its elbow, favouring 0.84 on 5/5 tickers -- but that too is a tie by the paired test |
 
 **Nothing in this repo now has a demonstrated edge, defensive or otherwise.** The one positive
 result survived exactly two more tests before collapsing: it is not better than an exponential
@@ -823,6 +826,137 @@ What test 14 does establish, and this is worth stating plainly: **the case for t
 regime filter is now weaker than the case for doing nothing at all.** At realistic costs it has
 a negative Sharpe. That is a live recommendation to remove it from the default path -- which is
 a decision about the product, not a research finding, and so is left to the maintainer.
+
+---
+
+## 15. The model class is not the constraint either
+
+Tests 11-14 all held the *model class* fixed and kept arriving at the same place: a
+one-parameter EWMA was never beaten. That left an obvious objection unanswered -- maybe EWMA's
+dominance was a statement about this HMM, not about the forecasting problem. The README's own
+"what to try next" list named the candidates: GARCH, HAR, or a plain rolling standard
+deviation, as a *replacement* rather than a benchmark.
+
+`tools/vol_model_class.py` runs that comparison. The reference is deliberately the cheapest
+thing available -- RiskMetrics EWMA at lambda = 0.94, one parameter, not even fitted -- against
+three strictly more expressive classes:
+
+| model | parameters | fitted on |
+| --- | --- | --- |
+| `ewma94` | 1, hardcoded | nothing -- the reference |
+| `ewma_fit` | 1 | train only, grid search over lambda in [0.70, 0.99] |
+| `har` | 3 | train only, OLS on daily/weekly/monthly log realized vol |
+| `garch11` | 3 | train only, Gaussian MLE, then filtered forward through the OOS block |
+
+Scoring is *identical* to test 11 by construction, not by resemblance: `_losses`, `_dm_test`
+and `_decimate` are imported from `tools/vol_forecast_shootout.py` rather than reimplemented.
+Same target (log forward 5-bar realized vol, annualized), same 5 tickers x 10 windows = 50
+blocks, same train-only affine recalibration for every model including the reference, same
+non-overlapping decimation. 1260 non-overlapping OOS bars of 6300 total.
+
+Neither `arch` nor `statsmodels` is installed, so GARCH(1,1) is hand-rolled: multi-start
+L-BFGS-B on the Gaussian likelihood with a stationarity bound, then the h-step variance
+forecast aggregated in closed form. On simulated data with true persistence 0.98 it recovers
+0.980; all 50 windows converged. `tests/test_vol_model_class.py` includes a no-lookahead test
+that rewrites every return after bar t and asserts the forecast at t is bit-identical.
+
+### Result: nothing beats one unfitted parameter
+
+| model | QLIKE | MSE (log) | corr | R2 |
+| --- | --- | --- | --- | --- |
+| `ewma_fit` | **0.53881** | 0.23900 | 0.698 | 0.486 |
+| `garch11` | 0.54380 | 0.23997 | 0.696 | 0.483 |
+| `ewma94` | 0.55487 | 0.23955 | 0.696 | 0.484 |
+| `har` | 0.55762 | 0.24018 | 0.696 | 0.483 |
+
+Paired loss differentials, bootstrapped over (ticker, window) blocks. Positive means the first
+model is worse. Block win rates are descriptive only -- significance is the CI excluding zero.
+
+| comparison | QLIKE diff | 95% CI | verdict | blocks won |
+| --- | --- | --- | --- | --- |
+| `har` vs `ewma94` | +0.00275 | [-0.02551, +0.03127] | tie | 22/50 (44%) |
+| `garch11` vs `ewma94` | -0.01107 | [-0.04027, +0.01711] | tie | 31/50 (62%) |
+| `ewma_fit` vs `ewma94` | -0.01606 | [-0.04383, +0.01059] | tie | 26/50 (52%) |
+| `garch11` vs `har` | -0.01382 | [-0.04127, +0.01383] | tie | 32/50 (64%) |
+| `har` vs `ewma_fit` | +0.01881 | [+0.00090, +0.03708] | **`har` worse** | 17/50 (34%) |
+
+Every comparison against the reference is a tie. The single significant result in the whole
+table is that **HAR -- three fitted parameters, the standard workhorse of the realized-volatility
+literature -- is significantly worse than a one-parameter EWMA with its lambda fitted**, and
+even that clears the bar barely (CI lower bound +0.0009). On MSE nothing is significant at all;
+the four models sit within 0.0012 of each other.
+
+`ewma94` wins no ticker outright (`garch11` takes AAPL, QQQ, SPY; `ewma_fit` takes NVDA, XLF),
+but neither does that add up to a defeat: the pooled test cannot separate them.
+
+### The lambda surface is not flat, and 0.94 sits past its elbow
+
+The fitted lambda never landed anywhere near 0.94 -- median **0.84** across 50 windows, range
+[0.78, 0.905], **0 of 50** within 0.02 of 0.94, and 0% pinned to a grid edge (a first pass
+bounded below at 0.80 *was* censored, which is why the grid now starts at 0.70). Rather than
+infer the loss surface from that, the tool scores fixed lambdas as models in their own right:
+
+| fixed lambda | 0.70 | 0.75 | 0.80 | **0.84** | 0.88 | 0.90 | **0.94** | 0.97 | 0.99 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| OOS QLIKE | 0.54766 | 0.54266 | 0.53868 | **0.53678** | 0.53724 | 0.53941 | **0.55487** | 0.60011 | 0.69736 |
+
+There is a genuine plateau -- 0.80 to 0.90 spans just 0.0027 -- but it does not include 0.94,
+and the surface climbs steeply past it: 0.97 costs 0.045 and 0.99 costs 0.16, roughly thirty
+times the width of the plateau. The hardcoded constant sits just outside the flat region on the
+dangerous side.
+
+Comparing the two *fixed* lambdas directly avoids any selection effect. 0.84 beats 0.94 on
+**5 of 5 tickers** (SPY -0.032, QQQ -0.027, NVDA -0.025, AAPL -0.005, XLF -0.002), and the
+per-ticker argmin lands at 0.80-0.90 every time. And yet:
+
+    fixed 0.84 vs fixed 0.94   QLIKE diff -0.01809  95% CI [-0.04649, +0.00853]  -> tie
+                               blocks: 0.84 better in 25/50 (50%), median -0.00105, p=0.53
+
+**Five tickers out of five, and still a tie.** The mean block differential is -0.018 while the
+median is -0.001 -- the signature of a few large wins rather than a broad edge. Aggregating
+within a ticker hides that; the block bootstrap does not. The mechanism is consistent with the
+asymmetry of QLIKE, which punishes under-forecast variance hard: lambda = 0.94 over-smooths, so
+it under-reacts to volatility spikes and eats a large penalty in the handful of blocks that
+contain them. That reading is interpretation, not measurement. Note also that lambda is
+selected on *train MSE* yet the difference shows up almost entirely in QLIKE (the MSE gap is
+0.0006, nil), which is itself a reason to treat the gain as fragile.
+
+### What this changes, and what it does not
+
+Scope first, because it is easy to overstate: **0.94 appears only in the research tools**
+(`tools/regime_volatility.py`, `tools/vol_forecast_shootout.py`). The serving path uses no EWMA
+at all, so nothing in production is affected and no default has been changed.
+
+What it does affect is the *benchmark* tests 11-14 measured the HMM against. Test 11 put the
+regime label at QLIKE 0.56302 against `ewma94` at 0.55487 -- a gap of 0.008, called a tie. The
+best fixed lambda scores 0.53678 on the same target, tickers and walk-forward parameters, which
+would widen that gap to roughly 0.026. The comparison spans two collection runs, so treat it as
+indicative rather than a measured differential; the direction is not in doubt. **Tests 11-14
+benchmarked the HMM against a needlessly weak EWMA, so their negative verdicts are if anything
+understated.** No published number in this document depends on the correction.
+
+The substantive answer to the question the README posed:
+
+> **The model class was never the binding constraint.** GARCH(1,1) and HAR -- three fitted
+> parameters each, and in HAR's case the standard tool of the realized-volatility literature --
+> cannot beat one unfitted parameter on this target. The ceiling in tests 11-14 is the
+> predictability of 5-bar forward volatility from daily bars, and it is not moved by model
+> sophistication, by the HMM, or by purpose-built features (test 13).
+
+That makes EWMA the right *engineering* choice rather than a convenient straw man, and it closes
+the "try a different model class" line of enquiry rather than opening a new one. The remaining
+untested directions are about *data*, not models: intraday bars would raise the ceiling on
+realized-vol estimation in a way that no daily-bar model class can.
+
+Recommendation, left as a recommendation: if the vol benchmarks are ever re-run, use a lambda
+in 0.80-0.90 or fit it on train, and do not use 0.99. This is a change to research tooling, not
+to any default, and the effect is not statistically demonstrated -- only consistent in
+direction across every ticker and smooth across the grid.
+
+Reproduce:
+
+    python tools/vol_model_class.py --tickers SPY --save-obs /tmp/vmobs   # repeat per ticker
+    python tools/vol_model_class.py --from-obs '/tmp/vmobs/*.csv' --json docs/vol_model_class.json
 
 ---
 
