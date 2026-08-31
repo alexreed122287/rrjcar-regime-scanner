@@ -16,6 +16,7 @@ import ta
 import yfinance as yf
 
 from backtester import DAILY_PERIODS_PER_YEAR
+from hmm_engine import REFERENCE_N, regime_sets
 from datetime import datetime, timedelta
 
 
@@ -160,6 +161,7 @@ def run_backtest_v2(
     regime_confirm_bars: int = 2,
     bullish_regimes: list = None,
     bearish_regimes: list = None,
+    n_regimes=None,
     initial_capital: float = 100_000.0,
     # ── Call-specific exits ──
     atr_trail_mult: float = 2.0,
@@ -193,14 +195,37 @@ def run_backtest_v2(
     periods_per_year : float
         Bars per year for annualizing ``sharpe_ratio``. Was hardcoded to 252, which is
         wrong for the hourly bars ``data_loader.fetch_data`` returns by default.
+    n_regimes : int or None
+        Derives the bullish/bearish sets via ``hmm_engine.regime_sets``, matching
+        ``run_backtest``. Two bugs made this necessary:
+
+        * ``api/routes_backtest.py`` has passed ``n_regimes=`` here since the "Derive
+          bullish/bearish regime sets from n_regimes" commit, but the parameter was only
+          added to ``run_backtest``. Since v2 is that route's DEFAULT strategy, the default
+          path raised ``TypeError: unexpected keyword argument 'n_regimes'`` on every
+          request.
+        * The hardcoded ``[0, 1, 2]`` / ``[5, 6]`` fallbacks are correct only for a
+          7-regime model. Under any other count -- including auto mode, which BIC drives to
+          3-4 -- ``[5, 6]`` matches no state, so nothing is ever bearish and the
+          regime-flip exit is unreachable. Same defect already fixed in ``run_backtest``.
+
+        Explicit ``bullish_regimes``/``bearish_regimes`` still win; with none of the three
+        the fallback is inferred from ``regime_id`` in ``df``.
     """
     cost_frac = float(cost_bps_per_side) / 10_000.0
     round_trip_cost_pct = 2.0 * float(cost_bps_per_side) / 100.0
     total_cost_paid_pct = 0.0
-    if bullish_regimes is None:
-        bullish_regimes = [0, 1, 2]
-    if bearish_regimes is None:
-        bearish_regimes = [5, 6]
+    if bullish_regimes is None or bearish_regimes is None:
+        if n_regimes is None:
+            if "regime_id" in df.columns and len(df):
+                n_regimes = int(df["regime_id"].max()) + 1
+            else:
+                n_regimes = REFERENCE_N
+        derived = regime_sets(int(n_regimes))
+        if bullish_regimes is None:
+            bullish_regimes = derived["bullish"]
+        if bearish_regimes is None:
+            bearish_regimes = derived["bearish"]
 
     # Compute enhanced confirmations
     data = compute_confirmations_v2(df)
