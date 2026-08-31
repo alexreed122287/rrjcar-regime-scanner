@@ -3,6 +3,7 @@
 import os
 import json
 import concurrent.futures
+import threading
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -20,8 +21,88 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# In-memory cache for scan results (single-user dashboard)
+# In-memory cache for scan results (single-user dashboard).
+#
+# Handlers run in the AnyIO threadpool, so several of them touch this dict at the same
+# time. Never read or write it directly -- go through the helpers below, which hold
+# _scan_lock. Reading it key-by-key can observe a half-published scan: status "done"
+# alongside the *previous* scan's results.
+_scan_lock = threading.RLock()
 _scan_cache: Dict[str, Any] = {"results": [], "timestamp": None, "status": "idle"}
+
+# Monotonic scan id. Two overlapping scans must not clobber each other: the older one
+# is superseded and its results are dropped rather than published over the newer.
+_scan_generation = 0
+
+# A "scanning" status older than this is reported as idle.
+#
+# Scope honestly: this is a backstop, not a fix for a demonstrated bug. Disconnects were
+# measured and they do NOT strand the status -- an abandoned SSE stream keeps running and
+# publishes normally (killed client 3s in: "done" at +16s cold pool, +15s warm, 2 of 2).
+# What justifies the deadline is a single unreproduced observation: one stream sat at
+# "scanning" for 5+ minutes with its workers alive and never published. The cause was
+# never identified, and nothing in the request path has a timeout, so a stalled upstream
+# fetch can strand the status indefinitely. The deadline bounds that failure instead of
+# guessing at its mechanism. Generous on purpose: a real scan must never trip it.
+_STALE_SCAN_SECONDS = 1800
+
+
+def _begin_scan() -> int:
+    """Mark a scan as running and return its generation token."""
+    global _scan_generation
+    with _scan_lock:
+        _scan_generation += 1
+        _scan_cache["status"] = "scanning"
+        _scan_cache["started_at"] = time.time()
+        return _scan_generation
+
+
+def _publish_scan(generation: int, **fields: Any) -> bool:
+    """Atomically publish a finished scan. All fields land together or none do, so no
+    reader can see status="done" next to stale results. Returns False if a newer scan
+    started meanwhile, in which case this scan's results are discarded."""
+    with _scan_lock:
+        if generation != _scan_generation:
+            return False
+        _scan_cache.update(fields)
+        return True
+
+
+def _end_scan(generation: int) -> None:
+    """Release the "scanning" status if this scan still owns it. Called from a finally
+    block: without it, any exception out of scan_watchlist -- one bad ticker, a provider
+    outage -- leaves status pinned at "scanning" for the life of the process, since the
+    state is module-level and no page reload can clear it."""
+    with _scan_lock:
+        if generation == _scan_generation and _scan_cache.get("status") == "scanning":
+            _scan_cache["status"] = "idle"
+
+
+def _cache_snapshot() -> Dict[str, Any]:
+    """A consistent shallow copy of the cache. Shallow is deliberate: result dicts are
+    treated as read-only once published, and results_full holds DataFrames that are far
+    too expensive to copy per request.
+
+    A scan still marked "scanning" past _STALE_SCAN_SECONDS is reported as "idle" with
+    stale_scan set, so an abandoned stream cannot strand the UI. The cache itself is left
+    untouched -- if that scan is somehow still alive it keeps its generation token and can
+    still publish."""
+    with _scan_lock:
+        snap = dict(_scan_cache)
+    started = snap.get("started_at")
+    if snap.get("status") == "scanning" and started is not None:
+        if time.time() - started > _STALE_SCAN_SECONDS:
+            snap["status"] = "idle"
+            snap["stale_scan"] = True
+    return snap
+
+
+def cached_results_full() -> List[Dict[str, Any]]:
+    """Full results of the last completed scan, or [] if there is none. The list is
+    copied so callers can iterate it while a scan republishes; the dicts inside are
+    shared and must not be mutated."""
+    with _scan_lock:
+        return list(_scan_cache.get("results_full") or [])
 
 # Detect constrained environments (Render free = 0.1 CPU)
 _IS_CLOUD = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
@@ -81,81 +162,92 @@ def get_all_watchlists():
 
 @router.post("/scan")
 def run_scan(req: ScanRequest):
-    global _scan_cache
-    _scan_cache["status"] = "scanning"
+    generation = _begin_scan()
+    try:
+        # Determine tickers
+        if req.custom_tickers.strip():
+            symbols = [t.strip().upper() for t in req.custom_tickers.split(",") if t.strip()]
+        else:
+            symbols = WATCHLISTS.get(req.watchlist, [])
 
-    # Determine tickers
-    if req.custom_tickers.strip():
-        symbols = [t.strip().upper() for t in req.custom_tickers.split(",") if t.strip()]
-    else:
-        symbols = WATCHLISTS.get(req.watchlist, [])
+        if not symbols:
+            return {"error": "No tickers to scan", "results": []}
 
-    if not symbols:
-        _scan_cache["status"] = "idle"
-        return {"error": "No tickers to scan", "results": []}
+        # Cap workers on constrained environments
+        workers = min(req.max_workers, _DEFAULT_WORKERS) if _IS_CLOUD else req.max_workers
 
-    # Cap workers on constrained environments
-    workers = min(req.max_workers, _DEFAULT_WORKERS) if _IS_CLOUD else req.max_workers
+        start = time.time()
+        results = scan_watchlist(
+            symbols=symbols,
+            strategy=req.strategy,
+            n_regimes=req.n_regimes,
+            min_confirmations=req.min_confs,
+            regime_confirm_bars=req.regime_confirm,
+            max_workers=workers,
+            bullish_only=req.bullish_only,
+            period_days=req.period_days,
+        )
 
-    start = time.time()
-    results = scan_watchlist(
-        symbols=symbols,
-        strategy=req.strategy,
-        n_regimes=req.n_regimes,
-        min_confirmations=req.min_confs,
-        regime_confirm_bars=req.regime_confirm,
-        max_workers=workers,
-        bullish_only=req.bullish_only,
-        period_days=req.period_days,
-    )
+        # Publish in one shot (results_full keeps _regime_df for drill-down)
+        serialized = [_serialize_result(r) for r in results]
+        elapsed = round(time.time() - start, 1)
+        _publish_scan(
+            generation,
+            results_full=results,
+            results=serialized,
+            timestamp=time.time(),
+            status="done",
+            elapsed=elapsed,
+        )
 
-    # Cache full results (with _regime_df for drill-down)
-    _scan_cache["results_full"] = results
-    serialized = [_serialize_result(r) for r in results]
-    _scan_cache["results"] = serialized
-    _scan_cache["timestamp"] = time.time()
-    _scan_cache["status"] = "done"
-    _scan_cache["elapsed"] = round(time.time() - start, 1)
+        # Summary counts
+        bulls = sum(1 for r in results if r.get("regime_id") is not None and r["regime_id"] <= 2)
+        bears = sum(1 for r in results if r.get("regime_id") is not None and r["regime_id"] >= 5)
+        neutrals = sum(1 for r in results if r.get("regime_id") is not None and 3 <= r["regime_id"] <= 4)
+        entries = sum(1 for r in results if "ENTER" in (r.get("signal") or ""))
+        exits = sum(1 for r in results if "EXIT" in (r.get("signal") or ""))
+        errors = sum(1 for r in results if r.get("error") and r.get("price") is None)
 
-    # Summary counts
-    bulls = sum(1 for r in results if r.get("regime_id") is not None and r["regime_id"] <= 2)
-    bears = sum(1 for r in results if r.get("regime_id") is not None and r["regime_id"] >= 5)
-    neutrals = sum(1 for r in results if r.get("regime_id") is not None and 3 <= r["regime_id"] <= 4)
-    entries = sum(1 for r in results if "ENTER" in (r.get("signal") or ""))
-    exits = sum(1 for r in results if "EXIT" in (r.get("signal") or ""))
-    errors = sum(1 for r in results if r.get("error") and r.get("price") is None)
-
-    return {
-        "results": serialized,
-        "summary": {
-            "total": len(results),
-            "bullish": bulls,
-            "bearish": bears,
-            "neutral": neutrals,
-            "entries": entries,
-            "exits": exits,
-            "errors": errors,
-            "elapsed": _scan_cache["elapsed"],
-        },
-        "regime_labels": REGIME_LABELS,
-    }
+        # elapsed comes from the local, not the cache: a newer scan may have superseded
+        # this one, and the old code raised KeyError here if publication never happened.
+        return {
+            "results": serialized,
+            "summary": {
+                "total": len(results),
+                "bullish": bulls,
+                "bearish": bears,
+                "neutral": neutrals,
+                "entries": entries,
+                "exits": exits,
+                "errors": errors,
+                "elapsed": elapsed,
+            },
+            "regime_labels": REGIME_LABELS,
+        }
+    finally:
+        _end_scan(generation)
 
 
 @router.get("/scan/status")
 def scan_status():
-    return {
-        "status": _scan_cache["status"],
-        "count": len(_scan_cache.get("results", [])),
-        "timestamp": _scan_cache.get("timestamp"),
+    snap = _cache_snapshot()
+    out = {
+        "status": snap["status"],
+        "count": len(snap.get("results", [])),
+        "timestamp": snap.get("timestamp"),
     }
+    if snap.get("stale_scan"):
+        out["stale_scan"] = True
+    return out
 
 
 @router.get("/scan/cached")
 def get_cached():
+    snap = _cache_snapshot()
     return {
-        "results": _scan_cache.get("results", []),
-        "timestamp": _scan_cache.get("timestamp"),
-        "status": _scan_cache["status"],
+        "results": snap.get("results", []),
+        "timestamp": snap.get("timestamp"),
+        "status": snap["status"],
     }
 
 
@@ -187,9 +279,7 @@ def run_scan_stream(req: ScanRequest):
 
     workers = min(req.max_workers, _DEFAULT_WORKERS) if _IS_CLOUD else req.max_workers
 
-    def generate():
-        global _scan_cache
-        _scan_cache["status"] = "scanning"
+    def _emit(generation: int):
         all_results = []
         done_count = 0
         total = len(symbols)
@@ -234,12 +324,17 @@ def run_scan_stream(req: ScanRequest):
                         })
                         yield f"data: {msg}\n\n"
 
-        # Final summary
-        _scan_cache["results_full"] = all_results
-        _scan_cache["results"] = [_serialize_result(r) for r in all_results]
-        _scan_cache["timestamp"] = time.time()
-        _scan_cache["status"] = "done"
+        # Final summary -- published in one shot so no reader sees "done" beside stale
+        # results, and skipped entirely if a newer scan has superseded this one.
         elapsed = round(time.time() - start, 1)
+        _publish_scan(
+            generation,
+            results_full=all_results,
+            results=[_serialize_result(r) for r in all_results],
+            timestamp=time.time(),
+            status="done",
+            elapsed=elapsed,
+        )
 
         bulls = sum(1 for r in all_results if r.get("regime_id") is not None and r["regime_id"] <= 2)
         bears = sum(1 for r in all_results if r.get("regime_id") is not None and r["regime_id"] >= 5)
@@ -282,6 +377,17 @@ def run_scan_stream(req: ScanRequest):
         })
         yield f"data: {summary}\n\n"
 
+    def generate():
+        # Same contract as run_scan: whatever unwinds this generator, the status is
+        # released. Measured caveat -- a disconnecting client does NOT reliably unwind it
+        # (uvicorn keeps pulling until the scan finishes, so it publishes normally), so
+        # this finally covers exceptions rather than disconnects.
+        generation = _begin_scan()
+        try:
+            yield from _emit(generation)
+        finally:
+            _end_scan(generation)
+
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
@@ -309,7 +415,7 @@ def get_vix():
 def scan_symbol(symbol: str, strategy: str = "v2"):
     """Deep scan a single ticker with full chart data."""
     # Check cache first
-    full_results = _scan_cache.get("results_full", [])
+    full_results = cached_results_full()
     cached = next((r for r in full_results if r.get("symbol", "").upper() == symbol.upper()), None)
     if cached and cached.get("_regime_df") is not None:
         return _serialize_drilldown(cached)
