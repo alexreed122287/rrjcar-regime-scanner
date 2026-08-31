@@ -847,3 +847,114 @@ def test_forward_return_rule_uses_the_next_bar():
     det.apply_rank_rule(feats, raw, rank_by="forward_return")
     forward = dict(det.state_scores)
     assert contemporaneous != forward, "forward scores identical to contemporaneous ones"
+
+
+# ──────────────────── silent failure modes (correctness fixes) ────────────────────
+
+def _constant_regime_frame(n=400, seed=0):
+    """A frame whose regime_id never changes, so n_regimes infers to 1."""
+    import numpy as np
+    import pandas as pd
+
+    rng = np.random.default_rng(seed)
+    price = 100 * np.cumprod(1 + rng.normal(0.001, 0.01, n))
+    df = pd.DataFrame({
+        "Open": price, "High": price * 1.01, "Low": price * 0.99, "Close": price,
+        "Volume": rng.integers(1_000_000, 5_000_000, n),
+    }, index=pd.date_range("2020-01-01", periods=n, freq="B"))
+    df["regime_id"] = 0
+    df["regime_name"] = "Neutral"
+    df["regime_label"] = "Neutral"
+    df["regime_confidence"] = 0.9
+    return df
+
+
+def test_empty_bullish_set_raises_instead_of_returning_zero_trades():
+    """A single-regime frame must fail loudly.
+
+    regime_sets(1) returns an empty bullish list, so run_backtest_v2 used to run to
+    completion and report 0 trades / 0.00% return -- indistinguishable from "the strategy
+    declined to trade". Four tests in #24 passed vacuously that way.
+    """
+    from strategy_v2 import run_backtest_v2
+
+    df = _constant_regime_frame()
+
+    with pytest.raises(ValueError, match="No bullish regimes"):
+        run_backtest_v2(df, min_confirmations=1)
+
+
+def test_explicit_bullish_regimes_still_accepted():
+    """The guard must not fire when the caller says which regimes are tradeable."""
+    from strategy_v2 import run_backtest_v2
+
+    df = _constant_regime_frame()
+
+    out = run_backtest_v2(df, min_confirmations=1, bullish_regimes=[0], bearish_regimes=[])
+    assert "metrics" in out
+
+
+def test_hv20_annualization_follows_the_bar_interval():
+    """hv_20 must scale with periods_per_year, not a hardcoded 252."""
+    import math
+
+    import numpy as np
+    import pandas as pd
+
+    from strategy_v2 import compute_confirmations_v2
+
+    rng = np.random.default_rng(1)
+    n = 400
+    price = 100 * np.cumprod(1 + rng.normal(0.0005, 0.01, n))
+    df = pd.DataFrame({
+        "Open": price, "High": price * 1.01, "Low": price * 0.99, "Close": price,
+        "Volume": rng.integers(1_000_000, 5_000_000, n),
+    }, index=pd.date_range("2020-01-01", periods=n, freq="B"))
+
+    daily = compute_confirmations_v2(df)
+    hourly = compute_confirmations_v2(df, periods_per_year=1638.0)
+    ratio = (hourly["hv_20"] / daily["hv_20"]).dropna()
+    assert np.allclose(ratio.values, math.sqrt(1638.0 / 252.0))
+    # The default must stay daily so existing daily results are untouched.
+    assert np.allclose(daily["hv_20"].dropna().values,
+                       compute_confirmations_v2(df, periods_per_year=252.0)["hv_20"]
+                       .dropna().values)
+
+
+def test_hv20_is_not_scaled_twice_in_the_priced_roll_model():
+    """_sigma used to correct hv_20's hardcoded 252; the fix moved that to the source.
+
+    If both corrections were live, the vol fed to Black-Scholes would be scaled twice. A
+    daily backtest must see hv_20 exactly as compute_confirmations_v2 produced it.
+    """
+    import numpy as np
+
+    from strategy_v2 import compute_confirmations_v2, run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    expected = compute_confirmations_v2(scored, periods_per_year=252.0)["hv_20"]
+    got = run_backtest_v2(scored, min_confirmations=3)
+    assert "metrics" in got
+    assert np.allclose(expected.dropna().values,
+                       compute_confirmations_v2(scored)["hv_20"].dropna().values)
+
+
+def test_leaps_hv20_annualization_follows_the_bar_interval():
+    import math
+
+    import numpy as np
+    import pandas as pd
+
+    from strategy_leaps import compute_leaps_confirmations
+
+    rng = np.random.default_rng(2)
+    n = 400
+    price = 100 * np.cumprod(1 + rng.normal(0.0005, 0.01, n))
+    df = pd.DataFrame({
+        "Open": price, "High": price * 1.01, "Low": price * 0.99, "Close": price,
+        "Volume": rng.integers(1_000_000, 5_000_000, n),
+    }, index=pd.date_range("2020-01-01", periods=n, freq="B"))
+
+    ratio = (compute_leaps_confirmations(df, periods_per_year=1638.0)["hv_20"]
+             / compute_leaps_confirmations(df)["hv_20"]).dropna()
+    assert np.allclose(ratio.values, math.sqrt(1638.0 / 252.0))

@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
+from api.errors import error_response
+
 router = APIRouter()
 
 # HTTP 423 Locked — used when circuit breakers refuse an order.
@@ -312,7 +314,7 @@ async def ladder_order(req: LadderOrder):
 async def ladder_status(order_id: str):
     """Check status of a ladder order."""
     if order_id not in _ladder_status:
-        return {"error": "Order not found"}
+        return error_response("Order not found", 404)
     return _ladder_status[order_id]
 
 

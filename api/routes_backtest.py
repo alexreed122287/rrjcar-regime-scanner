@@ -6,6 +6,8 @@ from hmm_engine import RegimeDetector
 from backtester import periods_per_year, run_backtest
 from strategy_v2 import run_backtest_v2
 
+from api.errors import error_response
+
 router = APIRouter()
 
 
@@ -104,4 +106,4 @@ async def backtest_symbol(
         }
 
     except Exception as e:
-        return {"error": str(e), "symbol": symbol.upper()}
+        return error_response(e, 500, symbol=symbol.upper())
