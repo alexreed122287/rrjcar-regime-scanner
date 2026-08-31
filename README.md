@@ -6,9 +6,9 @@ and the results that harness produced, which are not flattering.
 
 ## Validation status — read this first
 
-This system has been tested out of sample eight times. **All eight results were negative.**
-Full detail, with effect sizes and reproduction commands, is in
-[`docs/validation-findings.md`](docs/validation-findings.md).
+This system has been tested out of sample ten times: **nine negative results and one
+positive.** The positive one is about volatility, not returns. Full detail, with effect sizes
+and reproduction commands, is in [`docs/validation-findings.md`](docs/validation-findings.md).
 
 The short version:
 
@@ -19,12 +19,22 @@ The short version:
 | Can the entry filters be tuned into edge? | **No.** The best tuned setting decayed to exactly zero out of sample |
 | Does it beat buy-and-hold? | **No.** Once option roll legs are priced honestly, buy-and-hold wins on 5 of 5 tickers |
 | Is the regime ranking fixable (inverted, forward-scored)? | **No.** No ranking rule clears a Bonferroni-corrected bar |
+| Do regimes separate forward **volatility**, beyond free trailing vol? | **Yes, at 5 bars.** Bearish set runs ~14.5% higher forward 5-day vol, bootstrap CI [+0.069, +0.208]. Null at 20 bars, and it explains only ~1.4% of variance |
+| Does the capital preservation beat trivial alternatives? | **No.** Indistinguishable from a coin flip at the same exposure; a 200-day MA earns 10.1% vs the HMM's 2.8% for the same drawdown |
 
-**What it does appear to do** is preserve capital. In the 2022 window SPY lost **-4.01%
-against buy-and-hold's -18.78%**, at 3-19% market exposure — it behaves as a defensive
-filter, not an alpha source. Note that this observation is currently a single ticker in a
-single year and has **not** been benchmarked against simpler alternatives such as a 200-day
-moving-average filter, so do not treat it as established.
+**The capital-preservation claim has now been benchmarked, and it did not survive.** The old
+headline — SPY **-4.01%** against buy-and-hold's **-18.78%** in 2022 — is still arithmetically
+true, and across 50 windows the filter does cut drawdown from -16.7% to -12.5%. But it is
+**statistically indistinguishable from a coin flip holding the same average exposure**, so the
+reduction is what being out of the market buys, not evidence that the model knows when to be
+out. A 200-day moving average earns **10.1% against the HMM's 2.8%** for the same drawdown at
+a fifteenth of the turnover, and naive volatility targeting beats it on both drawdown and
+Sharpe. See test 10.
+
+**The one thing that did work:** the regimes carry a little forward-*volatility* information
+at a 5-bar horizon (test 9). That points at position sizing, not entry timing — and it is weak
+enough that a plain EWMA volatility forecast may well do the job better, which nobody has
+checked yet.
 
 The genuinely useful artifact in this repo is the validation harness (`walk_forward.py` plus
 `tools/`), which is capable of producing negative results about its own strategy. Treat the
@@ -133,16 +143,21 @@ AMD, MRVL, MU, SMCI, ZS, BTC-USD, ETH-USD, etc. Validation used SPY / QQQ / NVDA
 
 ## If you pick this up again
 
-Eight negative results share one root cause: the three features carry no forward return
+Nine negative results share one root cause: the three features carry no forward *return*
 information. Tuning thresholds on a signal with no information can only fit noise, so the
-two directions worth pursuing are:
+entry-timing direction is exhausted. Both of the directions this section used to propose have
+since been run — they are tests 9 and 10 — which leaves three open questions, in order of how
+much they would change the picture:
 
-- **Test forward *volatility* rather than forward returns.** Volatility clustering is a far
-  more robust empirical regularity than return predictability, and the existing features
-  include vol proxies. This would give the capital-preservation behaviour a mechanism.
-- **Benchmark the drawdown property against simple alternatives** — a 200-day MA filter,
-  naive vol targeting, matched-exposure random. If a moving average does the same job, the
-  HMM is expensive machinery for no gain, and that is worth knowing.
+- **Does a plain EWMA volatility forecast beat the HMM at forward vol?** Test 9's positive
+  result is an increment over a trailing-vol control, but it was never compared head to head
+  against a good vol model. EWMA explains far more variance and needs no HMM. If it wins, the
+  last positive result is also redundant, and that is the cheapest experiment left.
+- **Size positions inversely to predicted volatility** rather than switching in and out. Test
+  9 says the model's only real output is a vol estimate; test 10 says the binary in/out filter
+  is worthless. Sizing is the one use of that output nobody has tested.
+- **Build purpose-made volatility features** (longer lookbacks, real `^VIX`/`^TNX` data) now
+  that there is evidence the model picks up vol rather than direction.
 
 ---
 
