@@ -25,7 +25,12 @@ import numpy as np
 import pandas as pd
 
 from hmm_engine import RegimeDetector
-from backtester import compute_confirmations, run_backtest
+from backtester import (  # noqa: F401  (PERIODS_PER_YEAR/periods_per_year re-exported)
+    compute_confirmations,
+    run_backtest,
+    PERIODS_PER_YEAR,
+    periods_per_year,
+)
 
 # Bars of history prepended to each scored window so EMA-50 / MACD are warm and
 # dropna() does not eat the start of the window being measured.
@@ -36,17 +41,9 @@ TRADING_DAYS = 252
 # Periods per year, by bar interval. The scanner defaults to HOURLY bars
 # (data_loader.fetch_data interval="1h"), so annualizing Sharpe/CAGR with 252 would
 # overstate Sharpe by sqrt(6.5) ~= 2.5x. Always pass the interval you actually fetched.
-PERIODS_PER_YEAR = {
-    "1d": 252, "1day": 252, "daily": 252,
-    "1h": 252 * 6.5, "60m": 252 * 6.5, "hourly": 252 * 6.5,
-    "30m": 252 * 13, "15m": 252 * 26, "5m": 252 * 78, "1m": 252 * 390,
-    "1wk": 52, "weekly": 52,
-}
-
-
-def periods_per_year(interval: str) -> float:
-    """Annualization factor for a bar interval. Defaults to hourly, the repo default."""
-    return float(PERIODS_PER_YEAR.get(str(interval).lower().strip(), 252 * 6.5))
+# PERIODS_PER_YEAR and periods_per_year now live in backtester.py (imported above) so
+# _compute_metrics can annualize the strategy's Sharpe with the same factor the benchmark
+# uses. They stay importable from here for backward compatibility.
 
 
 @dataclass
@@ -355,6 +352,7 @@ class WalkForwardEngine:
         hmm_iter: int = 100,
         random_state: int = 42,
         interval: str = "1h",
+        cost_bps_per_side: float = 0.0,
     ):
         if is_bars < 30:
             raise ValueError("is_bars must be at least 30")
@@ -367,6 +365,14 @@ class WalkForwardEngine:
         self.n_regimes = n_regimes
         self.initial_capital = float(initial_capital)
         self.backtest_kwargs = dict(backtest_kwargs or {})
+        # One knob charges friction on BOTH sides of the comparison. Previously the only
+        # way to charge the strategy was to put cost_bps_per_side into backtest_kwargs,
+        # which left benchmark_random_entry cost-free -- so the strategy paid friction its
+        # control did not, biasing the comparison against the strategy. Setting it here
+        # keeps the two in step. An explicit backtest_kwargs entry still wins, so callers
+        # that deliberately charge asymmetric costs are not overridden.
+        self.cost_bps_per_side = float(cost_bps_per_side)
+        self.backtest_kwargs.setdefault("cost_bps_per_side", self.cost_bps_per_side)
         self.hmm_iter = hmm_iter
         self.random_state = random_state
         self.interval = interval
@@ -492,6 +498,9 @@ class WalkForwardEngine:
                     initial_capital=self.initial_capital,
                     skip_confirmations=True,
                     n_regimes=int(detector.n_regimes),
+                    # Annualize the strategy's Sharpe with the same factor the benchmark
+                    # uses, so the two are comparable.
+                    periods_per_year=self.ppy,
                     **self.backtest_kwargs,
                 )
                 result.strategy = dict(bt["metrics"])
@@ -515,6 +524,7 @@ class WalkForwardEngine:
                         scored, exposure_target=exposure_frac,
                         initial_capital=self.initial_capital,
                         seed=self.random_state, ppy=self.ppy,
+                        cost_bps_per_side=self.cost_bps_per_side,
                     ),
                 }
 
@@ -753,6 +763,10 @@ def _cli():
     parser.add_argument("--regimes", default="7",
                         help="regime count, or 'auto' to select per window")
     parser.add_argument("--capital", type=float, default=100_000.0)
+    parser.add_argument("--cost-bps", type=float, default=5.0,
+                        help="per-side friction in basis points, charged to the strategy "
+                             "AND the random-entry benchmark (default 5; pass 0 for the "
+                             "old cost-free numbers)")
     parser.add_argument("--stress", action="store_true",
                         help="also run shock scenarios")
     parser.add_argument("--json", dest="json_out", default=None,
@@ -778,6 +792,7 @@ def _cli():
         n_regimes=n_regimes,
         initial_capital=args.capital,
         interval=args.interval,
+        cost_bps_per_side=args.cost_bps,
     )
 
     result = engine.run(df)

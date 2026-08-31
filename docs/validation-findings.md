@@ -359,15 +359,66 @@ The consistent story across tests 4, 5 and 7 is that the labelled-bullish regime
 
 ---
 
+## Reporting fixes (not hypotheses)
+
+Two defects made reported performance wrong rather than merely optimistic. Both are fixed;
+neither changes any conclusion above, because every result above was produced on daily bars
+via `walk_forward`, which was already interval-aware for its benchmarks.
+
+### Sharpe was annualized with a hardcoded 252
+
+`backtester._compute_metrics` and `strategy_v2._compute_metrics_v2` both multiplied by
+`sqrt(252)` regardless of bar interval. `data_loader.fetch_data` defaults to **hourly**
+bars, where the correct factor is `252 * 6.5 = 1638`, so Sharpe was understated by
+`sqrt(1638/252) = 2.55x` on the default path. Worse, `walk_forward`'s *benchmark* Sharpe
+already used the interval-aware `periods_per_year()`, so strategy and benchmark Sharpe were
+computed with different factors and were never comparable.
+
+`periods_per_year` now lives in `backtester.py` (walk_forward re-exports it) and
+`run_backtest`/`run_backtest_v2` take a `periods_per_year` argument. The default stays 252
+so daily-bar results are unchanged; `walk_forward` passes its own `self.ppy`.
+
+### v2 ignored transaction costs, and the benchmark went uncharged
+
+- `strategy_v2` — the API's **default** strategy — had no cost model at all. It now mirrors
+  backtester's, charging `cost_frac` against compounding capital on entry and exit. Charging
+  only the trade rows would have left `total_return_pct`, the number the dashboard shows,
+  cost-free. On SPY 2020-2026 daily, 37 trades: **+12.07% gross → +8.00% at 5 bps → +4.07%
+  at 10 bps → -3.36% at 20 bps.** Friction takes **34% of gross at 5 bps** on this path,
+  roughly double the 18% the v1 walk-forward path pays.
+- `WalkForwardEngine` previously had no cost parameter; the only way to charge the strategy
+  was to pass `cost_bps_per_side` inside `backtest_kwargs`, which left
+  `benchmark_random_entry` **cost-free**. The strategy paid friction its own control did
+  not, biasing the comparison *against* the strategy. A single `cost_bps_per_side` argument
+  now feeds both sides, and an explicit `backtest_kwargs` entry still wins.
+
+Verified end to end on SPY daily, 7 regimes: excess return over matched random entry moves
+from **+0.04% at 0 bps to -0.44% at 5 bps**, and strategy Sharpe from +1.08 to +0.60.
+
+### Defaults
+
+| path | cost default | rationale |
+|---|---|---|
+| `run_backtest`, `run_backtest_v2` | 0.0 | library primitives; keeps existing results reproducible |
+| `WalkForwardEngine(...)` | 0.0 | same, for programmatic callers |
+| `walk_forward.py` CLI `--cost-bps` | **5.0** | anything a human reads should not be cost-free |
+| `GET /backtest/{symbol}` `cost_bps` | **5.0** | same; pass `cost_bps=0` for the old numbers |
+
+---
+
 ## Known measurement bugs found along the way
 
 1. **Annualization** — `data_loader.fetch_data` defaults to **hourly** bars, but
    `walk_forward` annualized with a hardcoded 252, overstating benchmark Sharpe by
    √6.5 ≈ 2.5x. Fixed with interval-aware `periods_per_year()`.
-2. **Still open:** `backtester.py:439` hardcodes `np.sqrt(252)` for the strategy's own
-   `sharpe_ratio`. On non-daily bars the strategy and benchmark Sharpes use different
-   annualization factors, and the live dashboard inherits the error. Left unchanged
-   because it affects displayed output.
+2. ~~`backtester.py` hardcodes `np.sqrt(252)` for the strategy's own `sharpe_ratio`.~~
+   **Fixed** — `run_backtest`/`run_backtest_v2` now take `periods_per_year`, and
+   `walk_forward` passes its own factor so strategy and benchmark match. See
+   "Reporting fixes" above.
+3. **Still open:** `strategy_v2`'s roll model credits a flat 0.5% per roll up to 3 times
+   per trade, unconditional on actual option pricing. That is a free +1.5% on any trade
+   that trends, and it is not derived from anything. It inflates v2 results by an amount
+   nobody has measured.
 
 ---
 

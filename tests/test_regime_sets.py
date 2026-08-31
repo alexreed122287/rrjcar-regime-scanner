@@ -343,3 +343,112 @@ def test_custom_feature_columns_validated():
     det = RegimeDetector(n_regimes=3, feature_columns=["returns", "nope"])
     with pytest.raises(ValueError, match="missing feature columns"):
         det.train(df)
+
+
+# ─────────────────────────── annualization + friction ───────────────────────────
+
+def _synthetic_scored(n=400, seed=1):
+    """A regime-labelled frame good enough to drive either backtester."""
+    import numpy as np
+    import pandas as pd
+    from data_loader import engineer_features
+    from hmm_engine import RegimeDetector
+
+    rng = np.random.default_rng(seed)
+    price = 100 * np.cumprod(1 + rng.normal(0.0004, 0.011, n))
+    idx = pd.date_range("2021-01-01", periods=n, freq="B")
+    raw = pd.DataFrame({
+        "Open": price, "High": price * 1.008, "Low": price * 0.992,
+        "Close": price, "Volume": rng.integers(1e6, 5e6, n),
+    }, index=idx)
+    from backtester import compute_confirmations
+    scored = RegimeDetector(n_regimes=3, n_iter=30).train(engineer_features(raw))
+    # compute_confirmations lives in backtester.py and must be applied before
+    # skip_confirmations=True is usable.
+    return compute_confirmations(scored)
+
+
+def test_sharpe_annualization_is_parameterized():
+    """Sharpe was hardcoded to sqrt(252), wrong for the default hourly bars."""
+    import math
+    from backtester import run_backtest, periods_per_year
+
+    scored = _synthetic_scored()
+    daily = run_backtest(scored, n_regimes=3, skip_confirmations=True,
+                         periods_per_year=252)["metrics"]
+    hourly = run_backtest(scored, n_regimes=3, skip_confirmations=True,
+                          periods_per_year=periods_per_year("1h"))["metrics"]
+    if daily["sharpe_ratio"] == 0:
+        return  # no trades on this seed; nothing to compare
+    ratio = hourly["sharpe_ratio"] / daily["sharpe_ratio"]
+    assert math.isclose(ratio, math.sqrt(periods_per_year("1h") / 252), rel_tol=0.02)
+    assert daily["periods_per_year"] == 252
+
+
+def test_run_backtest_annualization_default_is_daily():
+    """Default must not change existing daily-bar results."""
+    from backtester import run_backtest, DAILY_PERIODS_PER_YEAR
+
+    scored = _synthetic_scored()
+    m = run_backtest(scored, n_regimes=3, skip_confirmations=True)["metrics"]
+    assert m["periods_per_year"] == DAILY_PERIODS_PER_YEAR == 252.0
+
+
+def test_periods_per_year_lookup():
+    from backtester import periods_per_year
+
+    assert periods_per_year("1d") == 252
+    assert periods_per_year("1h") == 252 * 6.5
+    assert periods_per_year("WEEKLY") == 52          # case-insensitive
+    assert periods_per_year("nonsense") == 252 * 6.5  # hourly fallback
+
+
+def test_v2_costs_reduce_headline_return():
+    """Costs must hit compounding capital, not just the trade rows."""
+    from strategy_v2 import run_backtest_v2
+
+    scored = _synthetic_scored()
+    free = run_backtest_v2(scored, min_confirmations=3, cost_bps_per_side=0.0)
+    paid = run_backtest_v2(scored, min_confirmations=3, cost_bps_per_side=10.0)
+    if not free["trades"]:
+        return
+    assert paid["metrics"]["total_return_pct"] < free["metrics"]["total_return_pct"]
+    assert free["metrics"]["total_cost_paid_pct"] == 0.0
+    assert paid["metrics"]["total_cost_paid_pct"] > 0.0
+    # Every trade row carries gross alongside net.
+    for t in paid["trades"]:
+        assert t["gross_pnl_pct"] >= t["pnl_pct"]
+
+
+def test_v2_sharpe_annualization_is_parameterized():
+    from strategy_v2 import run_backtest_v2
+    from backtester import periods_per_year
+
+    scored = _synthetic_scored()
+    m = run_backtest_v2(scored, min_confirmations=3,
+                        periods_per_year=periods_per_year("1h"))["metrics"]
+    assert m["periods_per_year"] == periods_per_year("1h")
+
+
+def test_walk_forward_charges_strategy_and_benchmark():
+    """A single cost setting must reach both sides of the comparison."""
+    from walk_forward import WalkForwardEngine
+
+    eng = WalkForwardEngine(is_bars=100, oos_bars=60, n_regimes=3,
+                            interval="1d", cost_bps_per_side=7.0)
+    assert eng.cost_bps_per_side == 7.0
+    # Strategy side, via backtest kwargs.
+    assert eng.backtest_kwargs["cost_bps_per_side"] == 7.0
+    # An explicit override still wins.
+    eng2 = WalkForwardEngine(is_bars=100, oos_bars=60, n_regimes=3, interval="1d",
+                             cost_bps_per_side=7.0,
+                             backtest_kwargs={"cost_bps_per_side": 1.0})
+    assert eng2.backtest_kwargs["cost_bps_per_side"] == 1.0
+
+
+def test_walk_forward_default_is_cost_free_for_library_callers():
+    """Only the CLI defaults to 5 bps; the class default stays 0 for reproducibility."""
+    from walk_forward import WalkForwardEngine
+
+    eng = WalkForwardEngine(is_bars=100, oos_bars=60, n_regimes=3, interval="1d")
+    assert eng.cost_bps_per_side == 0.0
