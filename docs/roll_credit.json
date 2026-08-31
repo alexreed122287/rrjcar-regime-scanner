@@ -1,0 +1,323 @@
+{
+  "config": {
+    "tickers": [
+      "SPY",
+      "QQQ",
+      "NVDA",
+      "AAPL",
+      "XLF"
+    ],
+    "period_days": 3000,
+    "interval": "1d",
+    "n_regimes": 7,
+    "min_confs": 6,
+    "cost_bps_per_side": 5.0,
+    "roll_configs": {
+      "baseline": {
+        "roll_up_credit_pct": 0.5,
+        "roll_out_credit_pct": 0.3
+      },
+      "no_rolls": {
+        "roll_up_credit_pct": 0.0,
+        "roll_out_credit_pct": 0.0
+      },
+      "up_only": {
+        "roll_up_credit_pct": 0.5,
+        "roll_out_credit_pct": 0.0
+      },
+      "sign_fixed": {
+        "roll_up_credit_pct": 0.5,
+        "roll_out_credit_pct": -0.3
+      }
+    }
+  },
+  "rows": [
+    {
+      "total_return_pct": 129.75,
+      "sharpe_ratio": 1.53,
+      "max_drawdown_pct": -7.89,
+      "win_rate": 52.6,
+      "n_trades": 97,
+      "total_rolls": 62,
+      "roll_credits_pct": 31.0,
+      "buyhold_return_pct": 200.55,
+      "ticker": "SPY",
+      "config": "baseline"
+    },
+    {
+      "total_return_pct": 68.64,
+      "sharpe_ratio": 1.05,
+      "max_drawdown_pct": -7.89,
+      "win_rate": 52.6,
+      "n_trades": 97,
+      "total_rolls": 62,
+      "roll_credits_pct": 0.0,
+      "buyhold_return_pct": 200.55,
+      "ticker": "SPY",
+      "config": "no_rolls"
+    },
+    {
+      "total_return_pct": 129.75,
+      "sharpe_ratio": 1.53,
+      "max_drawdown_pct": -7.89,
+      "win_rate": 52.6,
+      "n_trades": 97,
+      "total_rolls": 62,
+      "roll_credits_pct": 31.0,
+      "buyhold_return_pct": 200.55,
+      "ticker": "SPY",
+      "config": "up_only"
+    },
+    {
+      "total_return_pct": 129.75,
+      "sharpe_ratio": 1.53,
+      "max_drawdown_pct": -7.89,
+      "win_rate": 52.6,
+      "n_trades": 97,
+      "total_rolls": 62,
+      "roll_credits_pct": 31.0,
+      "buyhold_return_pct": 200.55,
+      "ticker": "SPY",
+      "config": "sign_fixed"
+    },
+    {
+      "total_return_pct": 66.76,
+      "sharpe_ratio": 0.78,
+      "max_drawdown_pct": -10.02,
+      "win_rate": 53.7,
+      "n_trades": 82,
+      "total_rolls": 36,
+      "roll_credits_pct": 18.0,
+      "buyhold_return_pct": 320.27,
+      "ticker": "QQQ",
+      "config": "baseline"
+    },
+    {
+      "total_return_pct": 39.35,
+      "sharpe_ratio": 0.54,
+      "max_drawdown_pct": -12.24,
+      "win_rate": 53.7,
+      "n_trades": 82,
+      "total_rolls": 36,
+      "roll_credits_pct": 0.0,
+      "buyhold_return_pct": 320.27,
+      "ticker": "QQQ",
+      "config": "no_rolls"
+    },
+    {
+      "total_return_pct": 66.76,
+      "sharpe_ratio": 0.78,
+      "max_drawdown_pct": -10.02,
+      "win_rate": 53.7,
+      "n_trades": 82,
+      "total_rolls": 36,
+      "roll_credits_pct": 18.0,
+      "buyhold_return_pct": 320.27,
+      "ticker": "QQQ",
+      "config": "up_only"
+    },
+    {
+      "total_return_pct": 66.76,
+      "sharpe_ratio": 0.78,
+      "max_drawdown_pct": -10.02,
+      "win_rate": 53.7,
+      "n_trades": 82,
+      "total_rolls": 36,
+      "roll_credits_pct": 18.0,
+      "buyhold_return_pct": 320.27,
+      "ticker": "QQQ",
+      "config": "sign_fixed"
+    },
+    {
+      "total_return_pct": 1074.08,
+      "sharpe_ratio": 1.69,
+      "max_drawdown_pct": -19.94,
+      "win_rate": 59.3,
+      "n_trades": 123,
+      "total_rolls": 64,
+      "roll_credits_pct": 32.0,
+      "buyhold_return_pct": 3209.06,
+      "ticker": "NVDA",
+      "config": "baseline"
+    },
+    {
+      "total_return_pct": 753.24,
+      "sharpe_ratio": 1.53,
+      "max_drawdown_pct": -20.74,
+      "win_rate": 59.3,
+      "n_trades": 123,
+      "total_rolls": 64,
+      "roll_credits_pct": 0.0,
+      "buyhold_return_pct": 3209.06,
+      "ticker": "NVDA",
+      "config": "no_rolls"
+    },
+    {
+      "total_return_pct": 1074.08,
+      "sharpe_ratio": 1.69,
+      "max_drawdown_pct": -19.94,
+      "win_rate": 59.3,
+      "n_trades": 123,
+      "total_rolls": 64,
+      "roll_credits_pct": 32.0,
+      "buyhold_return_pct": 3209.06,
+      "ticker": "NVDA",
+      "config": "up_only"
+    },
+    {
+      "total_return_pct": 1074.08,
+      "sharpe_ratio": 1.69,
+      "max_drawdown_pct": -19.94,
+      "win_rate": 59.3,
+      "n_trades": 123,
+      "total_rolls": 64,
+      "roll_credits_pct": 32.0,
+      "buyhold_return_pct": 3209.06,
+      "ticker": "NVDA",
+      "config": "sign_fixed"
+    },
+    {
+      "total_return_pct": 36.07,
+      "sharpe_ratio": 0.39,
+      "max_drawdown_pct": -17.62,
+      "win_rate": 49.5,
+      "n_trades": 107,
+      "total_rolls": 26,
+      "roll_credits_pct": 13.0,
+      "buyhold_return_pct": 504.77,
+      "ticker": "AAPL",
+      "config": "baseline"
+    },
+    {
+      "total_return_pct": 19.52,
+      "sharpe_ratio": 0.25,
+      "max_drawdown_pct": -18.34,
+      "win_rate": 49.5,
+      "n_trades": 107,
+      "total_rolls": 26,
+      "roll_credits_pct": 0.0,
+      "buyhold_return_pct": 504.77,
+      "ticker": "AAPL",
+      "config": "no_rolls"
+    },
+    {
+      "total_return_pct": 36.07,
+      "sharpe_ratio": 0.39,
+      "max_drawdown_pct": -17.62,
+      "win_rate": 49.5,
+      "n_trades": 107,
+      "total_rolls": 26,
+      "roll_credits_pct": 13.0,
+      "buyhold_return_pct": 504.77,
+      "ticker": "AAPL",
+      "config": "up_only"
+    },
+    {
+      "total_return_pct": 36.07,
+      "sharpe_ratio": 0.39,
+      "max_drawdown_pct": -17.62,
+      "win_rate": 49.5,
+      "n_trades": 107,
+      "total_rolls": 26,
+      "roll_credits_pct": 13.0,
+      "buyhold_return_pct": 504.77,
+      "ticker": "AAPL",
+      "config": "sign_fixed"
+    },
+    {
+      "total_return_pct": 40.35,
+      "sharpe_ratio": 0.91,
+      "max_drawdown_pct": -5.7,
+      "win_rate": 61.1,
+      "n_trades": 54,
+      "total_rolls": 16,
+      "roll_credits_pct": 8.0,
+      "buyhold_return_pct": 138.8,
+      "ticker": "XLF",
+      "config": "baseline"
+    },
+    {
+      "total_return_pct": 29.58,
+      "sharpe_ratio": 0.74,
+      "max_drawdown_pct": -5.7,
+      "win_rate": 61.1,
+      "n_trades": 54,
+      "total_rolls": 16,
+      "roll_credits_pct": 0.0,
+      "buyhold_return_pct": 138.8,
+      "ticker": "XLF",
+      "config": "no_rolls"
+    },
+    {
+      "total_return_pct": 40.35,
+      "sharpe_ratio": 0.91,
+      "max_drawdown_pct": -5.7,
+      "win_rate": 61.1,
+      "n_trades": 54,
+      "total_rolls": 16,
+      "roll_credits_pct": 8.0,
+      "buyhold_return_pct": 138.8,
+      "ticker": "XLF",
+      "config": "up_only"
+    },
+    {
+      "total_return_pct": 40.35,
+      "sharpe_ratio": 0.91,
+      "max_drawdown_pct": -5.7,
+      "win_rate": 61.1,
+      "n_trades": 54,
+      "total_rolls": 16,
+      "roll_credits_pct": 8.0,
+      "buyhold_return_pct": 138.8,
+      "ticker": "XLF",
+      "config": "sign_fixed"
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "mean_return_pct": 269.40199999999993,
+      "mean_sharpe": 1.06,
+      "mean_max_dd_pct": -12.234,
+      "mean_win_rate": 55.24000000000001,
+      "n_positive": 5,
+      "n_beat_buyhold": 0,
+      "n_tickers": 5
+    },
+    "no_rolls": {
+      "mean_return_pct": 182.066,
+      "mean_sharpe": 0.8220000000000001,
+      "mean_max_dd_pct": -12.982,
+      "mean_win_rate": 55.24000000000001,
+      "n_positive": 5,
+      "n_beat_buyhold": 0,
+      "n_tickers": 5
+    },
+    "up_only": {
+      "mean_return_pct": 269.40199999999993,
+      "mean_sharpe": 1.06,
+      "mean_max_dd_pct": -12.234,
+      "mean_win_rate": 55.24000000000001,
+      "n_positive": 5,
+      "n_beat_buyhold": 0,
+      "n_tickers": 5
+    },
+    "sign_fixed": {
+      "mean_return_pct": 269.40199999999993,
+      "mean_sharpe": 1.06,
+      "mean_max_dd_pct": -12.234,
+      "mean_win_rate": 55.24000000000001,
+      "n_positive": 5,
+      "n_beat_buyhold": 0,
+      "n_tickers": 5
+    }
+  },
+  "credit_share_of_return_pct": 32.418467568911865,
+  "credit_share_per_ticker_pct": {
+    "SPY": 47.09826589595376,
+    "QQQ": 41.05751947273817,
+    "NVDA": 29.871145538507367,
+    "AAPL": 45.883005267535346,
+    "XLF": 26.6914498141264
+  },
+  "roll_out_unreachable": true
+}

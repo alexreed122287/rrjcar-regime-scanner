@@ -177,6 +177,10 @@ def run_backtest_v2(
     hv_rank_max: float = 0.75,
     hv_rank_caution: float = 0.50,
     hv_caution_confs: int = 8,
+    # ── Roll model ──
+    roll_up_credit_pct: float = 0.5,
+    roll_out_credit_pct: float = 0.3,
+    max_rolls: int = 3,
     # ── Friction ──
     cost_bps_per_side: float = 0.0,
     periods_per_year: float = DAILY_PERIODS_PER_YEAR,
@@ -211,6 +215,22 @@ def run_backtest_v2(
 
         Explicit ``bullish_regimes``/``bearish_regimes`` still win; with none of the three
         the fallback is inferred from ``regime_id`` in ``df``.
+    roll_up_credit_pct, roll_out_credit_pct, max_rolls : float, float, int
+        The simulated roll model, previously hardcoded at 0.5%, 0.3% and 3. Parameterized
+        so its contribution can be measured -- see tools/roll_credit_sensitivity.py.
+        Defaults reproduce the historical behaviour.
+
+        Both credits are unconditional: neither depends on strike, moneyness, implied vol,
+        or time to expiry, and nothing is surrendered in exchange. Two distinct problems:
+
+        * ``roll_up_credit_pct`` has the right *sign* -- closing a long call and reopening
+          at a higher strike is genuinely a net credit -- but the model keeps compounding
+          full capital on the underlying afterwards. A real roll up cuts delta, so upside
+          participation should fall, and here it does not.
+        * ``roll_out_credit_pct`` has the *wrong sign*. Rolling a long call to a later
+          expiry buys time value, which costs a debit. It also fires only when a position
+          is past its time stop at a loss, so it pays cash *and* defers realizing that
+          loss, converting a would-be exit into a credit plus continued exposure.
     """
     cost_frac = float(cost_bps_per_side) / 10_000.0
     round_trip_cost_pct = 2.0 * float(cost_bps_per_side) / 100.0
@@ -301,10 +321,10 @@ def run_backtest_v2(
             # Roll UP: price >= effective_entry + 1 ATR (and still in bullish regime)
             if (price >= effective_entry + current_atr
                 and regime in bullish_regimes
-                and roll_count < 3
+                and roll_count < max_rolls
                 and bars_since_roll >= 2):
-                # Simulate roll: collect ~0.5% credit, move effective entry up
-                roll_credit = 0.5  # % of stock price
+                # Simulate roll: collect a credit, move effective entry up
+                roll_credit = float(roll_up_credit_pct)  # % of stock price
                 roll_credits_pct += roll_credit
                 capital *= (1 + roll_credit / 100)  # add credit to capital
                 effective_entry = price  # reset entry to current price after roll
@@ -333,8 +353,8 @@ def run_backtest_v2(
             # 3. Time stop — but try roll-out first (simulated DTE check)
             if not exit_reason and bars_held >= time_stop_bars and gain_pct <= 0:
                 # Simulate: can we roll out for credit?
-                if regime in bullish_regimes and roll_count < 3:
-                    roll_credit = 0.3
+                if regime in bullish_regimes and roll_count < max_rolls:
+                    roll_credit = float(roll_out_credit_pct)
                     roll_credits_pct += roll_credit
                     capital *= (1 + roll_credit / 100)
                     roll_count += 1
@@ -495,6 +515,9 @@ def run_backtest_v2(
                                   cost_bps_per_side=cost_bps_per_side,
                                   periods_per_year=periods_per_year,
                                   total_cost_paid_pct=total_cost_paid_pct)
+    metrics["total_roll_credits_pct"] = round(
+        sum(float(t.get("roll_credits_pct", 0.0)) for t in trades), 4)
+    metrics["total_rolls"] = int(sum(int(t.get("roll_count", 0)) for t in trades))
     return {"trades": trades, "equity_curve": pd.Series(equity, index=data.index), "metrics": metrics, "df": data}
 
 

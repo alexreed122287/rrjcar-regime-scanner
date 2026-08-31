@@ -525,3 +525,117 @@ def test_v2_explicit_regime_sets_still_win():
     r = run_backtest_v2(scored, min_confirmations=3, n_regimes=7,
                         bullish_regimes=[0], bearish_regimes=[2])
     assert isinstance(r["trades"], list)
+
+
+# ───────────────────────────── v2 roll model ─────────────────────────────
+
+def _rolling_uptrend_scored(n=700):
+    """Deterministic bullish frame that is guaranteed to trigger ROLL_UP.
+
+    Fitting an HMM on random data is flaky (hmmlearn raises on non-positive-definite
+    covariances for many seeds) and rarely produces rolls, so the regime columns are set
+    directly instead. Everything else -- indicators, ATR, confirmations -- is computed by
+    the real pipeline.
+    """
+    import numpy as np
+    import pandas as pd
+    from data_loader import engineer_features
+    from backtester import compute_confirmations
+
+    # Steady uptrend with small wiggles: price keeps clearing effective_entry + 1 ATR.
+    t = np.arange(n)
+    price = 100 * (1.004 ** t) + np.sin(t / 3.0) * 0.35
+    idx = pd.date_range("2021-01-01", periods=n, freq="B")
+    raw = pd.DataFrame({
+        "Open": price, "High": price * 1.006, "Low": price * 0.994,
+        "Close": price, "Volume": np.full(n, 2_000_000),
+    }, index=idx)
+    df = compute_confirmations(engineer_features(raw))
+    # Regime 0 is bullish under regime_sets for every count >= 2. The frame must also
+    # contain a state numbered 6, or run_backtest_v2 infers n_regimes from
+    # regime_id.max() + 1 -- and regime_sets(1) returns an EMPTY bullish list, so no entry
+    # can ever fire and every roll assertion would pass vacuously.
+    df["regime_id"] = 0
+    df["regime_label"] = "Strong Bull"
+    df["regime_confidence"] = 0.95
+    df.iloc[-1, df.columns.get_loc("regime_id")] = 6          # bearish under 7 regimes
+    df.iloc[-1, df.columns.get_loc("regime_label")] = "Strong Bear"
+    return df.dropna(subset=["atr"]).copy()
+
+
+def test_fixture_actually_produces_rolls():
+    """Guard the guards.
+
+    The roll tests below skip when no rolls occur. That made them pass vacuously against a
+    fixture whose regime_id was constant 0, which made run_backtest_v2 infer n_regimes=1 --
+    and regime_sets(1) has an empty bullish list, so nothing ever entered. Assert the
+    fixture bites before trusting anything that depends on it.
+    """
+    from strategy_v2 import run_backtest_v2
+
+    r = run_backtest_v2(_rolling_uptrend_scored(), min_confirmations=3)
+    assert len(r["trades"]) > 0, "fixture produced no trades; roll tests would be vacuous"
+    assert r["metrics"]["total_rolls"] > 0, "fixture produced no rolls"
+
+
+def test_roll_credits_are_parameterized_and_scale():
+    """The roll credit was hardcoded at 0.5%; it must be measurable."""
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    off = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=0.0,
+                          roll_out_credit_pct=0.0)["metrics"]
+    half = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=0.5,
+                           roll_out_credit_pct=0.0)["metrics"]
+    if half["total_rolls"] == 0:
+        return  # no rolls on this seed; nothing to assert
+    assert off["total_roll_credits_pct"] == 0.0
+    assert half["total_roll_credits_pct"] > 0.0
+    # Credits must be exactly rate * number of rolls.
+    assert abs(half["total_roll_credits_pct"] - 0.5 * half["total_rolls"]) < 1e-6
+    # And they must reach the headline return, not just the metrics dict.
+    assert half["total_return_pct"] > off["total_return_pct"]
+
+
+def test_roll_credits_lift_reported_return():
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    lo = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=0.1)["metrics"]
+    hi = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=1.0)["metrics"]
+    if hi["total_rolls"] == 0:
+        return
+    assert hi["total_roll_credits_pct"] > lo["total_roll_credits_pct"]
+    assert hi["total_return_pct"] > lo["total_return_pct"]
+
+
+def test_max_rolls_caps_credits_per_trade():
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    r = run_backtest_v2(scored, min_confirmations=3, max_rolls=1)
+    for t in r["trades"]:
+        assert t["roll_count"] <= 1
+    r0 = run_backtest_v2(scored, min_confirmations=3, max_rolls=0)
+    assert r0["metrics"]["total_rolls"] == 0
+    assert r0["metrics"]["total_roll_credits_pct"] == 0.0
+
+
+def test_roll_out_credit_is_unreachable_at_defaults():
+    """Characterization, not an endorsement.
+
+    The ROLL_OUT credit has the wrong sign -- rolling a long call to a later expiry buys
+    time value and costs a debit. It turns out never to fire at default settings, because
+    the regime-flip exit is checked before the time-stop roll attempt. This test pins that
+    down so that if a future change makes it reachable, the wrong sign starts failing here
+    instead of silently inflating returns.
+    """
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    kw = dict(min_confirmations=3, roll_up_credit_pct=0.5)
+    a = run_backtest_v2(scored, roll_out_credit_pct=0.3, **kw)["metrics"]
+    b = run_backtest_v2(scored, roll_out_credit_pct=99.0, **kw)["metrics"]
+    c = run_backtest_v2(scored, roll_out_credit_pct=-99.0, **kw)["metrics"]
+    assert a["total_return_pct"] == b["total_return_pct"] == c["total_return_pct"]
+    assert a["total_roll_credits_pct"] == b["total_roll_credits_pct"]
