@@ -14,6 +14,24 @@ import ta
 from hmm_engine import regime_sets
 
 
+# Bars per year, by interval. Lives here rather than in walk_forward.py because
+# _compute_metrics needs it and walk_forward already imports from this module, so the
+# other direction would be a circular import. walk_forward re-exports these names.
+PERIODS_PER_YEAR = {
+    "1d": 252, "1day": 252, "daily": 252,
+    "1h": 252 * 6.5, "60m": 252 * 6.5, "hourly": 252 * 6.5,
+    "30m": 252 * 13, "15m": 252 * 26, "5m": 252 * 78, "1m": 252 * 390,
+    "1wk": 52, "weekly": 52,
+}
+
+DAILY_PERIODS_PER_YEAR = 252.0
+
+
+def periods_per_year(interval: str) -> float:
+    """Annualization factor for a bar interval. Unknown intervals fall back to hourly."""
+    return float(PERIODS_PER_YEAR.get(str(interval).lower().strip(), 252 * 6.5))
+
+
 def compute_confirmations(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute 8 confirmation signals used for trade entry.
@@ -87,6 +105,7 @@ def run_backtest(
     min_confidence: float = 0.5,
     neutral_exit_confidence: float = 0.6,
     cost_bps_per_side: float = 0.0,
+    periods_per_year: float = DAILY_PERIODS_PER_YEAR,
 ) -> dict:
     """
     Run the full regime-based backtest.
@@ -350,7 +369,8 @@ def run_backtest(
     data["equity"] = equity
 
     # --- METRICS ---
-    metrics = _compute_metrics(trades, equity, data, initial_capital, leverage)
+    metrics = _compute_metrics(trades, equity, data, initial_capital, leverage,
+                               periods_per_year=periods_per_year)
     metrics["cost_bps_per_side"] = float(cost_bps_per_side)
     metrics["total_cost_paid_pct"] = round(total_cost_paid_pct, 3)
 
@@ -451,7 +471,8 @@ def get_current_signal(df: pd.DataFrame, min_confirmations: int = 5, regime_conf
     }
 
 
-def _compute_metrics(trades, equity, df, initial_capital, leverage) -> dict:
+def _compute_metrics(trades, equity, df, initial_capital, leverage,
+                     periods_per_year: float = DAILY_PERIODS_PER_YEAR) -> dict:
     """Compute performance metrics from backtest results."""
     if not trades:
         return {
@@ -467,6 +488,7 @@ def _compute_metrics(trades, equity, df, initial_capital, leverage) -> dict:
             "final_equity": initial_capital,
             "initial_capital": initial_capital,
             "leverage": leverage,
+            "periods_per_year": float(periods_per_year),
         }
 
     final_equity = equity[-1] if equity else initial_capital
@@ -496,10 +518,10 @@ def _compute_metrics(trades, equity, df, initial_capital, leverage) -> dict:
     drawdown = (eq_series - peak) / peak * 100
     max_dd = drawdown.min()
 
-    # Sharpe (annualized, assume daily bars = 252 trading days/year)
+    # Sharpe, annualized with the caller's bar frequency rather than a hardcoded 252.
     returns = eq_series.pct_change().dropna()
     if len(returns) > 1 and returns.std() > 0:
-        sharpe = (returns.mean() / returns.std()) * np.sqrt(252)
+        sharpe = (returns.mean() / returns.std()) * np.sqrt(float(periods_per_year))
     else:
         sharpe = 0
 
@@ -513,6 +535,7 @@ def _compute_metrics(trades, equity, df, initial_capital, leverage) -> dict:
         "losing_trades": len(losses),
         "max_drawdown_pct": round(max_dd, 2),
         "sharpe_ratio": round(sharpe, 2),
+        "periods_per_year": float(periods_per_year),
         "profit_factor": round(profit_factor, 2),
         "avg_win_pct": round(avg_win, 2),
         "avg_loss_pct": round(avg_loss, 2),

@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 from data_loader import fetch_data, engineer_features
 from hmm_engine import RegimeDetector
-from backtester import run_backtest
+from backtester import periods_per_year, run_backtest
 from strategy_v2 import run_backtest_v2
 
 router = APIRouter()
@@ -18,9 +18,18 @@ async def backtest_symbol(
     regime_confirm: int = 2,
     capital: float = 100000,
     n_regimes: int = 7,
+    cost_bps: float = 5.0,
 ):
+    """Backtest a symbol.
+
+    ``cost_bps`` is per-side friction and defaults to 5 bps, not zero. A cost-free
+    backtest is the strategy's best case, not a neutral one -- see
+    docs/validation-findings.md, where friction consumed 18-37% of gross return. Pass
+    ``cost_bps=0`` to reproduce the old cost-free numbers.
+    """
     try:
-        raw = fetch_data(symbol=symbol, period_days=730, interval="1d")
+        interval = "1d"
+        raw = fetch_data(symbol=symbol, period_days=730, interval=interval)
         feat = engineer_features(raw)
         detector = RegimeDetector(n_regimes=n_regimes)
         regime_df = detector.train(feat)
@@ -33,6 +42,8 @@ async def backtest_symbol(
                 regime_confirm_bars=regime_confirm,
                 initial_capital=capital,
                 n_regimes=int(detector.n_regimes),
+                cost_bps_per_side=cost_bps,
+                periods_per_year=periods_per_year(interval),
             )
         else:
             bt = run_backtest(
@@ -42,6 +53,8 @@ async def backtest_symbol(
                 regime_confirm_bars=regime_confirm,
                 initial_capital=capital,
                 n_regimes=int(detector.n_regimes),
+                cost_bps_per_side=cost_bps,
+                periods_per_year=periods_per_year(interval),
             )
 
         metrics = bt["metrics"]

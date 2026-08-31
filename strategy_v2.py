@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 import ta
 import yfinance as yf
+
+from backtester import DAILY_PERIODS_PER_YEAR
 from datetime import datetime, timedelta
 
 
@@ -173,10 +175,28 @@ def run_backtest_v2(
     hv_rank_max: float = 0.75,
     hv_rank_caution: float = 0.50,
     hv_caution_confs: int = 8,
+    # ── Friction ──
+    cost_bps_per_side: float = 0.0,
+    periods_per_year: float = DAILY_PERIODS_PER_YEAR,
 ) -> dict:
     """
     Long-call optimized backtest with multi-exit logic, VIX overlay, and HV rank filter.
+
+    Parameters
+    ----------
+    cost_bps_per_side : float
+        Round-trip friction, charged as ``2 * cost_bps_per_side`` basis points against each
+        trade's return. Mirrors the model in backtester.py so the two engines are
+        comparable. Default 0.0 keeps existing results unchanged; callers that report
+        performance to a human should pass a realistic value. See
+        docs/validation-findings.md -- friction consumed 18-37% of gross return at 5-10 bps.
+    periods_per_year : float
+        Bars per year for annualizing ``sharpe_ratio``. Was hardcoded to 252, which is
+        wrong for the hourly bars ``data_loader.fetch_data`` returns by default.
     """
+    cost_frac = float(cost_bps_per_side) / 10_000.0
+    round_trip_cost_pct = 2.0 * float(cost_bps_per_side) / 100.0
+    total_cost_paid_pct = 0.0
     if bullish_regimes is None:
         bullish_regimes = [0, 1, 2]
     if bearish_regimes is None:
@@ -310,7 +330,14 @@ def run_backtest_v2(
                     exit_reason = f"Regime neutral - {row['regime_label']}"
 
             if exit_reason:
-                pnl_pct = gain_pct
+                gross_pnl_pct = gain_pct
+                pnl_pct = gain_pct - round_trip_cost_pct
+                # Charge the exit side against compounding capital. Deducting only from the
+                # trade row would leave total_return_pct cost-free, which is the headline
+                # number the dashboard shows.
+                if cost_frac:
+                    capital *= (1.0 - cost_frac)
+                    total_cost_paid_pct += cost_frac * 100.0
                 trades.append({
                     "entry_bar": entry_bar,
                     "entry_date": str(data.index[entry_bar]),
@@ -322,6 +349,7 @@ def run_backtest_v2(
                     "exit_regime": row["regime_label"],
                     "exit_reason": exit_reason,
                     "pnl_pct": round(pnl_pct, 2),
+                    "gross_pnl_pct": round(gross_pnl_pct, 2),
                     "bars_held": bars_held,
                     "peak_price": round(highest_since_entry, 2),
                     "peak_gain_pct": round((highest_since_entry - entry_price) / entry_price * 100, 2),
@@ -375,6 +403,9 @@ def run_backtest_v2(
             if is_bullish and enough_confs and high_confidence and regime_confirmed:
                 position_open = True
                 entry_price = price
+                if cost_frac:
+                    capital *= (1.0 - cost_frac)
+                    total_cost_paid_pct += cost_frac * 100.0
                 effective_entry = price
                 entry_bar = i
                 entry_regime = row["regime_label"]
@@ -401,6 +432,9 @@ def run_backtest_v2(
     if position_open:
         final_price = float(data.iloc[-1]["Close"])
         gain_pct = (final_price - entry_price) / entry_price * 100
+        if cost_frac:
+            capital *= (1.0 - cost_frac)
+            total_cost_paid_pct += cost_frac * 100.0
         trades.append({
             "entry_bar": entry_bar,
             "entry_date": str(data.index[entry_bar]),
@@ -411,7 +445,8 @@ def run_backtest_v2(
             "exit_price": final_price,
             "exit_regime": data.iloc[-1]["regime_label"],
             "exit_reason": "End of backtest",
-            "pnl_pct": round(gain_pct, 2),
+            "pnl_pct": round(gain_pct - round_trip_cost_pct, 2),
+            "gross_pnl_pct": round(gain_pct, 2),
             "bars_held": len(data) - 1 - entry_bar,
             "peak_price": round(highest_since_entry, 2),
             "peak_gain_pct": round((highest_since_entry - entry_price) / entry_price * 100, 2),
@@ -431,7 +466,10 @@ def run_backtest_v2(
     data["signal"] = signals
     data["equity"] = equity
 
-    metrics = _compute_metrics_v2(trades, equity, data, initial_capital)
+    metrics = _compute_metrics_v2(trades, equity, data, initial_capital,
+                                  cost_bps_per_side=cost_bps_per_side,
+                                  periods_per_year=periods_per_year,
+                                  total_cost_paid_pct=total_cost_paid_pct)
     return {"trades": trades, "equity_curve": pd.Series(equity, index=data.index), "metrics": metrics, "df": data}
 
 
@@ -517,13 +555,19 @@ def get_current_signal_v2(df: pd.DataFrame, min_confirmations: int = 6, regime_c
     }
 
 
-def _compute_metrics_v2(trades, equity, df, initial_capital) -> dict:
+def _compute_metrics_v2(trades, equity, df, initial_capital,
+                        cost_bps_per_side: float = 0.0,
+                        periods_per_year: float = DAILY_PERIODS_PER_YEAR,
+                        total_cost_paid_pct: float = 0.0) -> dict:
     """Compute performance metrics with call-relevant additions."""
     if not trades:
         return {
             "total_return_pct": 0, "alpha_vs_buyhold": 0, "buyhold_return_pct": 0,
             "win_rate": 0, "total_trades": 0, "winning_trades": 0, "losing_trades": 0,
             "max_drawdown_pct": 0, "sharpe_ratio": 0, "profit_factor": 0,
+            "cost_bps_per_side": float(cost_bps_per_side),
+            "total_cost_paid_pct": 0.0,
+            "periods_per_year": float(periods_per_year),
             "avg_win_pct": 0, "avg_loss_pct": 0, "avg_bars_held": 0,
             "avg_peak_gain": 0, "avg_giveback": 0,
             "final_equity": initial_capital, "initial_capital": initial_capital,
@@ -553,7 +597,8 @@ def _compute_metrics_v2(trades, equity, df, initial_capital) -> dict:
     max_dd = drawdown.min()
 
     returns = eq_series.pct_change().dropna()
-    sharpe = (returns.mean() / returns.std()) * np.sqrt(252) if len(returns) > 1 and returns.std() > 0 else 0
+    sharpe = ((returns.mean() / returns.std()) * np.sqrt(float(periods_per_year))
+              if len(returns) > 1 and returns.std() > 0 else 0)
 
     # Call-specific metrics
     avg_bars = np.mean([t.get("bars_held", 0) for t in trades]) if trades else 0
@@ -582,6 +627,9 @@ def _compute_metrics_v2(trades, equity, df, initial_capital) -> dict:
         "losing_trades": len(losses),
         "max_drawdown_pct": round(max_dd, 2),
         "sharpe_ratio": round(sharpe, 2),
+        "cost_bps_per_side": float(cost_bps_per_side),
+        "total_cost_paid_pct": round(float(total_cost_paid_pct), 4),
+        "periods_per_year": float(periods_per_year),
         "profit_factor": round(profit_factor, 2),
         "avg_win_pct": round(avg_win, 2),
         "avg_loss_pct": round(avg_loss, 2),
