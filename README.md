@@ -6,8 +6,8 @@ and the results that harness produced, which are not flattering.
 
 ## Validation status — read this first
 
-This system has been tested out of sample ten times: **nine negative results and one
-positive.** The positive one is about volatility, not returns. Full detail, with effect sizes
+This system has been tested out of sample thirteen times: **twelve negative results and one
+positive — and the positive one has since been shown to be useless.** Full detail, with effect sizes
 and reproduction commands, is in [`docs/validation-findings.md`](docs/validation-findings.md).
 
 The short version:
@@ -21,6 +21,9 @@ The short version:
 | Is the regime ranking fixable (inverted, forward-scored)? | **No.** No ranking rule clears a Bonferroni-corrected bar |
 | Do regimes separate forward **volatility**, beyond free trailing vol? | **Yes, at 5 bars.** Bearish set runs ~14.5% higher forward 5-day vol, bootstrap CI [+0.069, +0.208]. Null at 20 bars, and it explains only ~1.4% of variance |
 | Does the capital preservation beat trivial alternatives? | **No.** Indistinguishable from a coin flip at the same exposure; a 200-day MA earns 10.1% vs the HMM's 2.8% for the same drawdown |
+| Does that volatility signal beat a **free EWMA** forecast? | **No.** Every comparison a statistical tie; the regime label alone ranks 4th of 6 forecasts, below one line of pandas |
+| Does **sizing** off predicted vol rescue the model? | **Sizing yes, the model no.** Vol targeting lifts Sharpe 0.36 → 0.88 — but adding the regime *significantly worsens* it (−0.079 Sharpe) |
+| Would purpose-built **volatility features** fix it? | **No.** They performed *worse* than the shipped features. The constraint is the 7-state discrete architecture, not the inputs |
 
 **The capital-preservation claim has now been benchmarked, and it did not survive.** The old
 headline — SPY **-4.01%** against buy-and-hold's **-18.78%** in 2022 — is still arithmetically
@@ -31,10 +34,18 @@ out. A 200-day moving average earns **10.1% against the HMM's 2.8%** for the sam
 a fifteenth of the turnover, and naive volatility targeting beats it on both drawdown and
 Sharpe. See test 10.
 
-**The one thing that did work:** the regimes carry a little forward-*volatility* information
-at a 5-bar horizon (test 9). That points at position sizing, not entry timing — and it is weak
-enough that a plain EWMA volatility forecast may well do the job better, which nobody has
-checked yet.
+**The one thing that worked has now also been closed out.** The regimes do carry a little
+forward-*volatility* information at a 5-bar horizon (test 9), which pointed at position sizing.
+Three follow-ups settled it: an ordinary EWMA forecast matches the regime label head to head
+(test 11), sizing positions off predicted vol is a large improvement over the shipped filter
+but the *EWMA* delivers it while adding the regime makes it **significantly worse** through
+turnover (test 12), and purpose-built volatility features perform worse than the shipped ones
+(test 13). **No component of this model currently has a demonstrated use.**
+
+The one positive by-product: naive volatility targeting — a 20-bar rolling standard deviation,
+no regime model — earns Sharpe **0.89** against the shipped filter's **0.36** at a
+twenty-fourth of the turnover. It is still below buy-and-hold on Sharpe, so it is not an edge,
+but it is the best-performing thing measured in this repo.
 
 The genuinely useful artifact in this repo is the validation harness (`walk_forward.py` plus
 `tools/`), which is capable of producing negative results about its own strategy. Treat the
@@ -146,18 +157,16 @@ AMD, MRVL, MU, SMCI, ZS, BTC-USD, ETH-USD, etc. Validation used SPY / QQQ / NVDA
 Nine negative results share one root cause: the three features carry no forward *return*
 information. Tuning thresholds on a signal with no information can only fit noise, so the
 entry-timing direction is exhausted. Both of the directions this section used to propose have
-since been run — they are tests 9 and 10 — which leaves three open questions, in order of how
-much they would change the picture:
+since been run — they are tests 9 and 10 — as have the three that replaced them (tests 11, 12
+and 13). What is left is no longer about tuning this model:
 
-- **Does a plain EWMA volatility forecast beat the HMM at forward vol?** Test 9's positive
-  result is an increment over a trailing-vol control, but it was never compared head to head
-  against a good vol model. EWMA explains far more variance and needs no HMM. If it wins, the
-  last positive result is also redundant, and that is the cheapest experiment left.
-- **Size positions inversely to predicted volatility** rather than switching in and out. Test
-  9 says the model's only real output is a vol estimate; test 10 says the binary in/out filter
-  is worthless. Sizing is the one use of that output nobody has tested.
-- **Build purpose-made volatility features** (longer lookbacks, real `^VIX`/`^TNX` data) now
-  that there is evidence the model picks up vol rather than direction.
+- **Try a different model class.** Every test here measures *this* HMM. A one-parameter EWMA
+  keeps matching or beating it at its only surviving task, which points at GARCH, HAR, or a
+  plain rolling standard deviation as a *replacement* rather than a benchmark.
+- **Tune the volatility overlay** that fell out of test 12. `size_trail20` is the best result in
+  the repo and has been run at exactly one target vol, one exposure cap and one cost assumption.
+- **Real index data** (`^VIX`, `^TNX`), which no configured source provides. Test 13 makes this
+  much less promising than it looked: better vol inputs made the model worse, not better.
 
 ---
 
