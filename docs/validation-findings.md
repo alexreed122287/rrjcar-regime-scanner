@@ -12,8 +12,11 @@ whether the regime signal beats coin-flip entries held for the same fraction of 
 
 ## Summary
 
-Ten hypotheses tested: **nine negative, one positive.** The positive one is a volatility
-result, not a return result -- see #9.
+Thirteen hypotheses tested: **twelve negative, one positive -- and the positive one has since
+been shown to be useless.** Test 9 found the regimes carry forward-*volatility* information.
+Tests 11, 12 and 13 then established that the information is redundant against a free EWMA,
+that acting on it makes performance significantly *worse*, and that purpose-built volatility
+features do not fix it. The honest bottom line is that this model has no demonstrated use.
 
 | # | Hypothesis | Verdict |
 |---|---|---|
@@ -27,6 +30,13 @@ result, not a return result -- see #9.
 | 8 | The state ranking rule can be fixed (inverted, or scored on forward returns) | **No.** Rank 0 is the weakest state but at p=0.50; no rule clears Bonferroni |
 | 9 | Regimes separate forward **volatility**, beyond what trailing vol already gives free | **Yes, at 5 bars.** Bearish set runs ~14% higher forward vol, bootstrap CI [+0.069, +0.208], 5/5 tickers. Null at 20 bars |
 | 10 | The capital-preservation claim survives benchmarking against trivial alternatives | **No.** Real vs buy-and-hold (-12.5% vs -16.7% maxDD) but **indistinguishable from a coin flip with the same exposure**, and a 200-day MA earns 10.1% against the HMM's 2.8% for the same drawdown |
+| 11 | The test-9 volatility signal beats, or adds to, a free EWMA forecast | **No.** Every comparison a statistical tie. The regime label alone is *worse* than EWMA on point estimate; adding it to EWMA improves R² 0.484 -> 0.497 but the interval brackets zero |
+| 12 | Sizing positions off predicted volatility rescues the model | **Sizing yes, the model no.** Vol-targeted sizing beats the shipped filter massively (Sharpe 0.88 vs 0.36) -- but the *EWMA* forecast does that, and adding the regime makes it **significantly worse** (-0.079 Sharpe) |
+| 13 | The nulls are an input problem; purpose-built volatility features would fix it | **No.** Vol-specific features are *worse* than the shipped ones, and none beats a free EWMA. The limitation is the architecture, not the inputs |
+
+**Nothing in this repo now has a demonstrated edge, defensive or otherwise.** The one positive
+result survived exactly two more tests before collapsing: it is not better than an exponential
+moving average of squared returns, and trading on it loses money to turnover. See #11-13.
 
 **The capital-preservation claim, previously the system's one demonstrated virtue, does not
 survive #10.** The drawdown reduction is real relative to buy-and-hold, but it is what being
@@ -589,6 +599,135 @@ not that it is good, only that it is cheaper and better here.
 
 ---
 
+## 11. The volatility signal loses to an exponential average
+
+`tools/vol_forecast_shootout.py`. Test 9 measured the regime label as an increment over a
+trailing-vol *control* -- a nuisance regressor whose job was to absorb the obvious. It was
+never asked to compete. This asks it to compete.
+
+Six forecasts of forward 5-bar realized vol, all calibrated on training bars only, all scored
+on the same 1260 non-overlapping OOS bars. QLIKE is the standard volatility loss (it punishes
+under-prediction asymmetrically, as a risk manager would); MSE is on log vol.
+
+| forecast | QLIKE | MSE(log) | R-sq | corr | what it is |
+|---|---|---|---|---|---|
+| `ewma_hmm` | **0.55334** | 0.23389 | 0.497 | 0.711 | EWMA + per-regime offset |
+| `ewma94` | 0.55487 | 0.23955 | 0.484 | 0.696 | free EWMA, lambda=0.94 |
+| `combo_vol` | 0.55696 | 0.23799 | 0.488 | 0.699 | three vol models, no regime info |
+| `hmm` | 0.56302 | 0.24938 | 0.463 | 0.689 | the regime label alone |
+| `trail20` | 0.56916 | 0.24167 | 0.480 | 0.693 | one line of pandas |
+| `trail5` | 0.59280 | 0.26242 | 0.435 | 0.662 | one noisier line of pandas |
+
+Paired loss differentials, bootstrapped over (ticker, window) blocks -- **every single
+comparison is a tie:**
+
+| comparison | MSE difference | QLIKE difference | verdict |
+|---|---|---|---|
+| `hmm` vs `ewma94` | +0.0098 [-0.0072, +0.0260] | +0.0082 [-0.0356, +0.0490] | tie |
+| `ewma_hmm` vs `ewma94` | -0.0057 [-0.0153, +0.0037] | -0.0015 [-0.0391, +0.0329] | tie |
+| `hmm` vs `trail20` | +0.0077 [-0.0072, +0.0220] | -0.0061 [-0.0483, +0.0354] | tie |
+| `ewma_hmm` vs `combo_vol` | -0.0041 [-0.0130, +0.0047] | -0.0036 [-0.0343, +0.0280] | tie |
+
+**Two readings, and the difference matters.** The regime label standing alone ranks *fourth of
+six*, below a plain EWMA and below a three-model vol combination that uses no regime
+information at all -- its point estimates are worse, though not significantly. Adding it on top
+of EWMA does improve the point estimate (R-sq 0.484 -> 0.497, MSE -0.0057) but the interval
+comfortably brackets zero.
+
+So the strictly correct statement is: **no detectable difference either way**, with 50 blocks
+and wide intervals, and a favourable-but-insignificant point estimate for the increment. This
+is a null result, not proof of uselessness. What it does establish is that test 9's positive
+result buys nothing you cannot get free -- the EWMA already contains it. Test 12 then asks what
+happens if you act on the favourable point estimate anyway.
+
+---
+
+## 12. Sizing beats switching -- but the HMM is the wrong input for it
+
+`tools/vol_sizing.py`. Test 10 killed the in/out filter; test 9 said the model's only output is
+a vol estimate. Sizing is the obvious remaining use: hold a continuous position inversely
+proportional to predicted vol instead of switching between fully invested and flat. All sizers
+target 15% annualized vol, cap exposure at 1.0 (no leverage, so nothing can win by quietly
+taking more risk), and pay 5 bps on every exposure change.
+
+| strategy | return | max DD | vol | Sharpe | exposure | turnover | ret/vol |
+|---|---|---|---|---|---|---|---|
+| `size_trail20` | 6.68% | -11.38% | 16.9% | **0.89** | 76% | 2.1 | 0.40 |
+| `size_ewma` | 6.58% | -11.54% | 17.0% | 0.88 | 77% | 2.0 | 0.39 |
+| `size_hmm` | 5.82% | -11.24% | 16.3% | 0.81 | 75% | 7.9 | 0.36 |
+| `size_ewma_hmm` | 6.15% | -11.37% | 16.5% | 0.80 | 76% | 6.3 | 0.37 |
+| `hmm_filter` (shipped) | 2.80% | -12.53% | 17.0% | **0.36** | 45% | 49.6 | 0.16 |
+| `buy_hold` | 11.66% | -16.68% | 26.5% | 0.97 | 100% | 1.0 | 0.44 |
+
+| comparison | Sharpe | max drawdown | total return |
+|---|---|---|---|
+| `size_ewma` vs `hmm_filter` | **+0.522** [+0.201, +0.850] | +0.0099, n.s. | **+3.78pp** [+0.26, +7.01] |
+| `size_ewma_hmm` vs `size_ewma` | **-0.079** [-0.114, -0.044] | +0.0016, n.s. | **-0.43pp** [-0.81, -0.08] |
+| `size_hmm` vs `size_ewma` | **-0.077** [-0.145, -0.005] | +0.0029, n.s. | **-0.76pp** [-1.48, -0.03] |
+| `size_ewma` vs `size_trail20` | -0.011, n.s. | -0.0016 [-0.0027, -0.0005] | -0.10pp, n.s. |
+| `size_ewma` vs `buy_hold` | **-0.084** [-0.127, -0.043] | **+5.15pp** [+3.27, +7.32] | **-5.08pp** [-11.53, -0.07] |
+
+**Three findings:**
+
+1. **Sizing massively beats the shipped filter.** +0.52 Sharpe, +3.78pp return, and turnover of
+   2.0 against 49.6. This is the largest improvement any test in this document has produced --
+   and it comes entirely from replacing the regime signal with a volatility estimate.
+2. **Adding the regime makes sizing significantly WORSE.** `size_ewma_hmm` loses 0.079 Sharpe
+   and 0.43pp of return against plain `size_ewma`, with intervals excluding zero, and is better
+   in only 24% of windows. `size_hmm` is worse still. **The mechanism is turnover:** the regime
+   offset jitters the position (6.3 turnover vs 2.0) for a forecast improvement too small to
+   detect. This is the cleanest lesson in the whole document -- *a statistically undetectable
+   forecast gain became a statistically significant performance loss once you had to pay to
+   trade on it.* Test 11's favourable point estimate was worth acting on only if free.
+3. **Even EWMA is unnecessary.** `size_trail20` -- a 20-bar rolling standard deviation -- ties
+   `size_ewma` on Sharpe and is *significantly better* on drawdown.
+
+**And sizing is not free either.** Against buy-and-hold it cuts drawdown by 5.15pp but gives up
+5.08pp of return and 0.084 of Sharpe, both significant. It is a risk-reduction tool, not an
+improvement in risk-adjusted return, on this sample.
+
+---
+
+## 13. It is not the features. It is the architecture.
+
+`tools/vol_features.py`. The standing objection to tests 9, 11 and 12 is that the HMM was never
+given volatility features -- `returns`, `range` and `volume_change` are only incidentally vol
+proxies. So: build proper ones and re-run the only question that matters.
+
+`RegimeDetector` already accepts `feature_columns`, so no engine change was needed. Three sets,
+each fitted per window and used to add a per-regime offset to the EWMA forecast:
+
+* `baseline` -- returns, range, volume_change (shipped)
+* `vol` -- log EWMA vol, log 60-bar vol, vol-of-vol, downside-variance share, normalized range
+* `vol_ret` -- the vol set plus returns
+
+All 50 windows fitted successfully for all three sets, so nothing below is a convergence
+artifact.
+
+| forecast | QLIKE | MSE | R-sq | vs free EWMA (QLIKE) |
+|---|---|---|---|---|
+| `ewma94` (no HMM at all) | 0.55487 | 0.23955 | 0.484 | -- |
+| `baseline` features | **0.55332** | 0.23388 | **0.497** | -0.0016 [-0.039, +0.033], tie |
+| `vol` features | 0.56106 | 0.24549 | 0.472 | +0.0062 [-0.032, +0.041], tie |
+| `vol_ret` features | 0.57315 | 0.24078 | 0.482 | +0.0183 [-0.026, +0.057], tie |
+
+**The purpose-built volatility features are worse than the shipped ones**, and neither beats a
+free EWMA. Not significantly worse -- every interval brackets zero -- but the ordering is the
+opposite of the objection's prediction, across both loss functions.
+
+The reading is architectural rather than about inputs. Forward volatility is continuous, highly
+persistent, and already well estimated by an exponential average with one parameter. A 7-state
+*discrete* latent variable has to quantize it, and quantization discards exactly the gradations
+that make a vol forecast useful. Feeding better volatility measurements into a container that
+rounds them to seven buckets does not help, and adding a returns feature (`vol_ret`) makes it
+worse by spending states on direction, which tests 4, 5, 7 and 8 established carries no
+information at all.
+
+**What would actually be needed** is a different model class -- GARCH, HAR, or simply the EWMA
+that keeps winning -- at which point nothing of the HMM remains. That is the finding.
+
+---
+
 ## Reporting fixes (not hypotheses)
 
 Two defects made reported performance wrong rather than merely optimistic. Both are fixed;
@@ -812,17 +951,19 @@ interest earned on the cash side, and IV tracks trailing realized vol. These bia
 ## What has not been tested
 
 - **Better features.** Tests 4, 5 and 7 rule out the core three *and* credit/rates/breadth
-  proxies. Untested: longer lookbacks (these are all 1-day changes) and real index data
-  (`^VIX`, `^TNX`) which no configured source currently provides. Note test 9 now shows the
-  existing features *do* carry a little forward-volatility information, so a purpose-built
-  volatility feature set is the most promising untested direction in this list.
-- **Whether an EWMA vol estimate beats the HMM at its own one success.** Test 9's positive
-  result is measured as an increment over a trailing-vol control, but nobody has asked
-  whether a plain EWMA forecast predicts forward vol *better* than the regime label, which it
-  very likely does given it explains far more variance.
-- **Position sizing off the volatility signal.** Test 9 gives forward vol, test 10 shows the
-  binary in/out filter is worthless. Sizing inversely to predicted vol is the one untested
-  use of the model's only real output.
+  proxies; test 13 now rules out a purpose-built volatility feature set as well -- it performed
+  *worse* than the shipped features. Still untested: real index data (`^VIX`, `^TNX`), which no
+  configured source provides. Given test 13's result, this is no longer a promising direction:
+  the constraint appears to be the discrete 7-state architecture, not the inputs.
+- **A different model class.** Every test here measures *this* HMM. The repeated finding that a
+  one-parameter EWMA matches or beats it at its only surviving task points at GARCH, HAR, or a
+  plain rolling standard deviation. None has been tried as a *replacement* rather than a
+  benchmark, and on the evidence one of them should be.
+- **Vol targeting as a product in its own right.** Test 12 found `size_trail20` earns Sharpe
+  0.89 against the shipped filter's 0.36, using no regime model at all. It is still worse than
+  buy-and-hold on Sharpe, so it is not an edge -- but as a drawdown-reduction overlay it is the
+  best-performing thing measured in this repo, and it has not been tuned or stress-tested at
+  all (one target vol, one cap, one cost assumption, no leverage).
 - **More windows.** 10-14 per ticker is too few for ~1% effects. Shorter OOS steps, more
   tickers, or overlapping windows with corrected standard errors would all help.
 - **Realistic slippage on the entry bar.** Costs are charged as a flat bps figure on the
@@ -861,6 +1002,24 @@ for T in SPY QQQ NVDA AAPL XLF; do
   python tools/drawdown_benchmark.py --tickers $T --save-obs ddobs/$T.csv
 done
 python tools/drawdown_benchmark.py --from-obs 'ddobs/*.csv' --json docs/drawdown_benchmark.json
+
+# Does the vol signal beat a free EWMA? (test 11)
+for T in SPY QQQ NVDA AAPL XLF; do
+  python tools/vol_forecast_shootout.py --tickers $T --save-obs vfobs/$T.csv
+done
+python tools/vol_forecast_shootout.py --from-obs 'vfobs/*.csv' --json docs/vol_forecast_shootout.json
+
+# Does sizing off predicted vol rescue it? (test 12)
+for T in SPY QQQ NVDA AAPL XLF; do
+  python tools/vol_sizing.py --tickers $T --save-obs vsobs/$T.csv
+done
+python tools/vol_sizing.py --from-obs 'vsobs/*.csv' --json docs/vol_sizing.json
+
+# Would purpose-built volatility features fix it? (test 13)
+for T in SPY QQQ NVDA AAPL XLF; do
+  python tools/vol_features.py --tickers $T --save-obs fsobs/$T.csv
+done
+python tools/vol_features.py --from-obs 'fsobs/*.csv' --json docs/vol_features.json
 
 # Baseline walk-forward on one ticker
 .venv/bin/python walk_forward.py SPY --interval 1d --period-days 3000 --regimes 7

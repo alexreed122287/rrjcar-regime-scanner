@@ -1,0 +1,94 @@
+{
+  "n_obs_all": 6300,
+  "n_obs_nonoverlapping": 1260,
+  "table": {
+    "ewma94": {
+      "qlike": 0.554872,
+      "mse": 0.239552,
+      "r2": 0.4844
+    },
+    "baseline": {
+      "qlike": 0.553324,
+      "mse": 0.233879,
+      "r2": 0.4966
+    },
+    "vol": {
+      "qlike": 0.561064,
+      "mse": 0.245495,
+      "r2": 0.4716
+    },
+    "vol_ret": {
+      "qlike": 0.573147,
+      "mse": 0.24078,
+      "r2": 0.4817
+    }
+  },
+  "comparisons": {
+    "baseline_vs_ewma94": {
+      "mse": {
+        "usable": true,
+        "n": 1260,
+        "n_blocks": 50,
+        "mean_diff": -0.00567295413861572,
+        "ci_low": -0.015322668481218589,
+        "ci_high": 0.003653072447152124,
+        "frac_a_worse": 0.1195,
+        "verdict": "tie"
+      },
+      "qlike": {
+        "usable": true,
+        "n": 1260,
+        "n_blocks": 50,
+        "mean_diff": -0.0015481291868530717,
+        "ci_low": -0.03913496521452294,
+        "ci_high": 0.03289963325819796,
+        "frac_a_worse": 0.487,
+        "verdict": "tie"
+      }
+    },
+    "vol_vs_ewma94": {
+      "mse": {
+        "usable": true,
+        "n": 1260,
+        "n_blocks": 50,
+        "mean_diff": 0.005943072488336093,
+        "ci_low": -0.0026739341193155303,
+        "ci_high": 0.01440602398286344,
+        "frac_a_worse": 0.911,
+        "verdict": "tie"
+      },
+      "qlike": {
+        "usable": true,
+        "n": 1260,
+        "n_blocks": 50,
+        "mean_diff": 0.006192058288948159,
+        "ci_low": -0.03204961094503184,
+        "ci_high": 0.04123061214704951,
+        "frac_a_worse": 0.62725,
+        "verdict": "tie"
+      }
+    },
+    "vol_ret_vs_ewma94": {
+      "mse": {
+        "usable": true,
+        "n": 1260,
+        "n_blocks": 50,
+        "mean_diff": 0.001227355859173466,
+        "ci_low": -0.010626041298413737,
+        "ci_high": 0.012326175810854816,
+        "frac_a_worse": 0.58175,
+        "verdict": "tie"
+      },
+      "qlike": {
+        "usable": true,
+        "n": 1260,
+        "n_blocks": 50,
+        "mean_diff": 0.018274806928693377,
+        "ci_low": -0.025807746543905937,
+        "ci_high": 0.05683258690660457,
+        "frac_a_worse": 0.807,
+        "verdict": "tie"
+      }
+    }
+  }
+}
