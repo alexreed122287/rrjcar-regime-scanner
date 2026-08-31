@@ -48,7 +48,8 @@ def fetch_vix(start_date: str = None, end_date: str = None) -> pd.Series:
 #  ENHANCED CONFIRMATIONS (12 signals)
 # ═══════════════════════════════════════════
 
-def compute_confirmations_v2(df: pd.DataFrame) -> pd.DataFrame:
+def compute_confirmations_v2(df: pd.DataFrame,
+                             periods_per_year: float = DAILY_PERIODS_PER_YEAR) -> pd.DataFrame:
     """
     12 confirmation signals optimized for long call entries on daily bars.
 
@@ -97,7 +98,13 @@ def compute_confirmations_v2(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ── Historical volatility rank ──
-    out["hv_20"] = out["Close"].pct_change().rolling(20).std() * np.sqrt(252)
+    # Annualize with the actual bar frequency, not a hardcoded 252. On daily bars this is
+    # unchanged; on hourly bars the old constant understated vol by ~sqrt(6.5). This was
+    # dormant rather than wrong-in-production -- the only consumers were hv_rank (a rolling
+    # percentile, so scale-invariant) and _sigma (which compensated explicitly) -- but it is
+    # a trap for the next consumer, so fix it at the source and drop the compensation.
+    ppy = float(periods_per_year) if periods_per_year else DAILY_PERIODS_PER_YEAR
+    out["hv_20"] = out["Close"].pct_change().rolling(20).std() * np.sqrt(ppy)
     out["hv_rank"] = out["hv_20"].rolling(252, min_periods=60).apply(
         lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False
     )
@@ -257,8 +264,20 @@ def run_backtest_v2(
         if bearish_regimes is None:
             bearish_regimes = derived["bearish"]
 
+    if not list(bullish_regimes):
+        # regime_sets(1) returns an EMPTY bullish list, so a single-regime frame used to run
+        # to completion and report 0 trades / 0.00% return -- indistinguishable from "the
+        # strategy chose not to trade". That silently passed four tests in #24. A backtest
+        # that cannot enter is a caller error, so say so instead of returning a clean zero.
+        raise ValueError(
+            f"No bullish regimes to trade: n_regimes={n_regimes} yields an empty bullish "
+            f"set (regime_sets({n_regimes})['bullish'] == []). A frame with a constant "
+            f"regime_id infers n_regimes=1 this way. Pass bullish_regimes=[...] explicitly, "
+            f"or pass n_regimes matching the model that labelled the frame."
+        )
+
     # Compute enhanced confirmations
-    data = compute_confirmations_v2(df)
+    data = compute_confirmations_v2(df, periods_per_year=periods_per_year)
     data = data.dropna().copy()
 
     # Pre-compute regime streak
@@ -314,13 +333,16 @@ def run_backtest_v2(
     roll_cash_pct = 0.0
     total_roll_cash_pct = 0.0
     total_roll_cost_pct = 0.0
-    hv_scale = math.sqrt(float(periods_per_year) / 252.0) if periods_per_year else 1.0
+    # hv_20 is now annualized at this same periods_per_year by compute_confirmations_v2
+    # below, so no rescaling is needed here. Scaling again would double-count the interval.
+    hv_scale = 1.0
 
     def _sigma(r_):
         """IV proxy from trailing realized vol.
 
-        hv_20 is annualized with a hardcoded sqrt(252) regardless of bar interval, the same
-        interval bug fixed for Sharpe in #22, so rescale it before using it as a vol.
+        hv_20 arrives already annualized at this backtest's periods_per_year, so it is used
+        as-is. It previously needed a sqrt(periods_per_year/252) correction here because the
+        source hardcoded 252; that was fixed at the source instead.
         """
         v = r_.get("hv_20")
         v = float(v) * hv_scale if v is not None and pd.notna(v) else 0.25
@@ -668,9 +690,11 @@ def run_backtest_v2(
     return {"trades": trades, "equity_curve": pd.Series(equity, index=data.index), "metrics": metrics, "df": data}
 
 
-def get_current_signal_v2(df: pd.DataFrame, min_confirmations: int = 6, regime_confirm_bars: int = 2) -> dict:
+def get_current_signal_v2(df: pd.DataFrame, min_confirmations: int = 6,
+                          regime_confirm_bars: int = 2,
+                          periods_per_year: float = DAILY_PERIODS_PER_YEAR) -> dict:
     """Get current V2 signal for live use."""
-    data = compute_confirmations_v2(df)
+    data = compute_confirmations_v2(df, periods_per_year=periods_per_year)
     latest = data.iloc[-1]
     prev = data.iloc[-2] if len(data) > 1 else latest
 

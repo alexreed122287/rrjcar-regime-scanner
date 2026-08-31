@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter
 
+from api.errors import error_response
+
 router = APIRouter()
 
 # Import lazily to avoid slow startup
@@ -104,7 +106,7 @@ async def get_leaps(symbol: str, top_n: int = 5, min_dte: int = 180, max_dte: in
         }
 
     except Exception as e:
-        return {"error": str(e), "symbol": symbol.upper()}
+        return error_response(e, 500, symbol=symbol.upper())
 
 
 @router.get("/gex/{symbol}")
@@ -115,7 +117,8 @@ async def get_gex(symbol: str, min_dte: int = 0, max_dte: int = 365):
         profile = gex.compute_gex_profile(symbol, min_dte=min_dte, max_dte=max_dte)
 
         if profile.get("error"):
-            return {"error": profile["error"], "symbol": symbol.upper()}
+            # Upstream reported failure -- propagate it as an upstream error, not a 200.
+            return error_response(profile["error"], 502, symbol=symbol.upper())
 
         # Get regime info from scan cache if available
         regime_id = 3
@@ -139,7 +142,7 @@ async def get_gex(symbol: str, min_dte: int = 0, max_dte: int = 365):
         }
 
     except Exception as e:
-        return {"error": str(e), "symbol": symbol.upper()}
+        return error_response(e, 500, symbol=symbol.upper())
 
 
 @router.get("/options/{symbol}")
@@ -267,4 +270,4 @@ async def get_options(
         return result
 
     except Exception as e:
-        return {"error": str(e), "symbol": symbol.upper()}
+        return error_response(e, 500, symbol=symbol.upper())

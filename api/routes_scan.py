@@ -14,6 +14,8 @@ from hmm_engine import REGIME_LABELS
 import yfinance as yf
 import logging
 
+from api.errors import error_response
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -315,5 +317,5 @@ async def scan_symbol(symbol: str, strategy: str = "v2"):
     # Fresh scan
     result = scan_single_ticker(symbol, strategy=strategy)
     if result is None:
-        return {"error": f"Failed to scan {symbol}"}
+        return error_response(f"Failed to scan {symbol}", 502)
     return _serialize_drilldown(result)

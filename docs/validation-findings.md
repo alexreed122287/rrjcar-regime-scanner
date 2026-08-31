@@ -441,11 +441,21 @@ Reproduce with `tools/regime_ranking.py`; raw output in `docs/regime_ranking.jso
 
 ### Unrelated fragility found while building this
 
-`GaussianHMM` with full covariance on three features fails to fit on most synthetic data. Of
-16 (bars, seed, vol, n_regimes) combinations probed, **3 fit**; the rest raise `LinAlgError`
-or "covars must be symmetric, positive-definite". `RegimeDetector` has no fallback, so a bad
-fit propagates as an exception rather than a degraded result. The experiment tool catches it
-per window and skips; the API does not.
+`GaussianHMM` with full covariance on three features fails to fit on most **synthetic** data.
+Of 16 (bars, seed, vol, n_regimes) combinations probed, **3 fit**; the rest raise
+`LinAlgError` or "covars must be symmetric, positive-definite". `RegimeDetector` has no
+fallback, so a bad fit propagates as an exception rather than a degraded result.
+
+**Scope, measured rather than assumed:** on real data this did not occur once --
+`tools/regime_ranking.py` fitted **50 of 50 windows across 5 tickers with zero failures**.
+The failures are a property of small, near-degenerate synthetic frames, not of the
+production path. The practical consequence is confined to test fixtures, which is why the
+ranking tests pin a verified-good fit configuration.
+
+**Correction.** An earlier revision of this section claimed the API does not catch a failed
+fit. That was wrong: `api/routes_backtest.py` wraps its handler in `except Exception` and
+always did. The real defect was the opposite shape -- it returned the error with an **HTTP
+200** status. See "Silent failure modes" below.
 
 ---
 
@@ -520,10 +530,51 @@ from **+0.04% at 0 bps to -0.44% at 5 bps**, and strategy Sharpe from +1.08 to +
    unreachable. This is the same bug that commit fixed for `run_backtest`; v2 was missed.
 4. **`strategy_v2`'s roll credits** — now measured, see "Roll credits" below. A median
    **41%** of v2's reported return comes from them.
-5. **Latent:** `regime_sets(1)` returns an **empty bullish list**. Any frame whose
-   `regime_id` is constant makes `run_backtest_v2` infer `n_regimes=1`, so no entry can ever
-   fire and the backtest silently returns zero trades rather than erroring. This produced a
-   set of vacuously-passing tests before it was noticed.
+5. ~~**Latent:** `regime_sets(1)` returns an **empty bullish list**.~~ **Fixed.** Any frame
+   whose `regime_id` is constant makes `run_backtest_v2` infer `n_regimes=1`, so no entry
+   could ever fire and the backtest silently returned zero trades rather than erroring. This
+   produced a set of vacuously-passing tests before it was noticed. `run_backtest_v2` now
+   raises `ValueError` when the resolved bullish set is empty. See "Silent failure modes".
+6. ~~**Dormant:** `hv_20` annualized with a hardcoded `sqrt(252)`.~~ **Fixed.** Worth being
+   precise about severity, because it was initially overstated: this produced **no wrong
+   numbers**. Its only two consumers were `hv_rank`, a rolling percentile and therefore
+   scale-invariant, and `strategy_v2._sigma`, which compensated explicitly. It was a trap
+   for the next consumer, not a live defect. Now annualized with the actual bar frequency at
+   the source, with the compensation in `_sigma` removed so nothing scales twice. Daily
+   results are bit-identical, as verified against `main`.
+
+---
+
+## Silent failure modes
+
+Three defects that shared a shape: **the system reported success while failing.** None
+changed a published number; all three could have hidden a future one.
+
+### A backtest that could not trade returned 0.00% instead of erroring
+
+`regime_sets(1)` has an empty bullish list, so a constant-`regime_id` frame made
+`run_backtest_v2` infer `n_regimes=1`, enter nothing, and return `trades: 0`,
+`total_return_pct: 0` — indistinguishable from a strategy that legitimately stayed in cash.
+Four tests in #24 passed vacuously this way. `run_backtest_v2` now raises `ValueError`
+naming the cause and the fix. Explicit `bullish_regimes=[...]` still bypasses the guard, so
+deliberate single-regime experiments remain possible.
+
+### Failed API requests returned HTTP 200
+
+Route handlers caught every exception and returned `{"error": str(e)}`, which FastAPI
+serializes with a **200** status. Any client checking `response.ok` or `status_code == 200`
+read a failed backtest as a successful one; only a client that inspected the body for an
+`"error"` key would notice. Six sites now return truthful codes via `api/errors.py` — 500
+for internal errors, 502 for upstream/data-provider failures, 404 for a missing order —
+while keeping the `"error"` body key so existing front-end checks keep working.
+
+Three sites were left as 200 deliberately: an empty scan (`"No tickers to scan"` with
+`results: []`) is an empty success, not an error, and `"Tradier not configured"` is a
+configuration state the UI drives a flow from.
+
+### hv_20's annualization
+
+Documented under "Known measurement bugs" item 6. Dormant, now fixed at the source.
 
 ---
 

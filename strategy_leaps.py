@@ -33,7 +33,8 @@ from typing import Dict, Optional
 from scipy.stats import norm
 
 
-def compute_leaps_confirmations(df: pd.DataFrame) -> pd.DataFrame:
+def compute_leaps_confirmations(df: pd.DataFrame,
+                                periods_per_year: float = 252.0) -> pd.DataFrame:
     """
     10 confirmation signals optimized for LEAPS entries.
     Focused on durable trends and cheap IV rather than short-term momentum.
@@ -66,7 +67,9 @@ def compute_leaps_confirmations(df: pd.DataFrame) -> pd.DataFrame:
     out["pct_52w"] = out["Close"].pct_change(252) * 100
 
     # Historical volatility (20-day) and HV rank over 1 year
-    out["hv_20"] = out["Close"].pct_change().rolling(20).std() * np.sqrt(252)
+    # Same interval-aware annualization as strategy_v2.compute_confirmations_v2.
+    ppy = float(periods_per_year) if periods_per_year else 252.0
+    out["hv_20"] = out["Close"].pct_change().rolling(20).std() * np.sqrt(ppy)
     out["hv_rank"] = out["hv_20"].rolling(252, min_periods=60).apply(
         lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False
     )
