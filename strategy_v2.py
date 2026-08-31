@@ -10,11 +10,14 @@ Key differences from V1:
   - Pullback/dip-buy logic instead of momentum-chasing
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import ta
 import yfinance as yf
 
+from options_pricing import bs_call
 from backtester import DAILY_PERIODS_PER_YEAR
 from hmm_engine import REFERENCE_N, regime_sets
 from datetime import datetime, timedelta
@@ -178,9 +181,16 @@ def run_backtest_v2(
     hv_rank_caution: float = 0.50,
     hv_caution_confs: int = 8,
     # ── Roll model ──
-    roll_up_credit_pct: float = 0.5,
-    roll_out_credit_pct: float = 0.3,
+    roll_model: str = "priced",
+    roll_up_credit_pct: float = 0.0,
+    roll_out_credit_pct: float = 0.0,
     max_rolls: int = 3,
+    itm_depth: float = 0.15,
+    sizing: str = "delta_matched",
+    roll_dte_days: float = 120.0,
+    iv_floor: float = 0.10,
+    iv_cap: float = 1.50,
+    risk_free_rate: float = 0.04,
     # ── Friction ──
     cost_bps_per_side: float = 0.0,
     periods_per_year: float = DAILY_PERIODS_PER_YEAR,
@@ -291,6 +301,31 @@ def run_backtest_v2(
     last_roll_bar = 0
     effective_entry = 0.0  # adjusted entry after rolls
 
+    # Priced-roll state. at_risk is premium still in the option; cash_realized is money a
+    # roll has taken off the table and can no longer lose. Their sum is `capital`.
+    priced = str(roll_model).lower() == "priced"
+    dt_years = 1.0 / float(periods_per_year) if periods_per_year else 1.0 / 252.0
+    opt_units = 0.0
+    strike = 0.0
+    t_remaining = 0.0
+    at_risk = 0.0
+    cash_realized = 0.0
+    entry_capital = 0.0
+    roll_cash_pct = 0.0
+    total_roll_cash_pct = 0.0
+    total_roll_cost_pct = 0.0
+    hv_scale = math.sqrt(float(periods_per_year) / 252.0) if periods_per_year else 1.0
+
+    def _sigma(r_):
+        """IV proxy from trailing realized vol.
+
+        hv_20 is annualized with a hardcoded sqrt(252) regardless of bar interval, the same
+        interval bug fixed for Sharpe in #22, so rescale it before using it as a vol.
+        """
+        v = r_.get("hv_20")
+        v = float(v) * hv_scale if v is not None and pd.notna(v) else 0.25
+        return min(max(v, float(iv_floor)), float(iv_cap))
+
     trades = []
     equity = [initial_capital]
     signals = []
@@ -310,8 +345,18 @@ def run_backtest_v2(
 
         # Track unrealized PnL
         if position_open:
-            bar_return = (price - prev_price) / prev_price
-            capital *= (1 + bar_return)
+            if priced:
+                # Mark the option, don't compound the underlying. This is where the old
+                # model went wrong: it kept full stock participation after a roll had
+                # already sold that participation off.
+                t_remaining -= dt_years
+                v_now, _ = bs_call(price, strike, max(t_remaining, 0.0),
+                                   _sigma(row), risk_free_rate)
+                at_risk = opt_units * v_now
+                capital = at_risk + cash_realized
+            else:
+                bar_return = (price - prev_price) / prev_price
+                capital *= (1 + bar_return)
             highest_since_entry = max(highest_since_entry, price)
 
         # ── ROLL CHECK (before exit logic) ──
@@ -323,10 +368,38 @@ def run_backtest_v2(
                 and regime in bullish_regimes
                 and roll_count < max_rolls
                 and bars_since_roll >= 2):
-                # Simulate roll: collect a credit, move effective entry up
-                roll_credit = float(roll_up_credit_pct)  # % of stock price
-                roll_credits_pct += roll_credit
-                capital *= (1 + roll_credit / 100)  # add credit to capital
+                if priced:
+                    # Sell the existing call, buy the same number of contracts struck back
+                    # at itm_depth below spot. The difference is real cash, and the new
+                    # leg carries less delta -- that is the cost the flat credit ignored.
+                    sig = _sigma(row)
+                    v_old, _ = bs_call(price, strike, max(t_remaining, 0.0), sig,
+                                       risk_free_rate)
+                    k_new = price * (1.0 - float(itm_depth))
+                    t_new = float(roll_dte_days) / 365.0
+                    v_new, _ = bs_call(price, k_new, t_new, sig, risk_free_rate)
+                    if v_old <= 0.0 or v_new <= 0.0:
+                        signals.append("HOLD")
+                        equity.append(capital)
+                        continue
+                    proceeds = opt_units * (v_old - v_new)
+                    leg_cost = cost_frac * opt_units * (v_old + v_new)
+                    cash_realized += proceeds - leg_cost
+                    total_cost_paid_pct += (leg_cost / entry_capital * 100.0
+                                            if entry_capital else 0.0)
+                    total_roll_cost_pct += (leg_cost / entry_capital * 100.0
+                                            if entry_capital else 0.0)
+                    strike = k_new
+                    t_remaining = t_new
+                    at_risk = opt_units * v_new
+                    capital = at_risk + cash_realized
+                    booked = (proceeds / entry_capital * 100.0) if entry_capital else 0.0
+                    roll_cash_pct += booked
+                    total_roll_cash_pct += booked
+                else:
+                    roll_credit = float(roll_up_credit_pct)  # % of stock price
+                    roll_credits_pct += roll_credit
+                    capital *= (1 + roll_credit / 100)  # add credit to capital
                 effective_entry = price  # reset entry to current price after roll
                 roll_count += 1
                 last_roll_bar = i
@@ -339,6 +412,10 @@ def run_backtest_v2(
             exit_reason = None
             bars_held = i - entry_bar
             gain_pct = (price - entry_price) / entry_price * 100
+
+            # 0. Option expiry — only reachable in priced mode, where the leg has a real DTE.
+            if priced and t_remaining <= 0.0:
+                exit_reason = f"Option expiry ({bars_held} bars)"
 
             # 1. Regime flip to bearish (immediate, no roll possible)
             if regime in bearish_regimes:
@@ -354,9 +431,32 @@ def run_backtest_v2(
             if not exit_reason and bars_held >= time_stop_bars and gain_pct <= 0:
                 # Simulate: can we roll out for credit?
                 if regime in bullish_regimes and roll_count < max_rolls:
-                    roll_credit = float(roll_out_credit_pct)
-                    roll_credits_pct += roll_credit
-                    capital *= (1 + roll_credit / 100)
+                    if priced:
+                        # Buying time is a DEBIT. The flat model paid a credit here, which
+                        # was backwards; it also fired only on losers, so it paid you to
+                        # defer realizing a loss.
+                        sig = _sigma(row)
+                        v_old, _ = bs_call(price, strike, max(t_remaining, 0.0), sig,
+                                           risk_free_rate)
+                        t_new = max(t_remaining, 0.0) + float(roll_dte_days) / 365.0
+                        v_new, _ = bs_call(price, strike, t_new, sig, risk_free_rate)
+                        proceeds = opt_units * (v_old - v_new)  # negative by construction
+                        leg_cost = cost_frac * opt_units * (v_old + v_new)
+                        cash_realized += proceeds - leg_cost
+                        total_cost_paid_pct += (leg_cost / entry_capital * 100.0
+                                                if entry_capital else 0.0)
+                        total_roll_cost_pct += (leg_cost / entry_capital * 100.0
+                                                if entry_capital else 0.0)
+                        t_remaining = t_new
+                        at_risk = opt_units * v_new
+                        capital = at_risk + cash_realized
+                        booked = (proceeds / entry_capital * 100.0) if entry_capital else 0.0
+                        roll_cash_pct += booked
+                        total_roll_cash_pct += booked
+                    else:
+                        roll_credit = float(roll_out_credit_pct)
+                        roll_credits_pct += roll_credit
+                        capital *= (1 + roll_credit / 100)
                     roll_count += 1
                     last_roll_bar = i
                     signals.append("ROLL_OUT")
@@ -375,14 +475,24 @@ def run_backtest_v2(
                     exit_reason = f"Regime neutral - {row['regime_label']}"
 
             if exit_reason:
-                gross_pnl_pct = gain_pct
-                pnl_pct = gain_pct - round_trip_cost_pct
+                if priced:
+                    # The position return and the underlying return are different numbers
+                    # once the leg is priced: theta, leverage and rolled-off delta all sit
+                    # between them. Report the position's, which is what capital did.
+                    gross_pnl_pct = ((capital / entry_capital - 1.0) * 100.0
+                                     if entry_capital else 0.0)
+                else:
+                    gross_pnl_pct = gain_pct
+                    pnl_pct = gain_pct - round_trip_cost_pct
                 # Charge the exit side against compounding capital. Deducting only from the
                 # trade row would leave total_return_pct cost-free, which is the headline
                 # number the dashboard shows.
                 if cost_frac:
                     capital *= (1.0 - cost_frac)
                     total_cost_paid_pct += cost_frac * 100.0
+                if priced:
+                    pnl_pct = ((capital / entry_capital - 1.0) * 100.0
+                               if entry_capital else 0.0)
                 trades.append({
                     "entry_bar": entry_bar,
                     "entry_date": str(data.index[entry_bar]),
@@ -401,6 +511,8 @@ def run_backtest_v2(
                     "confirmations_at_entry": int(data.iloc[entry_bar]["confirmations_met"]),
                     "roll_count": roll_count,
                     "roll_credits_pct": round(roll_credits_pct, 2),
+                    "underlying_pnl_pct": round(gain_pct, 2),
+                    "roll_cash_pct": round(roll_cash_pct, 2),
                 })
                 position_open = False
                 cooldown_remaining = cooldown_bars
@@ -408,6 +520,10 @@ def run_backtest_v2(
                 roll_credits_pct = 0.0
                 last_roll_bar = 0
                 effective_entry = 0.0
+                opt_units = 0.0
+                at_risk = 0.0
+                cash_realized = 0.0
+                roll_cash_pct = 0.0
                 signals.append("EXIT")
                 equity.append(capital)
                 continue
@@ -458,6 +574,34 @@ def run_backtest_v2(
                 roll_count = 0
                 roll_credits_pct = 0.0
                 last_roll_bar = 0
+                entry_capital = capital
+                roll_cash_pct = 0.0
+                if priced:
+                    strike = price * (1.0 - float(itm_depth))
+                    t_remaining = float(roll_dte_days) / 365.0
+                    v0, d0 = bs_call(price, strike, t_remaining, _sigma(row),
+                                     risk_free_rate)
+                    if v0 <= 0.0 or d0 <= 0.0:
+                        # Cannot price the leg; do not open a position we can't value.
+                        position_open = False
+                        signals.append("WAIT")
+                        equity.append(capital)
+                        continue
+                    if str(sizing).lower() == "delta_matched":
+                        # Size so dollar delta equals capital. A call bought with 100% of
+                        # capital is roughly 5x levered at these strikes, and comparing a
+                        # 5x book to buy-and-hold would flatter the strategy for a reason
+                        # that has nothing to do with the signal. "Stock replacement" means
+                        # matching the exposure and holding the rest in cash.
+                        opt_units = capital / (d0 * price)
+                        premium = min(opt_units * v0, capital)
+                    else:
+                        opt_units = capital / v0
+                        premium = capital
+                    at_risk = premium
+                    # cash_realized holds every dollar not exposed to the option: the
+                    # unspent balance here, plus whatever later rolls take off the table.
+                    cash_realized = capital - premium
                 signals.append("ENTRY")
                 equity.append(capital)
                 continue
@@ -518,6 +662,9 @@ def run_backtest_v2(
     metrics["total_roll_credits_pct"] = round(
         sum(float(t.get("roll_credits_pct", 0.0)) for t in trades), 4)
     metrics["total_rolls"] = int(sum(int(t.get("roll_count", 0)) for t in trades))
+    metrics["roll_model"] = "priced" if priced else "flat"
+    metrics["total_roll_cash_pct"] = round(total_roll_cash_pct, 2)
+    metrics["total_roll_cost_pct"] = round(total_roll_cost_pct, 2)
     return {"trades": trades, "equity_curve": pd.Series(equity, index=data.index), "metrics": metrics, "df": data}
 
 

@@ -54,11 +54,15 @@ from strategy_v2 import run_backtest_v2
 
 DEFAULT_TICKERS = ["SPY", "QQQ", "NVDA", "AAPL", "XLF"]
 
+# Every config pins roll_model="flat". The flat credit is no longer the default --
+# run_backtest_v2 now prices the roll legs -- but this tool exists to reproduce the
+# historical numbers, so it must ask for the historical model explicitly. Without the pin
+# these four configs would silently return identical results.
 CONFIGS = {
-    "baseline":   dict(roll_up_credit_pct=0.5, roll_out_credit_pct=0.3),
-    "no_rolls":   dict(roll_up_credit_pct=0.0, roll_out_credit_pct=0.0),
-    "up_only":    dict(roll_up_credit_pct=0.5, roll_out_credit_pct=0.0),
-    "sign_fixed": dict(roll_up_credit_pct=0.5, roll_out_credit_pct=-0.3),
+    "baseline":   dict(roll_model="flat", roll_up_credit_pct=0.5, roll_out_credit_pct=0.3),
+    "no_rolls":   dict(roll_model="flat", roll_up_credit_pct=0.0, roll_out_credit_pct=0.0),
+    "up_only":    dict(roll_model="flat", roll_up_credit_pct=0.5, roll_out_credit_pct=0.0),
+    "sign_fixed": dict(roll_model="flat", roll_up_credit_pct=0.5, roll_out_credit_pct=-0.3),
 }
 
 

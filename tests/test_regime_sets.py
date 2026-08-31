@@ -579,14 +579,17 @@ def test_fixture_actually_produces_rolls():
 
 
 def test_roll_credits_are_parameterized_and_scale():
-    """The roll credit was hardcoded at 0.5%; it must be measurable."""
+    """The roll credit was hardcoded at 0.5%; it must be measurable.
+
+    Pins the legacy flat-credit path, which is now opt-in via roll_model="flat".
+    """
     from strategy_v2 import run_backtest_v2
 
     scored = _rolling_uptrend_scored()
-    off = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=0.0,
-                          roll_out_credit_pct=0.0)["metrics"]
-    half = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=0.5,
-                           roll_out_credit_pct=0.0)["metrics"]
+    off = run_backtest_v2(scored, min_confirmations=3, roll_model="flat",
+                          roll_up_credit_pct=0.0, roll_out_credit_pct=0.0)["metrics"]
+    half = run_backtest_v2(scored, min_confirmations=3, roll_model="flat",
+                           roll_up_credit_pct=0.5, roll_out_credit_pct=0.0)["metrics"]
     if half["total_rolls"] == 0:
         return  # no rolls on this seed; nothing to assert
     assert off["total_roll_credits_pct"] == 0.0
@@ -601,8 +604,10 @@ def test_roll_credits_lift_reported_return():
     from strategy_v2 import run_backtest_v2
 
     scored = _rolling_uptrend_scored()
-    lo = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=0.1)["metrics"]
-    hi = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=1.0)["metrics"]
+    lo = run_backtest_v2(scored, min_confirmations=3, roll_model="flat",
+                         roll_up_credit_pct=0.1)["metrics"]
+    hi = run_backtest_v2(scored, min_confirmations=3, roll_model="flat",
+                         roll_up_credit_pct=1.0)["metrics"]
     if hi["total_rolls"] == 0:
         return
     assert hi["total_roll_credits_pct"] > lo["total_roll_credits_pct"]
@@ -613,10 +618,10 @@ def test_max_rolls_caps_credits_per_trade():
     from strategy_v2 import run_backtest_v2
 
     scored = _rolling_uptrend_scored()
-    r = run_backtest_v2(scored, min_confirmations=3, max_rolls=1)
+    r = run_backtest_v2(scored, min_confirmations=3, roll_model="flat", max_rolls=1)
     for t in r["trades"]:
         assert t["roll_count"] <= 1
-    r0 = run_backtest_v2(scored, min_confirmations=3, max_rolls=0)
+    r0 = run_backtest_v2(scored, min_confirmations=3, roll_model="flat", max_rolls=0)
     assert r0["metrics"]["total_rolls"] == 0
     assert r0["metrics"]["total_roll_credits_pct"] == 0.0
 
@@ -633,9 +638,109 @@ def test_roll_out_credit_is_unreachable_at_defaults():
     from strategy_v2 import run_backtest_v2
 
     scored = _rolling_uptrend_scored()
-    kw = dict(min_confirmations=3, roll_up_credit_pct=0.5)
+    kw = dict(min_confirmations=3, roll_model="flat", roll_up_credit_pct=0.5)
     a = run_backtest_v2(scored, roll_out_credit_pct=0.3, **kw)["metrics"]
     b = run_backtest_v2(scored, roll_out_credit_pct=99.0, **kw)["metrics"]
     c = run_backtest_v2(scored, roll_out_credit_pct=-99.0, **kw)["metrics"]
+    assert a["roll_model"] == "flat"
     assert a["total_return_pct"] == b["total_return_pct"] == c["total_return_pct"]
     assert a["total_roll_credits_pct"] == b["total_roll_credits_pct"]
+
+
+# ─────────────────────── priced roll model (options_pricing) ───────────────────────
+
+def test_priced_is_the_default_roll_model():
+    from strategy_v2 import run_backtest_v2
+
+    m = run_backtest_v2(_rolling_uptrend_scored(), min_confirmations=3)["metrics"]
+    assert m["roll_model"] == "priced"
+    # The flat credits must default to zero so nothing is credited unconditionally.
+    assert m["total_roll_credits_pct"] == 0.0
+
+
+def test_flat_credits_are_ignored_under_priced_model():
+    """A stray roll_up_credit_pct must not leak free money into the priced path."""
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    a = run_backtest_v2(scored, min_confirmations=3)["metrics"]
+    b = run_backtest_v2(scored, min_confirmations=3, roll_up_credit_pct=5.0,
+                        roll_out_credit_pct=5.0)["metrics"]
+    assert a["total_return_pct"] == b["total_return_pct"]
+
+
+def test_priced_roll_does_not_create_money():
+    """The core correctness property.
+
+    Under the flat model, more rolls meant more return without limit -- the credit was
+    income. Priced, a roll is a reallocation: cash comes off the table and delta goes with
+    it, so raising max_rolls must not manufacture return.
+    """
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    none_ = run_backtest_v2(scored, min_confirmations=3, max_rolls=0)["metrics"]
+    many = run_backtest_v2(scored, min_confirmations=3, max_rolls=20)["metrics"]
+    assert many["total_rolls"] > none_["total_rolls"]
+    assert many["total_roll_cash_pct"] > 0.0, "rolling up must release cash"
+    # In a persistent uptrend, de-risking must cost return rather than add it.
+    assert many["total_return_pct"] < none_["total_return_pct"]
+
+
+def test_priced_rolls_charge_transaction_cost_on_both_legs():
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    free = run_backtest_v2(scored, min_confirmations=3, cost_bps_per_side=0.0)["metrics"]
+    paid = run_backtest_v2(scored, min_confirmations=3, cost_bps_per_side=25.0)["metrics"]
+    assert free["total_roll_cost_pct"] == 0.0
+    assert paid["total_roll_cost_pct"] > 0.0
+    assert paid["total_return_pct"] < free["total_return_pct"]
+
+
+def test_delta_matched_sizing_is_less_levered_than_full_premium():
+    """Spending all capital on premium is several times levered; the default must not be."""
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    matched = run_backtest_v2(scored, min_confirmations=3, sizing="delta_matched")["metrics"]
+    full = run_backtest_v2(scored, min_confirmations=3, sizing="full_premium")["metrics"]
+    assert full["total_return_pct"] > matched["total_return_pct"]
+
+
+def test_deep_itm_long_dated_approximates_stock_accounting():
+    """Validation anchor.
+
+    A very deep, very long-dated call is almost the underlying, so the priced engine with
+    rolling off must land near the old stock-participation model with credits zeroed. If
+    this drifts far apart, the option accounting is wrong somewhere.
+    """
+    from strategy_v2 import run_backtest_v2
+
+    scored = _rolling_uptrend_scored()
+    stock = run_backtest_v2(scored, min_confirmations=3, roll_model="flat",
+                            roll_up_credit_pct=0.0, roll_out_credit_pct=0.0)["metrics"]
+    priced = run_backtest_v2(scored, min_confirmations=3, max_rolls=0,
+                             itm_depth=0.60, roll_dte_days=1460)["metrics"]
+    assert stock["total_trades"] == priced["total_trades"]
+    ratio = (1 + priced["total_return_pct"] / 100) / (1 + stock["total_return_pct"] / 100)
+    assert 0.80 < ratio < 1.05, f"priced diverged from stock accounting: ratio {ratio:.3f}"
+
+
+def test_short_dated_legs_expire():
+    from strategy_v2 import run_backtest_v2
+
+    r = run_backtest_v2(_rolling_uptrend_scored(), min_confirmations=3,
+                        roll_dte_days=4.0, max_rolls=0)
+    assert any("expiry" in t["exit_reason"] for t in r["trades"])
+
+
+def test_trade_rows_separate_position_and_underlying_pnl():
+    """Priced, the position's return and the stock's return are different numbers."""
+    from strategy_v2 import run_backtest_v2
+
+    r = run_backtest_v2(_rolling_uptrend_scored(), min_confirmations=3)
+    assert r["trades"], "fixture must trade"
+    for t in r["trades"]:
+        assert "underlying_pnl_pct" in t and "roll_cash_pct" in t
+    assert any(abs(t["pnl_pct"] - t["underlying_pnl_pct"]) > 1e-6 for t in r["trades"])
