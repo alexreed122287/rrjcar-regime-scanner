@@ -428,10 +428,71 @@ from **+0.04% at 0 bps to -0.44% at 5 bps**, and strategy Sharpe from +1.08 to +
    returns bearish `[2]` and `regime_sets(4)` returns `[3]`, so below 7 the hardcoded set
    matched **no state at all** -- nothing was ever bearish and the regime-flip exit was
    unreachable. This is the same bug that commit fixed for `run_backtest`; v2 was missed.
-4. **Still open:** `strategy_v2`'s roll model credits a flat 0.5% per roll up to 3 times
-   per trade, unconditional on actual option pricing. That is a free +1.5% on any trade
-   that trends, and it is not derived from anything. It inflates v2 results by an amount
-   nobody has measured.
+4. **`strategy_v2`'s roll credits** — now measured, see "Roll credits" below. A median
+   **41%** of v2's reported return comes from them.
+5. **Latent:** `regime_sets(1)` returns an **empty bullish list**. Any frame whose
+   `regime_id` is constant makes `run_backtest_v2` infer `n_regimes=1`, so no entry can ever
+   fire and the backtest silently returns zero trades rather than erroring. This produced a
+   set of vacuously-passing tests before it was noticed.
+
+---
+
+## Roll credits: a median 41% of v2's reported return
+
+`strategy_v2` is the default strategy behind `GET /backtest/{symbol}`, so its numbers are
+what the dashboard shows. It hands out two credits not derived from any option pricing:
+
+| signal | credit | trigger |
+|---|---|---|
+| `ROLL_UP` | +0.5% of stock price | `price >= effective_entry + 1 ATR`, still bullish |
+| `ROLL_OUT` | +0.3% of stock price | past the time stop **at a loss**, still bullish |
+
+up to 3 per trade. Neither depends on strike, moneyness, implied vol, or time to expiry,
+and nothing is surrendered in exchange. `tools/roll_credit_sensitivity.py` measures four
+configurations on identical data (5 bps/side, 7 regimes, ~2060 daily bars).
+
+### Result
+
+| ticker | as shipped | credits off | delta | credit share | rolls | buy & hold |
+|---|---|---|---|---|---|---|
+| SPY | +129.75% | +68.64% | 61.11 pp | **47%** | 62 | +200.55% |
+| QQQ | +66.76% | +39.35% | 27.41 pp | **41%** | 36 | +320.27% |
+| NVDA | +1074.08% | +753.24% | 320.84 pp | **30%** | 64 | +3209.06% |
+| AAPL | +36.07% | +19.52% | 16.55 pp | **46%** | 26 | +504.77% |
+| XLF | +40.84% | +30.04% | 10.80 pp | **26%** | 16 | +138.80% |
+
+Mean return falls **+269.4% → +182.1%** when the credits are switched off. That is 32% of
+the mean, but the mean is dominated by NVDA's compounding; the **per-ticker median is 41%**,
+ranging 26-47%. Every ticker is affected.
+
+### The wrong-signed credit never fires
+
+`ROLL_OUT` has the wrong sign — rolling a long call to a later expiry buys time value and
+costs a **debit**, and it fires only on a losing position, so it pays cash *and* defers
+realizing the loss. In practice it is **unreachable**: setting
+`roll_out_credit_pct` to +0.3, +99 or -99 gives byte-identical results, so all credits come
+from `ROLL_UP`. The reason is exit ordering — the regime-flip check precedes the time-stop
+roll attempt, and 85 of 97 SPY exits are regime flips (mean hold 5.5 bars), so positions
+close before they can qualify. The sign error is inert, not merely small. A characterization
+test pins this down so it starts failing if a future change makes the path reachable.
+
+`ROLL_UP` has the right sign — closing a long call and reopening higher genuinely collects
+a credit — but the model keeps compounding **full capital** on the underlying afterwards. A
+real roll up cuts delta, so upside participation should fall, and here it never does. The
+credit is collected with no offsetting cost.
+
+### The larger finding
+
+**Buy-and-hold beats v2 on 5 of 5 tickers, with or without the credits.** NVDA returns
++1074% against +3209% for simply holding. A +269% mean looks impressive in isolation, and
+roughly two fifths of it is fabricated, and even the gross figure loses to doing nothing on
+every name tested.
+
+These are in-sample full-history backtests, the same basis the API uses — the right basis
+for "how much of the displayed number is this", but **not** out-of-sample evidence. They say
+nothing about whether the strategy works; test 4 already answered that.
+
+Raw output: `docs/roll_credit.json`.
 
 ---
 
@@ -462,6 +523,9 @@ from **+0.04% at 0 bps to -0.44% at 5 bps**, and strategy Sharpe from +1.08 to +
 
 # Do cross-asset features help?
 .venv/bin/python tools/cross_asset_features.py --regimes auto
+
+# How much of v2's return is the unconditional roll credit?
+.venv/bin/python tools/roll_credit_sensitivity.py
 
 # What do transaction costs do to all of the above?
 .venv/bin/python tools/cost_sensitivity.py --regimes 7 --costs 0,1,2,5,10,20
