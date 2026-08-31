@@ -1048,8 +1048,8 @@ from **+0.04% at 0 bps to -0.44% at 5 bps**, and strategy Sharpe from +1.08 to +
 
 ## Silent failure modes
 
-Four defects that shared a shape: **the system reported success while failing.** None
-changed a published number; all four could have hidden a future one.
+Five defects that shared a shape: **the system reported success while failing.** None
+changed a published number; all five could have hidden a future one.
 
 ### A backtest that could not trade returned 0.00% instead of erroring
 
@@ -1112,19 +1112,90 @@ Caveat: threadpooled handlers occupy AnyIO's worker threads (40 by default), and
 load, not a correctness problem. Neither BLAS threading nor the shared-state issues noted
 below were touched by this fix.
 
-### Unsynchronized module-level state (found, not fixed)
+### A scan that failed left the UI stuck on "scanning" forever
 
-Noted while auditing the above, and left alone deliberately -- these are latent rather than
-demonstrated, and the fix above increases real concurrency, which makes them more reachable
-than before:
+This one is a direct consequence of the previous fix, and it is the reason the shared state
+below could not stay a footnote. `run_scan` set `_scan_cache["status"] = "scanning"` with no
+`try`/`finally`, so **any** exception -- one bad ticker propagating out of `scan_watchlist`,
+a data-provider outage -- left the status pinned at `"scanning"` for the life of the process.
+Every subsequent poll reported a scan in progress that had died minutes earlier, and no page
+reload recovered it, because the state lives in the module rather than the session.
 
-- `api/routes_scan.py` mutates a module-level `_scan_cache` dict that `api/routes_options.py`
-  reads at three sites. Concurrent scans interleave writes to it.
+Note the interaction: before the event-loop fix, `/api/scan/status` could never return
+`"scanning"` at all, so a permanently stuck `"scanning"` was invisible. Making the progress
+indicator reachable is what made this reachable too. Fixing one silent failure exposed a
+second, which is the ordinary way of these things.
+
+**A claim retracted.** The first draft of this section said a client closing the tab mid-scan
+also wedged the dashboard, on the reasoning that `GeneratorExit` into the SSE generator would
+hit the same missing `finally`. That was asserted from reading the code, and it is wrong.
+Measured against a live server, killing the client 3s into an 8-ticker stream:
+
+| run | pool state | outcome |
+| --- | --- | --- |
+| control, client stays attached | warm | `"done"` at 2.7s |
+| client killed | warm | `"done"` at +15s, 10/10 tickers published |
+| client killed | cold | `"done"` at +16s, 8/8 tickers published |
+
+uvicorn keeps pulling the generator after the client is gone, so an abandoned stream runs to
+completion and publishes normally. The `finally` in `generate()` therefore covers exceptions,
+not disconnects, and the docstring on the corresponding test says so.
+
+What did happen once, and was never reproduced: a stream sat at `"scanning"` for **5+ minutes**
+with its six worker processes alive at ~3% CPU, publishing nothing, and only cleared because a
+later scan superseded it. Two subsequent attempts (one on a deliberately cold process pool)
+resolved in 16s. The cause is unidentified. Since nothing in the fetch path sets a timeout, a
+stalled upstream request can strand the status for as long as it stalls, so `_STALE_SCAN_SECONDS`
+(30 min) reports a `"scanning"` older than the deadline as `"idle"` with `stale_scan` set. That
+is a bounded backstop for an unexplained hang, **not** a fix for a demonstrated defect, and it
+is the one piece of this change that is a judgement call rather than a correction -- it can be
+deleted without affecting anything else here.
+
+Three further defects in the same dict, all of them now closed:
+
+- **Torn reads.** A finished scan wrote `results_full`, `results`, `timestamp`, `status` and
+  `elapsed` as five separate assignments, publishing `status="done"` *before* `elapsed`. A
+  reader between those two writes saw a completed scan with a missing or stale field.
+  `api/routes_options.py` read `results_full` at three sites with no status check at all.
+- **`KeyError` on the happy path.** `run_scan` returned `_scan_cache["elapsed"]` by subscript.
+  If publication had not happened -- which is exactly what an overlapping scan causes -- the
+  handler raised. `elapsed` is a local variable now.
+- **Overlapping scans clobbering each other.** Two concurrent scans published into the same
+  dict with no ordering, so the results could be a mixture of both. Each scan now carries a
+  monotonic generation token and a superseded scan discards its results instead of publishing
+  them over a newer one.
+
+All access now goes through five helpers holding a single `RLock`, and publication is one
+locked `dict.update` so no reader can observe a partial scan.
+
+`tests/test_scan_cache_concurrency.py` (24 tests) encodes the rules rather than the fix: no
+module in `api/` may name `_scan_cache` outside those helpers, every helper must hold the lock,
+and both entry points must release the status in a `finally`. Verified by reverting each
+element in turn -- dropping the `finally` fails 3 tests, ignoring the generation token fails 1,
+resetting the status unconditionally fails 5, publishing key-by-key fails 1, and reaching into
+the dict from `routes_options` fails 1.
+
+One honest limitation, since it determines what these tests are worth. The *source-level*
+checks are the load-bearing ones. The runtime race detector -- a reader thread hammering the
+cache while scans publish -- does **not** catch a key-by-key publish on its own: in CPython the
+window between two dict assignments is short enough that the reader almost never lands inside
+it. So the file carries a positive control that reintroduces the old unlocked publish with a
+2 ms gap and asserts the detector *does* fire. If that control ever stops failing, the
+negative test next to it has quietly become decorative.
+
+### Unsynchronized module-level state (the rest, found and not fixed)
+
+Left alone deliberately, and scoped honestly -- these are latent rather than demonstrated:
+
 - `api/routes_options.py` lazily initializes `_options_picker`, `_gex_engine` and
-  `_leaps_strategy` via `global` with no lock, so simultaneous first requests can each
-  construct their own.
+  `_leaps_strategy` via `global` with no lock, so simultaneous first requests can each run the
+  initializer. In practice each one only rebinds a module object that Python's import system
+  has already made idempotent, so the duplicate work is wasted rather than harmful. A lock
+  here would also be held across an `import`, which is its own hazard; the honest call is to
+  leave it and say why rather than add synchronization that buys nothing.
 - `api/routes_broker.py` mutates `data_loader._tradier_config_cache` from a request handler
-  and spawns a raw `threading.Thread` for ladder orders.
+  and spawns a raw `threading.Thread` for ladder orders. This is order-capable code, so it
+  wants its own change with its own review rather than being folded into a cache fix.
 - No `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `OPENBLAS_NUM_THREADS` is set anywhere, so
   concurrent HMM fits oversubscribe BLAS threads against available cores.
 

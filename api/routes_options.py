@@ -46,8 +46,8 @@ def get_leaps(symbol: str, top_n: int = 5, min_dte: int = 180, max_dte: int = 73
         spot = 0
         hv_rank = 0.5
         try:
-            from api.routes_scan import _scan_cache
-            full_results = _scan_cache.get("results_full", [])
+            from api.routes_scan import cached_results_full
+            full_results = cached_results_full()
             cached = next((r for r in full_results if r.get("symbol", "").upper() == symbol.upper()), None)
             if cached and cached.get("price"):
                 spot = cached["price"]
@@ -124,8 +124,8 @@ def get_gex(symbol: str, min_dte: int = 0, max_dte: int = 365):
         regime_id = 3
         regime_label = "Unknown"
         try:
-            from api.routes_scan import _scan_cache
-            full_results = _scan_cache.get("results_full", [])
+            from api.routes_scan import cached_results_full
+            full_results = cached_results_full()
             cached = next((r for r in full_results if r.get("symbol", "").upper() == symbol.upper()), None)
             if cached:
                 regime_id = cached.get("regime_id", 3)
@@ -154,11 +154,11 @@ def get_options(
     include_gex: bool = True,
 ):
     try:
-        from api.routes_scan import _scan_cache
+        from api.routes_scan import cached_results_full
         picker = _get_picker()
 
         # Try to get regime info from cache
-        full_results = _scan_cache.get("results_full", [])
+        full_results = cached_results_full()
         cached = next((r for r in full_results if r.get("symbol", "").upper() == symbol.upper()), None)
 
         regime_id = 3
