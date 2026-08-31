@@ -1,0 +1,258 @@
+{
+  "alpha": 0.0125,
+  "n_obs": 6300,
+  "horizons": {
+    "5": {
+      "trailing_vol_benchmark_rho": 0.6709,
+      "raw": {
+        "n": 6300,
+        "usable": true,
+        "kw_p": 4.8405761163846025e-119,
+        "epsilon_squared": 0.089,
+        "bear_minus_bull": 0.06923,
+        "mw_p": 1.6935194099557908e-31,
+        "tickers_with_direction": "5/5",
+        "windows_with_direction": "38/48",
+        "per_ticker_gap": {
+          "AAPL": 0.0293,
+          "NVDA": 0.0944,
+          "QQQ": 0.0479,
+          "SPY": 0.0286,
+          "XLF": 0.067
+        },
+        "bars": {
+          "separation": true,
+          "effect_size": true,
+          "direction": true,
+          "consistency": true
+        },
+        "verdict": "yes"
+      },
+      "residual": {
+        "n": 6300,
+        "usable": true,
+        "kw_p": 1.630151254633528e-11,
+        "epsilon_squared": 0.00893,
+        "bear_minus_bull": 0.11262,
+        "mw_p": 2.1210158902770024e-13,
+        "tickers_with_direction": "5/5",
+        "windows_with_direction": "37/48",
+        "per_ticker_gap": {
+          "AAPL": 0.0353,
+          "NVDA": 0.1352,
+          "QQQ": 0.0895,
+          "SPY": 0.1202,
+          "XLF": 0.1812
+        },
+        "bars": {
+          "separation": true,
+          "effect_size": false,
+          "direction": true,
+          "consistency": true
+        },
+        "verdict": "no"
+      },
+      "residual_nonoverlapping": {
+        "n": 1260,
+        "usable": true,
+        "kw_p": 0.0006113739942331346,
+        "epsilon_squared": 0.01407,
+        "bear_minus_bull": 0.136,
+        "mw_p": 5.036177976226405e-05,
+        "tickers_with_direction": "5/5",
+        "windows_with_direction": "31/42",
+        "per_ticker_gap": {
+          "AAPL": 0.0055,
+          "NVDA": 0.1821,
+          "QQQ": 0.1106,
+          "SPY": 0.1913,
+          "XLF": 0.1971
+        },
+        "bars": {
+          "separation": true,
+          "effect_size": true,
+          "direction": true,
+          "consistency": true
+        },
+        "verdict": "yes"
+      },
+      "n_nonoverlapping": 1260,
+      "bootstrap_residual": {
+        "usable": true,
+        "n_blocks": 50,
+        "gap_mean": 0.13572,
+        "ci_low": 0.06933,
+        "ci_high": 0.20772,
+        "frac_positive": 1.0
+      },
+      "quintile_control_raw": {
+        "quintiles_positive": "20/25",
+        "frac": 0.8,
+        "per_ticker": {
+          "AAPL": [
+            0.0145,
+            0.027,
+            -0.0182,
+            0.0401,
+            0.0112
+          ],
+          "NVDA": [
+            0.0541,
+            0.0739,
+            -0.0156,
+            0.1049,
+            0.1106
+          ],
+          "QQQ": [
+            -0.0022,
+            0.0365,
+            0.032,
+            0.0419,
+            -0.0238
+          ],
+          "SPY": [
+            0.0155,
+            0.0306,
+            0.0358,
+            0.0221,
+            -0.0
+          ],
+          "XLF": [
+            0.0455,
+            0.0345,
+            0.0625,
+            0.0641,
+            0.0449
+          ]
+        }
+      },
+      "strict_verdict": "yes"
+    },
+    "20": {
+      "trailing_vol_benchmark_rho": 0.7747,
+      "raw": {
+        "n": 6300,
+        "usable": true,
+        "kw_p": 4.826009231528336e-140,
+        "epsilon_squared": 0.10447,
+        "bear_minus_bull": 0.05409,
+        "mw_p": 8.628192989624532e-27,
+        "tickers_with_direction": "5/5",
+        "windows_with_direction": "36/48",
+        "per_ticker_gap": {
+          "AAPL": 0.0449,
+          "NVDA": 0.0472,
+          "QQQ": 0.0325,
+          "SPY": 0.0238,
+          "XLF": 0.0432
+        },
+        "bars": {
+          "separation": true,
+          "effect_size": true,
+          "direction": true,
+          "consistency": true
+        },
+        "verdict": "yes"
+      },
+      "residual": {
+        "n": 6300,
+        "usable": true,
+        "kw_p": 1.3774314819534298e-21,
+        "epsilon_squared": 0.01666,
+        "bear_minus_bull": 0.0778,
+        "mw_p": 1.0908404770952435e-14,
+        "tickers_with_direction": "5/5",
+        "windows_with_direction": "31/48",
+        "per_ticker_gap": {
+          "AAPL": 0.0866,
+          "NVDA": 0.0586,
+          "QQQ": 0.0356,
+          "SPY": 0.085,
+          "XLF": 0.1021
+        },
+        "bars": {
+          "separation": true,
+          "effect_size": true,
+          "direction": true,
+          "consistency": true
+        },
+        "verdict": "yes"
+      },
+      "residual_nonoverlapping": {
+        "n": 315,
+        "usable": true,
+        "kw_p": 0.2580526903448425,
+        "epsilon_squared": 0.00564,
+        "bear_minus_bull": 0.0532,
+        "mw_p": 0.03946696398111173,
+        "tickers_with_direction": "4/5",
+        "windows_with_direction": "7/11",
+        "per_ticker_gap": {
+          "AAPL": 0.0553,
+          "NVDA": 0.0405,
+          "QQQ": -0.0178,
+          "SPY": 0.1893,
+          "XLF": 0.0531
+        },
+        "bars": {
+          "separation": false,
+          "effect_size": false,
+          "direction": true,
+          "consistency": true
+        },
+        "verdict": "no"
+      },
+      "n_nonoverlapping": 315,
+      "bootstrap_residual": {
+        "usable": true,
+        "n_blocks": 50,
+        "gap_mean": 0.05367,
+        "ci_low": -0.03274,
+        "ci_high": 0.13328,
+        "frac_positive": 0.896
+      },
+      "quintile_control_raw": {
+        "quintiles_positive": "21/25",
+        "frac": 0.84,
+        "per_ticker": {
+          "AAPL": [
+            0.0122,
+            0.029,
+            0.0099,
+            0.1064,
+            0.0078
+          ],
+          "NVDA": [
+            0.0293,
+            -0.0153,
+            -0.0036,
+            0.0377,
+            0.0485
+          ],
+          "QQQ": [
+            -0.0006,
+            0.0082,
+            0.017,
+            0.0219,
+            -0.0228
+          ],
+          "SPY": [
+            0.0227,
+            0.0101,
+            0.0197,
+            0.0291,
+            0.0052
+          ],
+          "XLF": [
+            0.0298,
+            0.0238,
+            0.0277,
+            0.0272,
+            0.0354
+          ]
+        }
+      },
+      "strict_verdict": "no"
+    }
+  }
+}

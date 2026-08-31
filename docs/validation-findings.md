@@ -12,7 +12,8 @@ whether the regime signal beats coin-flip entries held for the same fraction of 
 
 ## Summary
 
-Eight hypotheses tested, eight negative results.
+Ten hypotheses tested: **nine negative, one positive.** The positive one is a volatility
+result, not a return result -- see #9.
 
 | # | Hypothesis | Verdict |
 |---|---|---|
@@ -24,10 +25,20 @@ Eight hypotheses tested, eight negative results.
 | 6 | Transaction costs are a second-order detail | **No.** They cost 18-37% of gross return and *widen* the gap to random |
 | 7 | Cross-asset features (credit, rates, breadth) give regimes forward information | **No.** Macro-only regimes score exactly at the null |
 | 8 | The state ranking rule can be fixed (inverted, or scored on forward returns) | **No.** Rank 0 is the weakest state but at p=0.50; no rule clears Bonferroni |
+| 9 | Regimes separate forward **volatility**, beyond what trailing vol already gives free | **Yes, at 5 bars.** Bearish set runs ~14% higher forward vol, bootstrap CI [+0.069, +0.208], 5/5 tickers. Null at 20 bars |
+| 10 | The capital-preservation claim survives benchmarking against trivial alternatives | **No.** Real vs buy-and-hold (-12.5% vs -16.7% maxDD) but **indistinguishable from a coin flip with the same exposure**, and a 200-day MA earns 10.1% against the HMM's 2.8% for the same drawdown |
 
-The system's one demonstrated virtue is capital preservation, not alpha. In the 2022
-window SPY lost **-4.01% against buy-and-hold's -18.78%**. It runs at 3-19% market
-exposure and behaves as a defensive filter.
+**The capital-preservation claim, previously the system's one demonstrated virtue, does not
+survive #10.** The drawdown reduction is real relative to buy-and-hold, but it is what being
+out of the market buys you, not evidence of timing: a random filter holding the same average
+exposure achieves the same drawdown, and both a 200-day moving average and naive volatility
+targeting dominate the HMM on return, Sharpe and turnover. The headline SPY 2022 figure
+(-4.01% vs -18.78%) still stands as arithmetic; it just is not attributable to the model.
+
+What remains, after ten tests, is: the regimes carry no forward *return* information at any
+horizon, ranking, feature set or cost assumption tested; they do carry a small amount of
+forward *volatility* information at a 5-bar horizon; and the defensive behaviour that
+information might justify is available more cheaply elsewhere.
 
 ---
 
@@ -459,6 +470,125 @@ always did. The real defect was the opposite shape -- it returned the error with
 
 ---
 
+## 9. Regimes DO separate forward volatility -- the first positive result
+
+`tools/regime_volatility.py`. Ten hypotheses in, this is the only one that came back
+positive, and it is worth being precise about how narrow the claim is.
+
+**Why ask.** Tests 4, 5, 7 and 8 all asked whether regimes predict forward *returns*. They do
+not. But volatility clustering is among the most robust regularities in empirical finance,
+while return predictability is fragile and mostly absent -- and the three features the HMM is
+fitted on (returns, high-low range, volume change) are largely volatility proxies. So the
+model may well encode a volatility state while failing entirely to encode a return state.
+
+**The trap this test is built around.** A naive version of this experiment passes trivially
+and means nothing. Realized vol is strongly autocorrelated -- trailing 20-bar vol alone has
+Spearman rho **+0.67** against forward 5-bar vol and **+0.77** at 20 bars, for free, with no
+model. Any label correlated with current vol therefore "predicts" forward vol. So every test
+here is run twice: raw, and with a **trailing-vol family regressed out** (20-bar, 5-bar and
+EWMA log vol, coefficients fitted on training bars only). Only the residual result can
+support a claim.
+
+Three further controls, because a bare p-value has already fooled this repo once:
+
+* **Non-overlapping observations.** Forward vol at bar t and bar t+1 share h-1 of their h
+  returns, so 6300 overlapping observations are nothing like 6300 independent draws. Keeping
+  every h-th bar costs power and buys honesty. This is the control that matters most: the
+  overlapping residual test reports p=1.6e-11, which is arithmetically correct and
+  scientifically meaningless.
+* **Block bootstrap over whole (ticker, window) blocks**, so window-to-window variation is in
+  the interval.
+* **Within-quintile comparison** of trailing vol, which assumes no functional form at all.
+
+**Result, 5 tickers x 10 windows, 6300 observations, Bonferroni alpha = 0.05/4 = 0.0125:**
+
+| horizon | free benchmark rho | residual KW p (non-overlapping) | epsilon-sq | bear-bull gap | bootstrap 95% CI | tickers | windows | quintiles | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| 5 bars | +0.671 | **6.1e-04** | 0.0141 | **+0.136** | **[+0.069, +0.208]** | 5/5 | 31/42 | 20/25 | **YES** |
+| 20 bars | +0.775 | 0.258 | 0.0056 | +0.053 | [-0.033, +0.133] | 4/5 | 7/11 | 21/25 | no |
+
+The 5-bar effect clears every bar: significant after decimation, bootstrap CI excluding zero
+with P(gap>0) = 1.000, right direction in all five tickers, and positive in 20 of 25
+trailing-vol quintiles. The gap is in log units, so **+0.136 means the bearish regime set
+runs roughly 14.5% higher forward 5-day volatility** than the bullish set, over and above
+what trailing volatility already implied.
+
+**How small it is.** Epsilon-squared of 0.0141 means the regime label explains about **1.4%
+of the variance** in residual forward vol. Trailing vol alone explains vastly more. And the
+per-ticker spread is wide: SPY +0.191, XLF +0.197, NVDA +0.182, QQQ +0.111, **AAPL +0.005** --
+on AAPL the effect is absent, so "5/5 tickers" is directionally true but leans on four.
+
+**The 20-bar null is informative, not just an absence.** Decimating a 20-bar horizon leaves
+only 315 observations, so power is genuinely low; but the point estimate also halves. The
+honest reading is that this is a short-horizon effect, consistent with vol clustering decaying
+over a few days.
+
+**What this does and does not license.** It does not imply tradeable return edge; nine other
+tests say there is none, and knowing that volatility will be higher tells you nothing about
+sign. What it does license is treating the regime label as a weak *volatility* signal --
+relevant to position sizing or option-premium timing, where forward vol is the input that
+matters. Anyone building on this should first check whether an EWMA vol estimate does the job
+better, since it explains far more variance and needs no HMM.
+
+---
+
+## 10. The capital-preservation claim does not survive benchmarking
+
+`tools/drawdown_benchmark.py`. This is the test that retires the last surviving claim.
+
+**Why ask.** The headline defensive result -- SPY **-4.01%** against buy-and-hold's
+**-18.78%** in 2022 at 3-19% exposure -- was one ticker, one year, with no benchmark. And the
+question was framed wrongly. Any filter that spends half its time in cash reduces drawdown;
+being flat is not a skill. The real question is whether the HMM reduces drawdown *more than
+trivial alternatives that cost nothing to build*.
+
+Four comparisons, walk-forward, 50 windows x 5 tickers, exposure at bar t earning bar t+1's
+return, 5 bps charged on every exposure change:
+
+| strategy | return | max DD | vol | Sharpe | exposure | turnover | DD saved per unit of return given up |
+|---|---|---|---|---|---|---|---|
+| hmm | 2.80% | -12.53% | 17.0% | 0.36 | 45% | 49.6 | **0.47** |
+| sma200 | **10.08%** | -12.06% | 19.7% | 0.61 | 76% | 3.4 | **2.94** |
+| vol_target | 6.29% | **-10.32%** | 15.3% | **0.84** | 71% | 2.7 | 1.19 |
+| random_matched | 2.62% | -12.01% | 17.5% | 0.21 | 45% | 56.9 | 0.52 |
+| buy_hold | 11.66% | -16.68% | 26.5% | 0.97 | 100% | 1.0 | -- |
+
+`random_matched` is the load-bearing benchmark: flat/long at random with the **same average
+exposure as the HMM**, averaged over 200 draws per window so no single lucky sequence decides
+it.
+
+**Paired per-window differences, bootstrapped over windows** (positive maxDD difference
+favours the HMM):
+
+| comparison | max drawdown | total return | Sharpe |
+|---|---|---|---|
+| hmm vs buy_hold | **+0.0416** [+0.026, +0.058], better in 76% of windows | **-0.0886** [-0.152, -0.033] | **-0.61** [-0.93, -0.29] |
+| hmm vs sma200 | -0.0047 [-0.021, +0.010], n.s. | **-0.0729** [-0.137, -0.015] | -0.25, n.s. |
+| hmm vs vol_target | **-0.0221** [-0.045, -0.001] | -0.0349, n.s. | **-0.48** [-0.81, -0.15] |
+| hmm vs random_matched | -0.0052 [-0.017, +0.007], n.s. | +0.0018, n.s. | +0.15, n.s. |
+
+**Three conclusions, in descending order of how much they hurt:**
+
+1. **The drawdown reduction is real against buy-and-hold** -- +4.2pp shallower, significant,
+   better in 76% of windows. That part of the original claim holds up.
+2. **It is indistinguishable from a coin flip with the same exposure budget.** Against
+   `random_matched` every metric's interval brackets zero. So the drawdown reduction is what
+   being out of the market buys, not evidence that the model knows *when* to be out. A
+   smaller constant position size achieves the same thing without 50x the turnover.
+3. **Both trivial alternatives dominate it.** A 200-day moving average delivers the same
+   drawdown while earning **10.08% against the HMM's 2.80%** -- 6.3x more drawdown saved per
+   unit of return surrendered (2.94 vs 0.47), at 3.4 turnover against 49.6. Naive vol
+   targeting is *significantly better* on both drawdown and Sharpe. The HMM is elaborate
+   machinery losing to one line of pandas.
+
+**Caveats.** Drawdown is measured within 126-bar windows, so these are not multi-year
+peak-to-trough figures. The HMM path here is the raw bullish-regime filter, not the full
+confirmation-gated strategy -- deliberately, since the question is what the *regime signal*
+contributes. And the 200-day MA is itself a filter with well-known weaknesses; the point is
+not that it is good, only that it is cheaper and better here.
+
+---
+
 ## Reporting fixes (not hypotheses)
 
 Two defects made reported performance wrong rather than merely optimistic. Both are fixed;
@@ -682,14 +812,18 @@ interest earned on the cash side, and IV tracks trailing realized vol. These bia
 ## What has not been tested
 
 - **Better features.** Tests 4, 5 and 7 rule out the core three *and* credit/rates/breadth
-  proxies. Untested: longer lookbacks (these are all 1-day changes), genuine volatility
-  regimes rather than the `range` proxy, and real index data (`^VIX`, `^TNX`) which no
-  configured source currently provides.
-- **The inverted ordering itself.** Three independent tests now show the labelled-bullish
-  regime underperforming. Ranking states by a *forward*-looking or longer-window statistic,
-  rather than 252-bar trailing mean return, is the one untested change with a mechanism
-  behind it.
-- **More windows.** 14 per ticker is too few for ~1% effects. Shorter OOS steps, more
+  proxies. Untested: longer lookbacks (these are all 1-day changes) and real index data
+  (`^VIX`, `^TNX`) which no configured source currently provides. Note test 9 now shows the
+  existing features *do* carry a little forward-volatility information, so a purpose-built
+  volatility feature set is the most promising untested direction in this list.
+- **Whether an EWMA vol estimate beats the HMM at its own one success.** Test 9's positive
+  result is measured as an increment over a trailing-vol control, but nobody has asked
+  whether a plain EWMA forecast predicts forward vol *better* than the regime label, which it
+  very likely does given it explains far more variance.
+- **Position sizing off the volatility signal.** Test 9 gives forward vol, test 10 shows the
+  binary in/out filter is worthless. Sizing inversely to predicted vol is the one untested
+  use of the model's only real output.
+- **More windows.** 10-14 per ticker is too few for ~1% effects. Shorter OOS steps, more
   tickers, or overlapping windows with corrected standard errors would all help.
 - **Realistic slippage on the entry bar.** Costs are charged as a flat bps figure on the
   close. Real fills on a regime flip may be worse than that, and the 3.2-bar average hold
@@ -715,6 +849,18 @@ interest earned on the cash side, and IV tracks trailing realized vol. These bia
 
 # What do transaction costs do to all of the above?
 .venv/bin/python tools/cost_sensitivity.py --regimes 7 --costs 0,1,2,5,10,20
+
+# Do regimes separate forward VOLATILITY? (test 9 -- the one positive result)
+for T in SPY QQQ NVDA AAPL XLF; do
+  python tools/regime_volatility.py --tickers $T --save-obs volobs/$T.csv
+done
+python tools/regime_volatility.py --from-obs 'volobs/*.csv' --json docs/regime_volatility.json
+
+# Does the capital preservation beat a 200-day MA or a coin flip? (test 10)
+for T in SPY QQQ NVDA AAPL XLF; do
+  python tools/drawdown_benchmark.py --tickers $T --save-obs ddobs/$T.csv
+done
+python tools/drawdown_benchmark.py --from-obs 'ddobs/*.csv' --json docs/drawdown_benchmark.json
 
 # Baseline walk-forward on one ticker
 .venv/bin/python walk_forward.py SPY --interval 1d --period-days 3000 --regimes 7
