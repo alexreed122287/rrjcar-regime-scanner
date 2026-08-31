@@ -1,0 +1,215 @@
+{
+  "n_rows": 250,
+  "pooled": {
+    "buy_hold": {
+      "total_return": 0.11657,
+      "max_drawdown": -0.16684,
+      "vol_ann": 0.26467,
+      "sharpe": 0.96534,
+      "exposure": 1.0,
+      "turnover": 1.0,
+      "dd_saved": 0.0,
+      "return_given_up": 0.0,
+      "dd_saved_per_return_given_up": null
+    },
+    "hmm": {
+      "total_return": 0.02797,
+      "max_drawdown": -0.12527,
+      "vol_ann": 0.17048,
+      "sharpe": 0.35999,
+      "exposure": 0.44603,
+      "turnover": 49.62,
+      "dd_saved": 0.04157,
+      "return_given_up": 0.08861,
+      "dd_saved_per_return_given_up": 0.469
+    },
+    "random_matched": {
+      "total_return": 0.02617,
+      "max_drawdown": -0.12006,
+      "vol_ann": 0.17522,
+      "sharpe": 0.21207,
+      "exposure": 0.44559,
+      "turnover": 56.907,
+      "dd_saved": 0.04678,
+      "return_given_up": 0.0904,
+      "dd_saved_per_return_given_up": 0.517
+    },
+    "sma200": {
+      "total_return": 0.10084,
+      "max_drawdown": -0.12056,
+      "vol_ann": 0.19656,
+      "sharpe": 0.60584,
+      "exposure": 0.75508,
+      "turnover": 3.42,
+      "dd_saved": 0.04628,
+      "return_given_up": 0.01573,
+      "dd_saved_per_return_given_up": 2.942
+    },
+    "vol_target": {
+      "total_return": 0.06287,
+      "max_drawdown": -0.10319,
+      "vol_ann": 0.15313,
+      "sharpe": 0.83979,
+      "exposure": 0.70756,
+      "turnover": 2.72801,
+      "dd_saved": 0.06366,
+      "return_given_up": 0.0537,
+      "dd_saved_per_return_given_up": 1.185
+    }
+  },
+  "comparisons": {
+    "hmm_vs_sma200": {
+      "max_drawdown": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.00471,
+        "ci_low": -0.02054,
+        "ci_high": 0.01037,
+        "frac_a_better": 0.48,
+        "wilcoxon_p": 0.652772195247282
+      },
+      "total_return": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.07288,
+        "ci_low": -0.13659,
+        "ci_high": -0.01488,
+        "frac_a_better": 0.38,
+        "wilcoxon_p": 0.007609452352863144
+      },
+      "sharpe": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.24586,
+        "ci_low": -0.62757,
+        "ci_high": 0.13999,
+        "frac_a_better": 0.48,
+        "wilcoxon_p": 0.20447619481721802
+      }
+    },
+    "hmm_vs_vol_target": {
+      "max_drawdown": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.02208,
+        "ci_low": -0.04472,
+        "ci_high": -0.00127,
+        "frac_a_better": 0.52,
+        "wilcoxon_p": 0.24513084584396871
+      },
+      "total_return": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.03491,
+        "ci_low": -0.06819,
+        "ci_high": 0.00212,
+        "frac_a_better": 0.34,
+        "wilcoxon_p": 0.005579489549422334
+      },
+      "sharpe": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.47981,
+        "ci_low": -0.81495,
+        "ci_high": -0.14845,
+        "frac_a_better": 0.46,
+        "wilcoxon_p": 0.01855822259070905
+      }
+    },
+    "hmm_vs_random_matched": {
+      "max_drawdown": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.00521,
+        "ci_low": -0.01701,
+        "ci_high": 0.00649,
+        "frac_a_better": 0.52,
+        "wilcoxon_p": 0.5024899674262855
+      },
+      "total_return": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": 0.0018,
+        "ci_low": -0.02887,
+        "ci_high": 0.03105,
+        "frac_a_better": 0.56,
+        "wilcoxon_p": 0.7521534307154649
+      },
+      "sharpe": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": 0.14792,
+        "ci_low": -0.14059,
+        "ci_high": 0.45746,
+        "frac_a_better": 0.6,
+        "wilcoxon_p": 0.5272794190915597
+      }
+    },
+    "hmm_vs_buy_hold": {
+      "max_drawdown": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": 0.04157,
+        "ci_low": 0.02638,
+        "ci_high": 0.0576,
+        "frac_a_better": 0.76,
+        "wilcoxon_p": 2.2310435863204248e-06
+      },
+      "total_return": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.08861,
+        "ci_low": -0.15158,
+        "ci_high": -0.03331,
+        "frac_a_better": 0.34,
+        "wilcoxon_p": 0.0008475708983652908
+      },
+      "sharpe": {
+        "usable": true,
+        "n_windows": 50,
+        "mean_diff": -0.60536,
+        "ci_low": -0.93041,
+        "ci_high": -0.28628,
+        "frac_a_better": 0.32,
+        "wilcoxon_p": 0.0005734773907004609
+      }
+    }
+  },
+  "per_ticker_drawdown": {
+    "AAPL": {
+      "buy_hold": -0.1712,
+      "hmm": -0.1267,
+      "random_matched": -0.1318,
+      "sma200": -0.1283,
+      "vol_target": -0.1104
+    },
+    "NVDA": {
+      "buy_hold": -0.2757,
+      "hmm": -0.2366,
+      "random_matched": -0.2006,
+      "sma200": -0.2054,
+      "vol_target": -0.0924
+    },
+    "QQQ": {
+      "buy_hold": -0.148,
+      "hmm": -0.1244,
+      "random_matched": -0.1079,
+      "sma200": -0.0941,
+      "vol_target": -0.1064
+    },
+    "SPY": {
+      "buy_hold": -0.1116,
+      "hmm": -0.0689,
+      "random_matched": -0.0705,
+      "sma200": -0.0761,
+      "vol_target": -0.0965
+    },
+    "XLF": {
+      "buy_hold": -0.1278,
+      "hmm": -0.0698,
+      "random_matched": -0.0895,
+      "sma200": -0.0989,
+      "vol_target": -0.1102
+    }
+  }
+}
