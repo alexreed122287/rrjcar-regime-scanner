@@ -494,6 +494,48 @@ nothing about whether the strategy works; test 4 already answered that.
 
 Raw output: `docs/roll_credit.json`.
 
+### Fixed: the legs are now priced
+
+`roll_up_credit_pct` and `roll_out_credit_pct` now default to **0**, and
+`roll_model="priced"` is the default. `options_pricing.py` (Black-Scholes, no scipy) prices
+both legs of every roll:
+
+* **Roll up** — sell the held call, buy the same contract count struck back at `itm_depth`
+  below spot. The difference is real cash to the cash side; the new leg carries less delta.
+  Cash and lost participation are the same transaction, so no return is manufactured.
+* **Roll out** — same strike, more time. That is a **debit**, and the sign now comes out of
+  the pricing rather than being asserted.
+* Both legs pay `cost_bps_per_side`. Rolls used to be free.
+* Positions are sized so **dollar delta equals capital**, balance in cash. Spending all
+  capital on premium is ~5x levered at these strikes, and comparing a 5x book to
+  buy-and-hold would flatter the strategy for reasons unrelated to the signal.
+
+| config | mean return | mean Sharpe | mean maxDD | beat B&H |
+|---|---|---|---|---|
+| `legacy_flat` (old default) | +269.50% | 1.06 | -12.23% | 0/5 |
+| `flat_zero` (credits off, stock accounting) | +182.16% | 0.82 | -12.98% | 0/5 |
+| `priced_norolls` (priced legs, no rolling) | +153.79% | 0.71 | -14.00% | 0/5 |
+| **`priced` (new default)** | **+129.04%** | **0.68** | **-13.69%** | **0/5** |
+
+Per ticker under the priced model: SPY +53.81% (B&H +200.55%), QQQ +31.92% (+320.27%),
+NVDA +516.78% (+3209.07%), AAPL +22.81% (+504.77%), XLF +19.88% (+138.80%).
+
+**52% of the legacy headline was roll-model artifact** — +269.50% → +129.04%. The flat credit
+accounted for 87 pp of that; the remaining ~53 pp was never charging theta or the delta given
+up at each roll. Sharpe falls 1.06 → 0.68.
+
+Rolling is now worth **-24.75 pp** rather than a large positive: taking cash off the table
+caps participation in the very move that triggered the roll. That is the correct sign, and it
+means the roll rule as designed is a drag in a trending market.
+
+Buy-and-hold still wins 5/5 under every configuration. Reproduce with
+`tools/roll_model_compare.py`; raw output in `docs/roll_model.json`.
+
+Remaining simplifications, stated so nobody over-reads this: one vol input (rescaled
+`hv_20`) rather than a real surface, no smile or skew, no early exercise, no dividends, no
+interest earned on the cash side, and IV tracks trailing realized vol. These bias the result
+*optimistically* on the vol path but are second-order next to the effects above.
+
 ---
 
 ## What has not been tested
@@ -526,6 +568,9 @@ Raw output: `docs/roll_credit.json`.
 
 # How much of v2's return is the unconditional roll credit?
 .venv/bin/python tools/roll_credit_sensitivity.py
+
+# What changes once the roll legs are actually priced?
+.venv/bin/python tools/roll_model_compare.py
 
 # What do transaction costs do to all of the above?
 .venv/bin/python tools/cost_sensitivity.py --regimes 7 --costs 0,1,2,5,10,20
