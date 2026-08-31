@@ -914,8 +914,8 @@ from **+0.04% at 0 bps to -0.44% at 5 bps**, and strategy Sharpe from +1.08 to +
 
 ## Silent failure modes
 
-Three defects that shared a shape: **the system reported success while failing.** None
-changed a published number; all three could have hidden a future one.
+Four defects that shared a shape: **the system reported success while failing.** None
+changed a published number; all four could have hidden a future one.
 
 ### A backtest that could not trade returned 0.00% instead of erroring
 
@@ -938,6 +938,61 @@ while keeping the `"error"` body key so existing front-end checks keep working.
 Three sites were left as 200 deliberately: an empty scan (`"No tickers to scan"` with
 `results: []`) is an empty success, not an error, and `"Tradier not configured"` is a
 configuration state the UI drives a flow from.
+
+### Every route was `async def`, so any scan froze the whole server
+
+All 24 route handlers were declared `async def`, and **not one of them awaited anything.**
+FastAPI runs `async def` handlers on the event loop, so the blocking work inside them --
+`fetch_data` (network), `RegimeDetector.train` (CPU-bound EM), `scan_watchlist` (a
+`ThreadPoolExecutor` joined synchronously) -- held the loop for its full duration. Nothing
+else could be served in the meantime.
+
+Measured against the running app, 21-ticker scan of the semiconductor watchlist:
+
+| probe | during scan, before fix | during scan, after fix | idle baseline |
+| --- | --- | --- | --- |
+| `GET /api/apis` (trivial, unrelated) | **7.48 s** | 0.015 s | 0.0005 s |
+| `GET /api/scan/status` (progress poll) | blocked until the scan returned | 0.003 s | 0.004 s |
+
+The second row is the one that mattered. `/api/scan/status` exists so the UI can poll a
+running scan, and it **could never report `"scanning"`**: the loop was blocked until the scan
+finished, and by the time the poll was served the cached status had already flipped to
+`"done"`. The progress indicator was unreachable by construction, and it failed silently --
+it returned a valid `200` with a plausible body, just never the state it was written for.
+After the fix, the same poll returns `{"status": "scanning", ...}` mid-scan.
+
+A health check would have been affected the same way, which matters on a platform that
+restarts instances for failing them.
+
+The fix is one keyword per handler: `async def` -> `def`, which moves them into FastAPI's
+threadpool, where blocking code belongs. Since no handler awaited anything, the `async`
+keyword bought nothing to begin with. `POST /api/scan/stream` was already safe -- Starlette
+iterates a *sync* generator in a threadpool -- and is left alone.
+
+`tests/test_event_loop_not_blocked.py` encodes the rule rather than the fix: a route may be a
+coroutine function only if its source actually contains `await`. Genuinely async handlers stay
+legal; fake-async ones fail. Verified to fail when `run_scan` is reverted to `async def`.
+
+Caveat: threadpooled handlers occupy AnyIO's worker threads (40 by default), and
+`scan_watchlist` spawns its own pool on top. That is a throughput ceiling worth sizing under
+load, not a correctness problem. Neither BLAS threading nor the shared-state issues noted
+below were touched by this fix.
+
+### Unsynchronized module-level state (found, not fixed)
+
+Noted while auditing the above, and left alone deliberately -- these are latent rather than
+demonstrated, and the fix above increases real concurrency, which makes them more reachable
+than before:
+
+- `api/routes_scan.py` mutates a module-level `_scan_cache` dict that `api/routes_options.py`
+  reads at three sites. Concurrent scans interleave writes to it.
+- `api/routes_options.py` lazily initializes `_options_picker`, `_gex_engine` and
+  `_leaps_strategy` via `global` with no lock, so simultaneous first requests can each
+  construct their own.
+- `api/routes_broker.py` mutates `data_loader._tradier_config_cache` from a request handler
+  and spawns a raw `threading.Thread` for ladder orders.
+- No `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `OPENBLAS_NUM_THREADS` is set anywhere, so
+  concurrent HMM fits oversubscribe BLAS threads against available cores.
 
 ### hv_20's annualization
 

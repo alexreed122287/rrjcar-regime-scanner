@@ -69,18 +69,18 @@ def _serialize_drilldown(r: dict) -> dict:
 
 
 @router.get("/watchlists")
-async def get_watchlists():
+def get_watchlists():
     return {name: tickers for name, tickers in WATCHLISTS.items()
             if name not in ("ALL TICKERS", "All Stocks (no ETFs)", "All ETFs")}
 
 
 @router.get("/watchlists/all")
-async def get_all_watchlists():
+def get_all_watchlists():
     return {name: tickers for name, tickers in WATCHLISTS.items()}
 
 
 @router.post("/scan")
-async def run_scan(req: ScanRequest):
+def run_scan(req: ScanRequest):
     global _scan_cache
     _scan_cache["status"] = "scanning"
 
@@ -142,7 +142,7 @@ async def run_scan(req: ScanRequest):
 
 
 @router.get("/scan/status")
-async def scan_status():
+def scan_status():
     return {
         "status": _scan_cache["status"],
         "count": len(_scan_cache.get("results", [])),
@@ -151,7 +151,7 @@ async def scan_status():
 
 
 @router.get("/scan/cached")
-async def get_cached():
+def get_cached():
     return {
         "results": _scan_cache.get("results", []),
         "timestamp": _scan_cache.get("timestamp"),
@@ -175,7 +175,7 @@ def _scan_ticker_light(args):
 
 
 @router.post("/scan/stream")
-async def run_scan_stream(req: ScanRequest):
+def run_scan_stream(req: ScanRequest):
     """Stream scan results with concurrent process workers via SSE."""
     if req.custom_tickers.strip():
         symbols = [t.strip().upper() for t in req.custom_tickers.split(",") if t.strip()]
@@ -286,7 +286,7 @@ async def run_scan_stream(req: ScanRequest):
 
 
 @router.get("/vix")
-async def get_vix():
+def get_vix():
     """Fetch current VIX level."""
     try:
         import pandas as pd
@@ -306,7 +306,7 @@ async def get_vix():
 
 
 @router.get("/scan/{symbol}")
-async def scan_symbol(symbol: str, strategy: str = "v2"):
+def scan_symbol(symbol: str, strategy: str = "v2"):
     """Deep scan a single ticker with full chart data."""
     # Check cache first
     full_results = _scan_cache.get("results_full", [])
