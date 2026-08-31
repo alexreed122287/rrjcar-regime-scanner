@@ -6,7 +6,7 @@ and the results that harness produced, which are not flattering.
 
 ## Validation status — read this first
 
-This system has been tested out of sample fourteen times: **thirteen negative results and one
+This system has been tested out of sample fifteen times: **fourteen negative results and one
 positive — and the positive one has since been shown to be useless.** Full detail, with effect sizes
 and reproduction commands, is in [`docs/validation-findings.md`](docs/validation-findings.md).
 
@@ -25,6 +25,7 @@ The short version:
 | Does **sizing** off predicted vol rescue the model? | **Sizing yes, the model no.** Vol targeting lifts Sharpe 0.36 → 0.88 — but adding the regime *significantly worsens* it (−0.079 Sharpe) |
 | Would purpose-built **volatility features** fix it? | **No.** They performed *worse* than the shipped features. The constraint is the 7-state discrete architecture, not the inputs |
 | Is the volatility overlay robust enough to replace the filter? | **No.** Across 240 configurations it never beats a *constant position at its own average exposure* on drawdown, and most of its edge over the filter is the filter's 49.6 turnover |
+| Would a better **model class** (GARCH, HAR) beat that one-parameter EWMA? | **No.** Every comparison a tie; HAR is *significantly worse* than a fitted EWMA. Three fitted parameters cannot beat one unfitted one — the ceiling is the target, not the model |
 
 **The capital-preservation claim has now been benchmarked, and it did not survive.** The old
 headline — SPY **-4.01%** against buy-and-hold's **-18.78%** in 2022 — is still arithmetically
@@ -174,9 +175,13 @@ What is left is no longer about tuning this model:
 - **Should the default path include the regime filter at all?** Test 14 puts its Sharpe at
   -0.02 at 10 bps and -0.78 at 20. That is a product decision, not a research question, and no
   default has been changed.
-- **Try a different model class.** Every test here measures *this* HMM. A one-parameter EWMA
-  keeps matching or beating it, which points at GARCH, HAR, or a plain rolling standard
-  deviation as a *replacement* rather than a benchmark.
+- ~~**Try a different model class.**~~ **Tested (test 15) — the model class was never the
+  constraint.** GARCH(1,1) and HAR, three fitted parameters each, cannot beat a *one-parameter,
+  unfitted* EWMA on forward 5-bar volatility; every comparison is a tie and HAR is significantly
+  *worse* than a fitted EWMA. The ceiling is the predictability of the target from daily bars.
+  The lambda surface did turn up something worth knowing: the 0.94 used by the research tools
+  sits just past the flat region, and 0.84 scores better on 5 of 5 tickers — though that is
+  itself a tie by the paired test, and 0.94 appears nowhere in the serving path.
 - **Real index data** (`^VIX`, `^TNX`), which no configured source provides. Test 13 makes this
   much less promising than it looked: better vol inputs made the model worse, not better.
 
