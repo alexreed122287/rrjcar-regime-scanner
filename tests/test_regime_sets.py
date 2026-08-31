@@ -744,3 +744,106 @@ def test_trade_rows_separate_position_and_underlying_pnl():
     for t in r["trades"]:
         assert "underlying_pnl_pct" in t and "roll_cash_pct" in t
     assert any(abs(t["pnl_pct"] - t["underlying_pnl_pct"]) > 1e-6 for t in r["trades"])
+
+
+# ────────────────────────── regime ranking rules ──────────────────────────
+
+def _ranking_frame(n=900, seed=3, vol=0.009):
+    """A frame the HMM can actually fit.
+
+    These parameters are pinned deliberately. GaussianHMM with full covariance on three
+    features throws LinAlgError / "covars must be symmetric, positive-definite" on most
+    synthetic seeds -- of 16 (bars, seed, vol, n_regimes) combinations probed, only 3 fit.
+    RegimeDetector has no fallback for that, which is worth knowing independently of these
+    tests. n=900, seed=3, vol=0.009, n_regimes=3 is a verified-good combination.
+    """
+    import numpy as np
+    import pandas as pd
+    from data_loader import engineer_features
+
+    rng = np.random.default_rng(seed)
+    # Alternating drift so the states are genuinely distinguishable.
+    drift = np.where((np.arange(n) // 90) % 2 == 0, 0.0016, -0.0012)
+    price = 100 * np.cumprod(1 + drift + rng.normal(0, vol, n))
+    idx = pd.date_range("2018-01-01", periods=n, freq="B")
+    return engineer_features(pd.DataFrame({
+        "Open": price, "High": price * 1.007, "Low": price * 0.993,
+        "Close": price, "Volume": rng.integers(1_000_000, 5_000_000, n),
+    }, index=idx))
+
+
+def test_default_rank_rule_is_unchanged():
+    from hmm_engine import RegimeDetector
+
+    assert RegimeDetector().rank_by == "return"
+
+
+def test_invalid_rank_rule_is_rejected():
+    from hmm_engine import RegimeDetector
+
+    with pytest.raises(ValueError, match="rank_by"):
+        RegimeDetector(rank_by="whatever")
+
+
+def test_rank_rules_produce_a_bijection():
+    """Every rule must be a relabelling: all ids used exactly once, nothing dropped."""
+    from hmm_engine import RANK_RULES, RegimeDetector
+
+    feats = _ranking_frame()
+    det = RegimeDetector(n_regimes=3, n_iter=40)
+    trained = det.train(feats)
+    raw = trained["raw_state"].values
+    for rule in RANK_RULES:
+        order = det.apply_rank_rule(feats, raw, rank_by=rule)
+        assert sorted(order.keys()) == [0, 1, 2]
+        assert sorted(order.values()) == [0, 1, 2], f"{rule} is not a bijection"
+
+
+def test_inverted_reverses_the_return_ranking():
+    from hmm_engine import RegimeDetector
+
+    feats = _ranking_frame()
+    det = RegimeDetector(n_regimes=3, n_iter=40)
+    raw = det.train(feats)["raw_state"].values
+    normal = det.apply_rank_rule(feats, raw, rank_by="return")
+    inverted = det.apply_rank_rule(feats, raw, rank_by="inverted")
+    n = len(normal)
+    for state, rank in normal.items():
+        assert inverted[state] == n - 1 - rank
+
+
+def test_rank_rule_relabels_without_repartitioning():
+    """The invariant the experiment tool relies on.
+
+    Changing the rank rule must not move any bar between states -- it only renames them. So
+    the multiset of state populations is identical across rules within one fit.
+    """
+    from collections import Counter
+
+    from hmm_engine import RANK_RULES, RegimeDetector
+
+    feats = _ranking_frame()
+    det = RegimeDetector(n_regimes=3, n_iter=40)
+    raw = det.train(feats)["raw_state"].values
+    reference = None
+    for rule in RANK_RULES:
+        det.apply_rank_rule(feats, raw, rank_by=rule)
+        labeled = det.filtered_regimes(feats)
+        sizes = sorted(Counter(labeled["regime_id"].tolist()).values())
+        if reference is None:
+            reference = sizes
+        assert sizes == reference, f"{rule} repartitioned the bars"
+
+
+def test_forward_return_rule_uses_the_next_bar():
+    """forward_return must score on successors, so it can disagree with `return`."""
+    from hmm_engine import RegimeDetector
+
+    feats = _ranking_frame()
+    det = RegimeDetector(n_regimes=3, n_iter=40)
+    raw = det.train(feats)["raw_state"].values
+    det.apply_rank_rule(feats, raw, rank_by="return")
+    contemporaneous = dict(det.state_scores)
+    det.apply_rank_rule(feats, raw, rank_by="forward_return")
+    forward = dict(det.state_scores)
+    assert contemporaneous != forward, "forward scores identical to contemporaneous ones"

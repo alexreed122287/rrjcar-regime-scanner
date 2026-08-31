@@ -12,17 +12,18 @@ whether the regime signal beats coin-flip entries held for the same fraction of 
 
 ## Summary
 
-Three hypotheses tested, three negative results.
+Eight hypotheses tested, eight negative results.
 
 | # | Hypothesis | Verdict |
 |---|---|---|
 | 1 | The strategy beats matched-exposure random entry | **No.** Point estimates negative on 4 of 5 tickers, none significant |
 | 2 | 7 regimes is over-parameterized; a converged 3-4 regime model does better | **No.** Level with 7, worse on NVDA |
 | 3 | The entry filters (confidence × confirmations) can be tuned into edge | **No.** Best tune setting decayed to exactly zero out of sample |
-| 4 | The 3 features separate regimes in a way that predicts forward returns | **No.** Regimes carry no forward information, and the ranking inverts |
+| 4 | The 3 features separate regimes in a way that predicts forward returns | **No.** Regimes carry no forward information; labelled-bullish mildly underperforms |
 | 5 | Regimes are informative at longer horizons (5/10/20 bars) even if not at 1 | **No.** Flat null at every horizon tested |
 | 6 | Transaction costs are a second-order detail | **No.** They cost 18-37% of gross return and *widen* the gap to random |
 | 7 | Cross-asset features (credit, rates, breadth) give regimes forward information | **No.** Macro-only regimes score exactly at the null |
+| 8 | The state ranking rule can be fixed (inverted, or scored on forward returns) | **No.** Rank 0 is the weakest state but at p=0.50; no rule clears Bonferroni |
 
 The system's one demonstrated virtue is capital preservation, not alpha. In the 2022
 window SPY lost **-4.01% against buy-and-hold's -18.78%**. It runs at 3-19% market
@@ -356,6 +357,95 @@ over-parameterized configuration tested.
 
 The consistent story across tests 4, 5 and 7 is that the labelled-bullish regime mildly
 *under*performs out of sample, whatever features are used to define it.
+
+---
+
+## 8. The regime ranking rule carries no forward information
+
+The last idea in this repo with a mechanism rather than a hunch behind it.
+
+`RegimeDetector` ranks raw HMM states by the mean return of the bars **during** each state
+and calls rank 0 "most bullish". Since the HMM is fitted on return and momentum features,
+that is close to tautological: a state scores highest largely because it is *defined* by
+prices having risen. Whether the **next** bar is also good is a separate question, and tests
+4, 5 and 7 each showed the labelled-bullish regime mildly *under*performing — consistent with
+rank 0 marking local tops.
+
+Correction to an earlier note in this file: the ranking uses the **full in-sample mean**
+return per state, not a trailing 252-bar window. There is no 252-bar lookback in the ranking
+code. The out-of-sample path is nonetheless clean — `filtered_regimes` uses the forward
+algorithm and `state_order` is fitted on training data only.
+
+### Setup
+
+Five ranking rules, all scored on training data only, evaluated on causally-labelled OOS
+windows (expanding train ≥756 bars, 126-bar OOS, 50 windows across 5 tickers, 6300
+observations per rule):
+
+| rule | ranks states by |
+|---|---|
+| `return` | mean return during the state (**the shipped rule**) |
+| `inverted` | the same, ascending — is the rule anti-predictive? |
+| `forward_return` | mean return of the **next** bar |
+| `forward_sharpe` | next-bar mean / next-bar sd |
+| `persistence` | self-transition probability |
+
+A rule passes only if it clears four bars: right direction, negative Spearman rho, KW p below
+Bonferroni alpha (0.05/5 = 0.01), and consistency across windows and tickers.
+
+### Result: nothing passes
+
+Unconditional mean forward return is **+7.91 bps/bar**.
+
+| rule | rank0 edge | bullish-set edge | rho | KW p | rank0 beat window mean | verdict |
+|---|---|---|---|---|---|---|
+| `return` | **-4.58 bps** | +0.07 | -0.003 | 0.496 | 17/37 | no |
+| `inverted` | +3.83 | +1.50 | +0.003 | 0.496 | 20/34 | no |
+| `forward_return` | +5.01 | -3.25 | +0.024 | 0.228 | 20/36 | no |
+| `forward_sharpe` | -4.08 | -2.97 | +0.026 | 0.105 | 19/41 | no |
+| `persistence` | +3.49 | +5.41 | -0.028 | 0.174 | 24/43 | no |
+
+The shipped rule's rank 0 does have the **lowest** forward return of all seven states
+(+3.3 bps against a +7.91 bps unconditional mean; the best state is +11.7). So the direction
+of the suspicion is confirmed. But KW p = 0.50, and the per-ticker spread is enormous — SPY
+-29.4 bps, NVDA -15.0, AAPL -4.4, QQQ +5.6, XLF **+60.9**. That is noise with a sign, not an
+effect.
+
+Critically, **inverting the rule does not harvest it**: +3.83 bps, p = 0.50, and Spearman rho
+flips to the wrong sign. `forward_return` — the theoretically correct rule, ranking states by
+what happens *after* them — gets rank 0 to +5.01 bps but has a *negative* bullish-set edge
+(-3.25) and p = 0.228. `persistence` has the best window consistency (24/43) and the best
+bullish-set edge (+5.41) but p = 0.174.
+
+Effect sizes are all ~3-5 bps/bar against a +7.91 bps/bar baseline and cross-ticker dispersion
+an order of magnitude larger. Nothing here survives multiplicity correction.
+
+### Why no strategy-level run followed
+
+This test measures **information content**, which is upstream of any strategy. If forward
+returns are not separated by the labels, no entry rule, confirmation count or position sizer
+built on those labels can harvest what is not there. Running a walk-forward on a rule that
+fails the information test would only measure noise. What would change that: a rule clearing
+the Bonferroni bar with a consistent sign across a majority of tickers.
+
+### A trap worth naming
+
+Kruskal-Wallis is invariant to group relabelling, so I expected identical p-values across all
+five rules and treated the mismatch as a bug in the tool. It is not. The invariance holds **per
+window**; pooled group sizes legitimately differ because each rule promotes a *different* raw
+state to id 0 in each window, and pooling mixes them. `return` and `inverted` do match exactly
+(0.4963 both), which is the tell — a strict reversal preserves the pooled multiset. The tool now
+asserts per-window partition invariance on every run and says so in its output.
+
+Reproduce with `tools/regime_ranking.py`; raw output in `docs/regime_ranking.json`.
+
+### Unrelated fragility found while building this
+
+`GaussianHMM` with full covariance on three features fails to fit on most synthetic data. Of
+16 (bars, seed, vol, n_regimes) combinations probed, **3 fit**; the rest raise `LinAlgError`
+or "covars must be symmetric, positive-definite". `RegimeDetector` has no fallback, so a bad
+fit propagates as an exception rather than a degraded result. The experiment tool catches it
+per window and skips; the API does not.
 
 ---
 

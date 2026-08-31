@@ -36,6 +36,9 @@ REGIME_LABELS = [
 # The 7-label scheme is the reference shape: 3 bullish states, 2 neutral, 2 bearish.
 # Every other regime count is mapped proportionally onto it, so the invariant
 # "regime 0 is most bullish, regime n-1 is most bearish" always holds.
+# Ways to map raw HMM states onto ranked regime ids. See RegimeDetector._score_states.
+RANK_RULES = ("return", "inverted", "forward_return", "forward_sharpe", "persistence")
+
 REFERENCE_N = 7
 REFERENCE_BULLISH = 3
 REFERENCE_BEARISH = 2
@@ -335,6 +338,7 @@ class RegimeDetector:
         auto_candidates=range(3, 8),
         auto_criterion: str = "bic",
         feature_columns=None,
+        rank_by: str = "return",
     ):
         if isinstance(n_regimes, str):
             if n_regimes.strip().lower() != "auto":
@@ -349,6 +353,18 @@ class RegimeDetector:
         # every existing caller is unaffected. Overridden by the cross-asset feature
         # experiments in tools/, which need to fit on rates/credit/breadth columns.
         self.feature_columns = list(feature_columns) if feature_columns else list(FEATURE_COLUMNS)
+
+        # How raw HMM states are mapped to ranked regime ids. "return" is the historical
+        # rule and stays the default. It ranks a state by the mean return of the bars
+        # DURING that state -- which, when the fitted features are themselves momentum
+        # measures, is close to tautological: a state is "bullish" largely because it was
+        # defined by rising prices. What a trader actually needs is the mean return of the
+        # bar AFTER the state is observed, which is what "forward_return" ranks by.
+        # Everything is estimated on the training window only, so no rule leaks the future.
+        rank_by = str(rank_by).lower()
+        if rank_by not in RANK_RULES:
+            raise ValueError(f"rank_by must be one of {sorted(RANK_RULES)}, got {rank_by!r}")
+        self.rank_by = rank_by
 
         self.auto_candidates = auto_candidates
         self.auto_criterion = auto_criterion
@@ -431,18 +447,8 @@ class RegimeDetector:
         # Get posterior probabilities
         posteriors = self.model.predict_proba(X_scaled)
 
-        # Compute mean return per raw state, rank from most bullish → most bearish
-        state_returns = {}
-        for s in range(self.n_regimes):
-            mask = raw_states == s
-            if mask.sum() > 0:
-                state_returns[s] = df["returns"].values[mask].mean()
-            else:
-                state_returns[s] = 0.0
-
-        # Sort states by descending mean return (highest return = most bullish = regime 0)
-        sorted_states = sorted(state_returns.keys(), key=lambda s: state_returns[s], reverse=True)
-        self.state_order = {raw: rank for rank, raw in enumerate(sorted_states)}
+        # Score each raw state, then rank most bullish -> most bearish.
+        self.apply_rank_rule(df, raw_states)
 
         # Apply to dataframe
         result = df.copy()
@@ -461,6 +467,68 @@ class RegimeDetector:
         self.is_trained = True
         print(f"[HMM] Training complete. Log-likelihood: {self.model.score(X_scaled):.2f}")
         return result
+
+    def _score_states(self, df: pd.DataFrame, raw_states: np.ndarray) -> dict:
+        """Score every raw state under ``self.rank_by``, using training data only.
+
+        Ranking a state by the returns observed *during* it is the historical rule. It is
+        weakly justified: the HMM is fitted on returns/momentum features, so the state with
+        the highest contemporaneous mean return is close to "the state defined by prices
+        having gone up". Whether that state's *next* bar is also good is a separate,
+        testable question -- see tools/regime_ranking.py.
+        """
+        rets = np.asarray(df["returns"].values, dtype=float)
+        # Return of the bar AFTER each observation; the last bar has no successor.
+        fwd = np.full(len(rets), np.nan, dtype=float)
+        if len(rets) > 1:
+            fwd[:-1] = rets[1:]
+
+        scores = {}
+        for s in range(self.n_regimes):
+            mask = raw_states == s
+            if not mask.any():
+                scores[s] = 0.0
+                continue
+            if self.rank_by in ("return", "inverted"):
+                scores[s] = float(np.nanmean(rets[mask]))
+            elif self.rank_by == "forward_return":
+                vals = fwd[mask]
+                scores[s] = float(np.nanmean(vals)) if np.isfinite(vals).any() else 0.0
+            elif self.rank_by == "forward_sharpe":
+                vals = fwd[mask][np.isfinite(fwd[mask])]
+                sd = float(np.std(vals)) if len(vals) > 1 else 0.0
+                scores[s] = float(np.mean(vals) / sd) if sd > 0 else 0.0
+            elif self.rank_by == "persistence":
+                # Self-transition probability: how sticky the state is, ignoring direction.
+                scores[s] = float(self.model.transmat_[s, s])
+            else:  # pragma: no cover - guarded in __init__
+                raise ValueError(self.rank_by)
+        return scores
+
+    def apply_rank_rule(self, df: pd.DataFrame, raw_states: np.ndarray,
+                        rank_by: str = None) -> dict:
+        """Score the raw states and install the resulting ``state_order``.
+
+        Exposed so ranking rules can be compared without refitting: the rule changes only
+        the state -> regime_id mapping, never the HMM itself, so an experiment can fit once
+        per window and re-rank. Sharing this method is what keeps tools/regime_ranking.py
+        testing the same ordering code the engine uses rather than a copy of it.
+
+        ``df`` and ``raw_states`` must both come from the TRAINING window only.
+        """
+        if rank_by is not None:
+            rank_by = str(rank_by).lower()
+            if rank_by not in RANK_RULES:
+                raise ValueError(f"rank_by must be one of {sorted(RANK_RULES)}")
+            self.rank_by = rank_by
+        scores = self._score_states(df, np.asarray(raw_states))
+        self.state_scores = dict(scores)
+        # "inverted" exists only to test whether the return ranking is anti-predictive: it
+        # ranks ascending, so the worst-returning state becomes regime 0.
+        descending = self.rank_by != "inverted"
+        ordered = sorted(scores.keys(), key=lambda s: scores[s], reverse=descending)
+        self.state_order = {raw: rank for rank, raw in enumerate(ordered)}
+        return dict(self.state_order)
 
     def filtered_regimes(self, df: pd.DataFrame) -> pd.DataFrame:
         """
