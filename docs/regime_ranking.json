@@ -1,0 +1,252 @@
+{
+  "results": {
+    "forward_return": {
+      "n_obs": 6300,
+      "rule_mean_bps": 7.911774643179901,
+      "rank0_edge_bps": 5.01275442630749,
+      "bullish_set_edge_bps": -3.2519917506485103,
+      "spearman_rho": 0.024349523018158487,
+      "spearman_p": 0.053287159244725345,
+      "kruskal_p": 0.22831280704264068,
+      "mannwhitney_p": 0.8166979271381705,
+      "rank0_beat_window_mean": "20/36",
+      "rank0_win_frac": 0.5555555555555556,
+      "per_ticker_edge_bps": {
+        "AAPL": 14.21787103943765,
+        "NVDA": 1.6376893065088243,
+        "QQQ": -9.990750008162111,
+        "SPY": 5.273255253119744,
+        "XLF": 8.592298545517364
+      },
+      "mean_fwd_by_regime_bps": {
+        "0": 12.92452906948739,
+        "1": 0.36788041118029263,
+        "2": 4.825595507850109,
+        "3": 10.199272156742886,
+        "4": 12.561311507252098,
+        "5": 10.98651049723211,
+        "6": 9.579914000774599
+      },
+      "n_by_regime": {
+        "0": 580,
+        "1": 1169,
+        "2": 1349,
+        "3": 899,
+        "4": 1022,
+        "5": 803,
+        "6": 478
+      },
+      "checks": {
+        "direction": true,
+        "monotonic": false,
+        "significant": false,
+        "consistent": true
+      },
+      "verdict": "no"
+    },
+    "forward_sharpe": {
+      "n_obs": 6300,
+      "rule_mean_bps": 7.911774643179901,
+      "rank0_edge_bps": -4.084768620927482,
+      "bullish_set_edge_bps": -2.967664795222631,
+      "spearman_rho": 0.025978123375478054,
+      "spearman_p": 0.0392183611134573,
+      "kruskal_p": 0.105191627354245,
+      "mannwhitney_p": 0.13998569864872398,
+      "rank0_beat_window_mean": "19/41",
+      "rank0_win_frac": 0.4634146341463415,
+      "per_ticker_edge_bps": {
+        "AAPL": 14.21787103943765,
+        "NVDA": -17.070674955765053,
+        "QQQ": -4.890564626833247,
+        "SPY": -4.2885845824430735,
+        "XLF": -2.559235556472696
+      },
+      "mean_fwd_by_regime_bps": {
+        "0": 3.82700602225242,
+        "1": 8.484376809897036,
+        "2": 2.72700418742774,
+        "3": 12.214975580292329,
+        "4": 10.488539468247712,
+        "5": 15.336513209371933,
+        "6": 1.7579463824204233
+      },
+      "n_by_regime": {
+        "0": 717,
+        "1": 1041,
+        "2": 1301,
+        "3": 780,
+        "4": 1138,
+        "5": 805,
+        "6": 518
+      },
+      "checks": {
+        "direction": false,
+        "monotonic": false,
+        "significant": false,
+        "consistent": false
+      },
+      "verdict": "no"
+    },
+    "inverted": {
+      "n_obs": 6300,
+      "rule_mean_bps": 7.911774643179901,
+      "rank0_edge_bps": 3.8298396654190148,
+      "bullish_set_edge_bps": 1.5003250888951085,
+      "spearman_rho": 0.0029428367397412174,
+      "spearman_p": 0.8153463200767431,
+      "kruskal_p": 0.49628721591973457,
+      "mannwhitney_p": 0.9696201881047135,
+      "rank0_beat_window_mean": "20/34",
+      "rank0_win_frac": 0.5882352941176471,
+      "per_ticker_edge_bps": {
+        "AAPL": 2.3138638192760292,
+        "NVDA": 4.997822218106671,
+        "QQQ": 4.134875364745988,
+        "SPY": -8.334567834500698,
+        "XLF": 40.17372591275246
+      },
+      "mean_fwd_by_regime_bps": {
+        "0": 11.741614308598917,
+        "1": 8.771407289341555,
+        "2": 8.926427589639774,
+        "3": 5.2119715165163605,
+        "4": 10.520262075415781,
+        "5": 7.134023706097922,
+        "6": 3.3331335929097587
+      },
+      "n_by_regime": {
+        "0": 427,
+        "1": 818,
+        "2": 969,
+        "3": 1302,
+        "4": 1269,
+        "5": 1005,
+        "6": 510
+      },
+      "checks": {
+        "direction": true,
+        "monotonic": false,
+        "significant": false,
+        "consistent": true
+      },
+      "verdict": "no"
+    },
+    "persistence": {
+      "n_obs": 6300,
+      "rule_mean_bps": 7.911774643179901,
+      "rank0_edge_bps": 3.4895102637758786,
+      "bullish_set_edge_bps": 5.410444636145153,
+      "spearman_rho": -0.0275646645963068,
+      "spearman_p": 0.02867987681185749,
+      "kruskal_p": 0.17399424374306052,
+      "mannwhitney_p": 0.8146439703001077,
+      "rank0_beat_window_mean": "24/43",
+      "rank0_win_frac": 0.5581395348837209,
+      "per_ticker_edge_bps": {
+        "AAPL": 3.89729297725692,
+        "NVDA": 40.87070043381652,
+        "QQQ": -10.008199238265243,
+        "SPY": 6.33819704813537,
+        "XLF": -7.26675069457749
+      },
+      "mean_fwd_by_regime_bps": {
+        "0": 11.401284906955777,
+        "1": 13.335650269776275,
+        "2": 14.940923619691873,
+        "3": 6.100780966561526,
+        "4": 9.97748058039041,
+        "5": -9.797442935468307,
+        "6": -6.798796143724234
+      },
+      "n_by_regime": {
+        "0": 942,
+        "1": 1432,
+        "2": 1106,
+        "3": 996,
+        "4": 699,
+        "5": 640,
+        "6": 485
+      },
+      "checks": {
+        "direction": true,
+        "monotonic": true,
+        "significant": false,
+        "consistent": true
+      },
+      "verdict": "no"
+    },
+    "return": {
+      "n_obs": 6300,
+      "rule_mean_bps": 7.911774643179901,
+      "rank0_edge_bps": -4.578641050270141,
+      "bullish_set_edge_bps": 0.06947698423210202,
+      "spearman_rho": -0.0029428367397412174,
+      "spearman_p": 0.8153463200767431,
+      "kruskal_p": 0.49628721591973457,
+      "mannwhitney_p": 0.6940102652455764,
+      "rank0_beat_window_mean": "17/37",
+      "rank0_win_frac": 0.4594594594594595,
+      "per_ticker_edge_bps": {
+        "AAPL": -4.445489360177917,
+        "NVDA": -15.04929733518651,
+        "QQQ": 5.580430006825031,
+        "SPY": -29.448279825225388,
+        "XLF": 60.91642576037623
+      },
+      "mean_fwd_by_regime_bps": {
+        "0": 3.3331335929097587,
+        "1": 7.134023706097922,
+        "2": 10.520262075415781,
+        "3": 5.2119715165163605,
+        "4": 8.926427589639774,
+        "5": 8.771407289341555,
+        "6": 11.741614308598917
+      },
+      "n_by_regime": {
+        "0": 510,
+        "1": 1005,
+        "2": 1269,
+        "3": 1302,
+        "4": 969,
+        "5": 818,
+        "6": 427
+      },
+      "checks": {
+        "direction": false,
+        "monotonic": true,
+        "significant": false,
+        "consistent": false
+      },
+      "verdict": "no"
+    },
+    "_overall_mean_bps": 7.911774643179902,
+    "_partition_check_passed": true
+  },
+  "alpha": 0.01,
+  "params": {
+    "tickers": [
+      "SPY",
+      "QQQ",
+      "NVDA",
+      "AAPL",
+      "XLF"
+    ],
+    "period_days": 3000,
+    "interval": "1d",
+    "regimes": 7,
+    "train_bars": 756,
+    "oos_bars": 126,
+    "step_bars": 126,
+    "n_iter": 50,
+    "json_out": "docs/regime_ranking.json",
+    "save_obs": null,
+    "from_obs": [
+      "/home/user/workspace/rankobs/AAPL.csv",
+      "/home/user/workspace/rankobs/NVDA.csv",
+      "/home/user/workspace/rankobs/QQQ.csv",
+      "/home/user/workspace/rankobs/SPY.csv",
+      "/home/user/workspace/rankobs/XLF.csv"
+    ]
+  }
+}
