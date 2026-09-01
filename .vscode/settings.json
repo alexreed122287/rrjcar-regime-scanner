@@ -1,0 +1,39 @@
+{
+  // Interpreter. Every contributor here uses a local .venv; pointing at it explicitly
+  // stops VS Code from picking a system Python that lacks hmmlearn.
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+
+  // Test discovery, so the Test Explorer and the inline run/debug gutter icons work.
+  // pytest.ini already sets testpaths, so no arguments are needed here.
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.autoTestDiscoverOnSaveEnabled": true,
+
+  // Order-capable modules open read-only in the editor. This is friction, not security:
+  // it is trivially toggled off, and it does nothing about an agent writing to disk
+  // directly. What it buys is that an absent-minded edit to a file that can place real
+  // orders fails loudly instead of saving. The authoritative rule is in
+  // .github/copilot-instructions.md; this is a reminder of it at the point of editing.
+  "files.readonlyInclude": {
+    "order_executor.py": true,
+    "tradier_broker.py": true,
+    "roll_manager.py": true,
+    "api/routes_broker.py": true
+  },
+
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  },
+
+  // Sentinel and state files are gitignored but should stay visible in the explorer --
+  // the whole point of HALT_TRADING is that a human notices it.
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/__pycache__/**": true
+  },
+
+  "[python]": {
+    "editor.rulers": [100]
+  }
+}

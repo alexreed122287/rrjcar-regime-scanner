@@ -1,0 +1,57 @@
+name: Tests
+
+# The risk rules in .github/copilot-instructions.md -- the HALT_TRADING sentinel, the
+# circuit-breaker thresholds, the causal-regime guarantee -- are all enforced by tests
+# in tests/. Until this workflow existed, nothing ran them except a human remembering
+# to. That is the gap this closes.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A force-push should not leave two runs racing on the same branch.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only. This workflow must never be given the Tradier or SMTP secrets: it runs
+# repository code on the contents of a pull request, including one from a fork.
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches daily-scan.yml, which is the interpreter this repo actually runs on.
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run the test suite
+        run: pytest -q
+
+      - name: Confirm the suite still needs no network
+        # The suite is hermetic today -- verified locally by running it with both proxy
+        # variables pointed at a dead port: 332 passed. That property is worth keeping.
+        # A test that quietly starts calling yfinance would make this workflow fail on a
+        # provider outage and teach everyone to ignore a red check. This step fails
+        # instead, on the commit that introduced the dependency.
+        env:
+          http_proxy: http://127.0.0.1:9
+          https_proxy: http://127.0.0.1:9
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+        run: pytest -q
