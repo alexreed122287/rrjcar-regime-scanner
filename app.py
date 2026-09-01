@@ -3,6 +3,13 @@ app.py — FastAPI entry point for HMM Regime Terminal
 Serves the REST API and static frontend files.
 """
 
+# Thread caps first, before anything drags numpy in. OpenBLAS reads these variables
+# when its shared library loads, so a later call is a silent no-op. See thread_limits
+# for the measurements (3.5-4.4x on the process-pool scan path).
+from thread_limits import apply_thread_caps
+
+apply_thread_caps()
+
 import os
 from dotenv import load_dotenv
 
