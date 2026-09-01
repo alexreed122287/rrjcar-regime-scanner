@@ -20,6 +20,12 @@ V1: 6/8 confirmations required
 V2: 8/12 confirmations required
 """
 
+# Thread caps first, before anything drags numpy in -- OpenBLAS reads these variables
+# when its shared library loads, so a later call silently does nothing.
+from thread_limits import apply_thread_caps
+
+apply_thread_caps()
+
 import os
 import sys
 import json

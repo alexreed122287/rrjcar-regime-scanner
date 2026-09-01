@@ -1196,8 +1196,9 @@ Left alone deliberately, and scoped honestly -- these are latent rather than dem
 - `api/routes_broker.py` mutates `data_loader._tradier_config_cache` from a request handler
   and spawns a raw `threading.Thread` for ladder orders. This is order-capable code, so it
   wants its own change with its own review rather than being folded into a cache fix.
-- No `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `OPENBLAS_NUM_THREADS` is set anywhere, so
-  concurrent HMM fits oversubscribe BLAS threads against available cores.
+- ~~No `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `OPENBLAS_NUM_THREADS` is set anywhere, so
+  concurrent HMM fits oversubscribe BLAS threads against available cores.~~ **Fixed and
+  measured** -- see "Thread oversubscription was real" below.
 
 ### hv_20's annualization
 
@@ -1395,3 +1396,81 @@ python tools/vol_overlay_sweep.py --from-obs 'swobs/*.csv' --json docs/vol_overl
   --confidences 0.4,0.5,0.6,0.7,0.8,0.9 \
   --confirmations 3,4,5,6,7
 ```
+
+### Thread oversubscription was real, and the fix is narrower than it sounds
+
+The bullet above was asserted from reading the code. It turns out to be true, but the
+size and the location of the effect were both worth measuring before claiming anything.
+
+The setup: numpy here links scipy-openblas, which sizes its pool from the core count --
+2 threads on this box. The scan's streaming endpoint fans out across a
+`ProcessPoolExecutor` of 6 workers, and each worker process loads its own OpenBLAS, so
+6 x 2 threads contend for 2 cores. Nothing set a cap.
+
+Against that, an argument the code makes for itself: the fits are
+`GaussianHMM(n_components=7, covariance_type="full")` on 3 features, so the
+per-iteration linear algebra is on 3x3 covariance matrices. There is no useful
+parallelism in a 3x3 Cholesky. Both effects are real and point opposite ways, so
+`tools/bench_blas_threads.py` measures rather than argues (medians, config order
+shuffled per repetition to keep cold-start cost from landing on whichever config runs
+first):
+
+| bars | pool | uncapped | capped=1 | effect |
+| --- | --- | --- | --- | --- |
+| 1500 | 6 processes | 21.76s | 4.92s | 4.4x faster |
+| 4745 | 6 processes | 27.24s | 7.71s | 3.5x faster |
+| 4745 | 10 threads | 5.52s | 5.45s | noise |
+
+Then end to end on a live server, 10 tickers, `period_days=730`, warm data cache,
+medians of 3 after a discarded warm-up:
+
+| endpoint | pool | uncapped | capped | effect |
+| --- | --- | --- | --- | --- |
+| `/api/scan/stream` | 6 processes | 19.32s | 6.69s | **2.9x faster** |
+| `/api/scan` | 6 threads | 3.53s | 3.44s | noise (~2.5%) |
+
+So the win is real but narrow. It lands entirely on the streaming endpoint -- which is
+the one the dashboard uses, so it is the one that matters, but anyone benchmarking via
+`/api/scan` will measure nothing and reasonably conclude the change is pointless.
+
+The caps do not change results: same data and seed, capped vs uncapped gives identical
+state assignments, identical state counts, means equal to 10 decimals, and
+log-likelihood agreeing to 2e-10. Floating-point summation order, not a decision change.
+
+Implementation note, because the failure mode is silent: OpenBLAS reads its thread-count
+variables once, when the shared library first loads. Setting them after `import numpy`
+runs fine, sets the variables, and has no effect on the pool. `thread_limits.py` must
+therefore be imported before anything that reaches numpy, and
+`tests/test_thread_limits.py` enforces that at the source level with an AST check on
+each entry point, plus a subprocess check that the caps actually reach OpenBLAS in a
+pool worker. Existing environment settings are never overruled -- an exported
+`OMP_NUM_THREADS` is the operator's channel.
+
+### The process pool costs more than it saves (found, not fixed)
+
+Noticed while measuring the above, and it is the larger lever of the two. Both scan
+endpoints call the same `scan_single_ticker` with the same default of 6 workers -- the
+`_light` in `_scan_ticker_light` refers only to stripping unpicklable keys off the
+result, not to doing less work. So they are directly comparable. Same server, same warm
+cache, alternating requests:
+
+| pool | run 1 | run 2 | run 3 |
+| --- | --- | --- | --- |
+| 6 threads (`/api/scan`) | 3.51s | 3.55s | (4.39s warm-up, discarded) |
+| 6 processes (`/api/scan/stream`) | 6.85s | 6.69s | 6.58s |
+
+The process pool is roughly **1.9x slower than threads for identical work**, even after
+the BLAS caps, and was 5.6x slower before them. The comment at the pool selection says
+"Use processes on desktop for true parallelism", which is the wrong call for this
+workload: the time goes to network fetch and numpy, and both release the GIL.
+
+Likely mechanism, not yet confirmed: the streaming handler constructs a **new**
+`ProcessPoolExecutor` on every request, so each scan pays forkserver startup for 6
+workers before doing any work. A persistent pool, or simply threads, would remove it.
+Two caveats keep this a finding rather than a change: the streaming endpoint also does
+per-ticker SSE serialization the other does not, and I have not isolated pool-creation
+cost from steady-state cost. It deserves its own change and its own measurements.
+
+Related, and worth knowing operationally: after killing a server with SIGKILL, 7
+forkserver worker processes were still alive and reparented to PID 1. Graceful
+shutdown would clean them up; an abrupt kill does not, and they accumulate.
